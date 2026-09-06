@@ -24,25 +24,92 @@ here — no need to leave the repo to find it.
 ## Commit convention
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/)
-with a WHAT/WHY/HOW body in the spirit of the
-[`commit-as-prompt`](https://github.com) skill:
+with a WHAT/WHY/HOW body in the spirit of the locally-installed
+[`commit-as-prompt`](../../.agents/skills/commit-as-prompt/SKILL.md)
+skill (read the full skill for the source-of-truth reference; the
+short form below is the working subset that ships on this branch).
+Two commit flavors exist on the same branch; keep them separate, do
+not mix flavors in one commit:
 
-- **Subject**: `<type>(<scope>): <imperative>` — types are `feat`,
-  `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`, `perf`.
-  Scope is optional but encouraged.
-- **Body**: prose (not numbered list) structured as
-  - `WHAT:` one line describing the action and its object, no
-    implementation detail.
-  - `WHY:` the motivation — bug, requirement, or design tradeoff.
-  - `HOW:` the strategy, compatibility, verification, risk.
-- **Trailers** (the lore protocol): `Constraint:`, `Rejected:`,
-  `Confidence:`, `Scope-risk:`, `Directive:`, `Tested:`, `Not-tested:`.
-  Use `Rejected:` to mark alternatives future agents must not
-  re-explore. Use `Directive:` for forward-looking warnings.
-- **Footer**: any non-trivial commit on a feature branch ends with
-  `Plan: .omo/plans/<slug>.md` pointing at the design record.
+- **Context Prompt commits** — subject starts with `prompt(<scope>):`,
+  body is a WHAT/WHY/HOW prompt for downstream AI review. Use this
+  flavor when the change is documentation, a design record, or any
+  artifact whose primary consumer is a reviewer, not the runtime.
+- **Regular feature/fix commits** — subject follows Conventional
+  Commits: `<type>(<scope>): <imperative>`, where `type` is `feat`,
+  `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`, or
+  `perf`. Scope is optional but encouraged. These commits do not
+  enter the prompt-conversion flow but still respect the body
+  conventions below.
 
-Example shape (from this branch's own `f1aa83f`):
+### The five-step commit flow
+
+The full execution order is in the `commit-as-prompt` skill; the
+non-negotiable subset for this branch:
+
+1. **Inspect the working tree** — `git status -s`, `git diff`,
+   `git diff --cached`. Read what is actually changing before
+   staging anything.
+2. **Read and clean the diff** — before any auto-cleanup or
+   rename, confirm the change does not break existing behavior;
+   never modify code you do not understand. Remove dead imports,
+   stray `console.log`/`debugger`, throwaway scaffolding, and
+   placeholder identifiers (`V2`, `TEMP`, `TEST_`).
+3. **Stage by file or by hunk** — `git add <file> ...` or
+   `git add -p` for granular selection. Keep only the files that
+   ship the current requirement. **Pure formatting, dependency
+   bumps, large-scale renames, and unrelated drive-by edits go
+   into their own commits** — never co-mingled with logic.
+4. **Write the message** — see the body schema below.
+5. **Push and sync docs** — after committing, update any doc that
+   the change references. If you edited a behavior, run the
+   relevant QA scripts in `tests/qa/*.mjs` and capture the
+   PASS/FAIL output next to the commit.
+
+### File-selection rules
+
+- Only ship the code, config, tests, and docs that implement the
+  current requirement.
+- Exclude noise: pure formatting, dep upgrades, generated files.
+- Pure renames or large-scale reformat = **own commit**, not a
+  footnote on a logic commit.
+- If the staging area contains more than one topic, **split into
+  multiple commits** (see this branch's `91b8325` → `ce38022` →
+  `17ecd1e` → `708d5ed` sequence as a worked example).
+
+### Body schema (every commit on this branch)
+
+The body is prose, not a numbered list, structured as:
+
+- **WHAT** — one sentence: action and object, imperative voice,
+  no implementation detail. Example: `Add dark theme to UI`.
+- **WHY** — motivation: bug, requirement, or design tradeoff;
+  cite an issue/PR id when one exists (e.g. `Fixes #1234`,
+  `Improve a11y for dark environments`).
+- **HOW** — strategy, compatibility, verification, risk, and
+  user impact. Reference dependencies and preconditions. The diff
+  already lists files; do not re-list them here.
+
+Then a trailing block of **lore trailers** for non-trivial commits:
+
+- `Constraint:` — external force that shaped the decision.
+- `Rejected:` — alternatives future agents must not re-explore.
+- `Confidence: low|medium|high` — calibration.
+- `Scope-risk: narrow|moderate|broad` — blast radius.
+- `Directive:` — forward-looking warning to future modifiers.
+- `Tested:` — what was verified.
+- `Not-tested:` — known verification gaps.
+
+End the commit body with a footer pointing at the design record:
+
+```
+Plan: .omo/plans/<slug>.md
+```
+
+`Plan:` is required on any commit that ships a non-trivial change;
+trivial chore commits (auto-emitted files, format-only) skip it.
+
+### Worked example (from this branch's `f1aa83f`)
 
 ```
 fix(store): hydrate persisted stats on client mount so /result shows history after refresh
@@ -51,6 +118,23 @@ The `hydrateStats` action on the game store was dead code: ...
 ...
 Plan: .omo/plans/result-stats-reload.md
 ```
+
+### High-quality commit practices
+
+- **One topic per commit.** Big changes ship as several commits,
+  each with its own WHAT/WHY/HOW, each builds and tests green.
+- **Go deep on WHY.** Tie the change to a user need, a bug, or
+  an issue id; for an architecture call, capture the tradeoff.
+- **Be specific in HOW.** Describe the strategy, not a file-by-file
+  recap.
+- **Use clear, conventional phrasing.** Subject is imperative
+  English; body is prose, not bullets.
+- **Wire to automation.** Reference issue/PR ids so changelog and
+  CI flows stay linked.
+- **For `prompt:` commits**, append a `<Context>` block with
+  dependencies and preconditions so the downstream reviewer sees
+  the full picture.
+
 
 ## Atomic commits
 
