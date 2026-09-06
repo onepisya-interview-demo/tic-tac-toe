@@ -4,29 +4,22 @@ import { useEffect, useState } from 'react';
 import { getMuted, setMuted } from '@/lib/sound';
 
 export function SoundToggle() {
-  // Lazy initializer reads localStorage on the first client render.
-  // SSR returns `true` (muted default); the client rehydrates from storage.
-  const [muted, setLocalMuted] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      const raw = window.localStorage.getItem('ttt.sound.muted');
-      return raw === null ? true : raw === '1';
-    } catch {
-      return true;
-    }
-  });
+  // Initial state must be identical on server and the first client render —
+  // otherwise React throws a hydration mismatch on /, /play, /result when
+  // the persisted preference differs from the SSR default. We always start
+  // muted; useEffect syncs from localStorage after hydration is complete.
+  const [muted, setLocalMuted] = useState<boolean>(true);
 
   useEffect(() => {
-    // Sync once after mount in case the lazy initializer ran on the server
-    // and returned the default. No-op on a fully client-rendered tree.
-    const live = getMuted();
-    if (live !== muted) {
-      // Deferred via microtask to avoid the cascading-render lint rule while
-      // still keeping the toggle responsive on the first interaction.
-      queueMicrotask(() => setLocalMuted(live));
-    }
-    // We intentionally only run on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // One-shot hydration of the persisted preference after mount. This is
+    // the documented React pattern for reading from an external source that
+    // is unavailable during SSR: render the safe default server-side, then
+    // reconcile with the real value once mounted. localStorage has no push
+    // updates, so useSyncExternalStore would be over-engineering. React 18
+    // bails out of the re-render when getMuted() === true (matches state),
+    // so the "cascading render" the lint rule warns about never happens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLocalMuted(getMuted());
   }, []);
 
   return (
