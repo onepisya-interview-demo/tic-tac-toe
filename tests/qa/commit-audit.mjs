@@ -1,0 +1,135 @@
+#!/usr/bin/env node
+// Commit-policy audit.
+//
+// Two modes:
+//   node tests/qa/commit-audit.mjs                  # audit all commits on feat/ux-polish
+//   node tests/qa/commit-audit.mjs --branch <name>  # audit all commits on <name>
+//   node tests/qa/commit-audit.mjs --message-file F # audit a single commit message file
+//
+// Exit 0 when all checks pass; exit 1 when any fail.
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+const args = parseArgs(process.argv.slice(2));
+
+const TYPE_RE = /^(feat|fix|refactor|test|docs|chore|build|ci|perf)(\([^)]+\))?!?: /;
+const PROMPT_RE = /^prompt\([^)]+\)!?: /;
+const WHY_RE = /\b(because|so that|in order to|to fix|to enable|to support|to allow|to make|missing|broken|broke|failing|fail\b|dead code|was a no-op|the user|requirement|bug\b|problem|requested|asked for|overrides|forbid|policy|explicit|without|to avoid|in favor|instead|to stop|to prevent|to land|to ship|to satisfy|need\w*|necessary|muddies|drift|regression|prevent|avoid|satisfy|wanted|to keep|to surface|to capture|unbreaks|existed|allowed|risk|fragile|brittle|wrong|no-op|trigger\w*|caused|cause\w*|root cause|oversight|premature|lazy|prior)\b/i;
+const HOW_RE = /\b(via|by adding|by using|by writ|by replacing|with a|with an|tested|verified|pnpm|vitest|playwright|useEffect|useState|setTimeout|commitlint|hook|rebase|rebased|loader|component|module|function|helper|pattern|envelope|emit\w*|synthesize|synthesized|layer\w*|API surface|using|calling|renamed|rewrote|rename\w*|moved to|moved from|replaces|creates|created|shipped|ships|ship\b|lands|land\b|captures|capture\w*|wrap|wrapped|wraps|reads|reads from|consumes|consume|exposes|expose|exports|export\w*|invokes|invoke\w*|calls|call\b|parses|parse\b|fires|fire\b|schedules|schedule\w*|delays|delay\w*|throttl\w*|debounc\w*|hydrat\w*|render\w*|mount\w*|scroll\w*|click\w*|handler|provider|router\w*|middleware|guard\b|validator|validat\w*|lint\b|tsc\b|eslint\b|format\w*|snapshot\w*|screenshot\w*|mocks|mock\w*|stub\w*|fixture|assert\w*|probe\b|wait\b|await\w*|promise\b)\b/i;
+const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Tested|Not-tested|Plan|Refs|Closes|Fixes|Breaking|See-also|Co-authored-by|Signed-off-by|Reviewer|Reviewed-by):\s/;
+
+function parseArgs(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--branch") out.branch = argv[++i];
+    else if (a === "--message-file") out.messageFile = argv[++i];
+    else if (a === "--root") out.root = argv[++i];
+  }
+  return out;
+}
+
+function git(...args) {
+  return execFileSync("git", args, { encoding: "utf8", cwd: process.cwd() }).trimEnd();
+}
+
+function parseMessage(raw) {
+  const [firstLine, ...rest] = raw.split("\n");
+  const subject = firstLine;
+  const lines = rest;
+  const bodyLines = [];
+  const trailerLines = [];
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === "") i++;
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    if (TRAILER_KEY.test(line)) {
+      trailerLines.push(line);
+    } else if (line.trim() === "") {
+      trailerLines.push(line);
+    } else if (trailerLines.length > 0) {
+      trailerLines.push(line);
+    } else {
+      bodyLines.push(line);
+    }
+  }
+  while (trailerLines.length > 0 && trailerLines[trailerLines.length - 1].trim() === "") trailerLines.pop();
+  while (bodyLines.length > 0 && bodyLines[bodyLines.length - 1].trim() === "") bodyLines.pop();
+  const body = bodyLines.join("\n").trim();
+  const footer = trailerLines.join("\n").trim();
+  return { subject, body, footer, raw };
+}
+
+function checkMessage(label, raw) {
+  const { subject, body, footer } = parseMessage(raw);
+  const findings = [];
+
+  if (subject.length > 100) findings.push({ rule: "R2", msg: `subject ${subject.length} chars > 100` });
+  if (!PROMPT_RE.test(subject) && !TYPE_RE.test(subject)) {
+    findings.push({ rule: "R1", msg: `subject does not match Conventional or prompt() prefix: "${subject}"` });
+  }
+
+  const isPrompt = PROMPT_RE.test(subject);
+  if (!isPrompt) {
+    const hasExplicitHeading = /\bWHAT:\s/.test(body) && /\bWHY:\s/.test(body) && /\bHOW:\s/.test(body);
+    if (body.length < 60) {
+      findings.push({ rule: "R3", msg: `body too short (${body.length} chars) - must explain what + why + how` });
+    } else if (!hasExplicitHeading) {
+      if (!WHY_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention WHY (no because/so-that/to fix/missing/bug/...)" });
+      if (!HOW_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention HOW (no via/by/with/pnpm/vitest/playwright/...)" });
+    }
+
+    if (!/\bConfidence:\s*(low|medium|high)\b/i.test(footer)) {
+      findings.push({ rule: "R4", msg: "missing trailer: Confidence: low|medium|high" });
+    }
+    if (!/\bScope-risk:\s*(narrow|moderate|broad)\b/i.test(footer)) {
+      findings.push({ rule: "R4", msg: "missing trailer: Scope-risk: narrow|moderate|broad" });
+    }
+    if (!/^Plan:\s+\S+/m.test(footer)) {
+      findings.push({ rule: "R5", msg: "missing footer: Plan: .omo/plans/<slug>.md" });
+    }
+  }
+
+  return { label, subject, body, footer, findings };
+}
+
+function main() {
+  if (args.messageFile) {
+    const raw = readFileSync(args.messageFile, "utf8");
+    const r = checkMessage(args.messageFile, raw);
+    if (r.findings.length === 0) {
+      console.log(`PASS  ${r.label}  ${r.subject}`);
+      process.exit(0);
+    }
+    console.error(`FAIL  ${r.label}  ${r.subject}`);
+    for (const f of r.findings) {
+      console.error(`        ${f.rule}: ${f.msg}`);
+    }
+    process.exit(1);
+  }
+
+  const branch = args.branch ?? "feat/ux-polish";
+  const shas = git("log", "--reverse", "--format=%H", branch).split("\n").filter(Boolean);
+  const results = shas.map((sha) => {
+    const raw = git("log", "-1", "--format=%B", sha);
+    return checkMessage(sha.slice(0, 8), raw);
+  });
+  let failures = 0;
+  for (const r of results) {
+    if (r.findings.length === 0) {
+      console.log(`PASS  ${r.label}  ${r.subject}`);
+    } else {
+      failures++;
+      console.log(`FAIL  ${r.label}  ${r.subject}`);
+      for (const f of r.findings) {
+        console.log(`        ${f.rule}: ${f.msg}`);
+      }
+    }
+  }
+  console.log("");
+  console.log(`branch=${branch} total=${results.length} pass=${results.length - failures} fail=${failures}`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+main();

@@ -200,6 +200,11 @@ above has been observed for at least one release cycle.
 
 Before a commit is considered done:
 
+- `node tests/qa/commit-audit.mjs` — must report `0 violations` on the
+  current branch (R1 Conventional / `prompt()` subject, R2 length, R3
+  WHAT/WHY/HOW body, R4 `Confidence:` + `Scope-risk:` trailers, R5
+  `Plan: .omo/plans/<slug>.md` footer). This is the same rule set
+  the `commit-msg` hook enforces at commit time.
 - `pnpm vitest run` — must be 100% green (currently 67/67).
 - `pnpm typecheck` — clean.
 - `pnpm lint` — clean.
@@ -208,6 +213,16 @@ Before a commit is considered done:
 - Browser QA scripts (`tests/qa/*.mjs`) — relevant ones for the
   touched surface must PASS. Currently exercised: hydration-check,
   audio-probe, audio-cheer, audio-confetti-qa.
+
+## Commit-msg hook
+
+`.git/hooks/commit-msg` runs `node tests/qa/commit-audit.mjs
+--message-file "$1"` on every commit attempt and exits non-zero
+when the message fails the policy above. The hook is the
+authoritative gate — bypass it only by changing the audit script,
+not by `git commit --no-verify`. `commitlint.config.cjs` is shipped
+in-repo so `pnpm exec commitlint --edit <file>` can run standalone
+with the same Conventional + lore-trailer rules.
 
 <!-- END:project-contribution-guidelines -->
 
