@@ -6,9 +6,17 @@
 const STORAGE_KEY = 'ttt.sound.muted';
 const VOLUME = 0.18;
 
-type Tone = 'move' | 'win' | 'draw' | 'lose';
+type Tone = 'move' | 'win' | 'draw' | 'lose' | 'cheer';
 
-const PROGRAMS: Record<Tone, { freq: number; dur: number; type?: OscillatorType }[]> = {
+interface ProgramStep {
+  freq: number;
+  dur: number;
+  type?: OscillatorType;
+  /** Add a paired 5Hz LFO modulating detune for the duration of this note. */
+  vibrato?: boolean;
+}
+
+const PROGRAMS: Record<Tone, ProgramStep[]> = {
   move: [{ freq: 440, dur: 0.08, type: 'square' }],
   win: [
     { freq: 523.25, dur: 0.18, type: 'triangle' },
@@ -19,11 +27,19 @@ const PROGRAMS: Record<Tone, { freq: number; dur: number; type?: OscillatorType 
     { freq: 392, dur: 0.18, type: 'sine' },
     { freq: 196, dur: 0.32, type: 'sine' },
   ],
+  // Ascending C-major arpeggio with a sustained, vibrato-tailed top note.
+  // Total duration ~1.02s — short enough not to collide with the next round.
+  cheer: [
+    { freq: 523.25, dur: 0.12, type: 'triangle' }, // C5
+    { freq: 659.25, dur: 0.11, type: 'triangle' }, // E5
+    { freq: 783.99, dur: 0.10, type: 'triangle' }, // G5
+    { freq: 1046.5, dur: 0.09, type: 'triangle' }, // C6
+    { freq: 1318.51, dur: 0.6, type: 'triangle', vibrato: true }, // E6
+  ],
 };
 
 let ctx: AudioContext | null = null;
 let muted = true;
-
 
 function ensureContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -87,5 +103,17 @@ export function playSound(name: Tone): void {
     osc.connect(envGain).connect(master);
     osc.start(t0);
     osc.stop(t1 + 0.02);
+
+    if (step.vibrato) {
+      // 5Hz LFO modulating detune by ±10 cents — a subtle chorus-like
+      // shimmer that turns the sustained top note into a "celebration".
+      const lfo = audio.createOscillator();
+      const lfoGain = audio.createGain();
+      lfo.frequency.value = 5;
+      lfoGain.gain.value = 10;
+      lfo.connect(lfoGain).connect(osc.detune);
+      lfo.start(t0);
+      lfo.stop(t1 + 0.02);
+    }
   });
 }

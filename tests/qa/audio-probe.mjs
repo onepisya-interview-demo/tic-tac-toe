@@ -66,9 +66,11 @@ console.log('first player who won:', firstPlayer);
 console.log('audio probe:', JSON.stringify(probe));
 
 // 6. Strong assertions on the audio path. playSound('move') fires 4 times
-//    (4 moves) at 1 oscillator each = 4 oscillators, then playSound('win')
-//    fires once with 2 oscillators. So we expect at least 4.
-assert.ok(probe.oscillators >= 4, `expected ≥4 oscillators across the game, got ${probe.oscillators}`);
+//    (4 moves) at 1 oscillator each = 4 oscillators, playSound('win')
+//    fires once with 2 oscillators, and playSound('cheer') fires once
+//    after a 360ms setTimeout with 6 oscillators (5 notes + 1 vibrato
+//    modulator). Total expected ≥ 12.
+assert.ok(probe.oscillators >= 12, `expected ≥12 oscillators across the game (4 move + 2 win + 6 cheer), got ${probe.oscillators}`);
 // resume() only fires if the context starts suspended; with --autoplay-policy=no-user-gesture-required it starts running. Either way is correct.
 assert.ok(probe.gains >= probe.oscillators, `gains (${probe.gains}) should be ≥ oscillators (${probe.oscillators})`);
 
