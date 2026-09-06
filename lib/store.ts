@@ -191,3 +191,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 export function selectAvailableMoves(state: GameStore): readonly number[] {
   return getAvailableMoves(state.board);
 }
+
+// Client-side: kick off stats hydration once when the store module loads
+// in the browser. Without this, any page that reads `stats` (e.g. /result
+// after a hard refresh) sees the emptyStats() initial state until the user
+// first clicks "start-game", because `startGame` is the only other caller
+// of apiGetStats. The fetch is fire-and-forget; on failure the store
+// stays at emptyStats() and the next write path will overwrite anyway.
+if (typeof window !== 'undefined') {
+  useGameStore.getState().hydrateStats();
+}
