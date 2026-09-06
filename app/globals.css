@@ -62,49 +62,9 @@ html, body {
 .draw-shake,
 .player-pulse,
 .stats-value,
-.page-fade-in,
-.confetti-piece {
+.page-fade-in {
   will-change: transform, opacity;
 }
-
-.confetti {
-  position: absolute;
-  inset: -16px 0 auto;
-  height: 168px;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.confetti-piece {
-  position: absolute;
-  top: -12px;
-  width: 7px;
-  height: 16px;
-  border-radius: var(--radius-sm);
-  opacity: 0;
-  background-color: var(--color-accent);
-}
-
-.confetti-piece:nth-child(3n) {
-  background-color: var(--color-text-primary);
-}
-
-.confetti-piece:nth-child(3n + 1) {
-  background-color: var(--color-accent-hover);
-}
-
-.confetti-piece:nth-child(1) { left: 8%; --confetti-drift: 22px; --confetti-rotate: 220deg; --confetti-delay: 40ms; }
-.confetti-piece:nth-child(2) { left: 14%; --confetti-drift: -30px; --confetti-rotate: 160deg; --confetti-delay: 130ms; }
-.confetti-piece:nth-child(3) { left: 22%; --confetti-drift: 38px; --confetti-rotate: 280deg; --confetti-delay: 10ms; }
-.confetti-piece:nth-child(4) { left: 30%; --confetti-drift: -18px; --confetti-rotate: 135deg; --confetti-delay: 180ms; }
-.confetti-piece:nth-child(5) { left: 38%; --confetti-drift: 28px; --confetti-rotate: 250deg; --confetti-delay: 90ms; }
-.confetti-piece:nth-child(6) { left: 46%; --confetti-drift: -34px; --confetti-rotate: 190deg; --confetti-delay: 220ms; }
-.confetti-piece:nth-child(7) { left: 54%; --confetti-drift: 18px; --confetti-rotate: 320deg; --confetti-delay: 70ms; }
-.confetti-piece:nth-child(8) { left: 62%; --confetti-drift: -24px; --confetti-rotate: 145deg; --confetti-delay: 160ms; }
-.confetti-piece:nth-child(9) { left: 70%; --confetti-drift: 32px; --confetti-rotate: 235deg; --confetti-delay: 25ms; }
-.confetti-piece:nth-child(10) { left: 78%; --confetti-drift: -20px; --confetti-rotate: 175deg; --confetti-delay: 200ms; }
-.confetti-piece:nth-child(11) { left: 86%; --confetti-drift: 25px; --confetti-rotate: 290deg; --confetti-delay: 115ms; }
-.confetti-piece:nth-child(12) { left: 92%; --confetti-drift: -28px; --confetti-rotate: 205deg; --confetti-delay: 55ms; }
 
 @media (prefers-reduced-motion: no-preference) {
   @keyframes cell-pop {
@@ -141,12 +101,6 @@ html, body {
     to { opacity: 1; }
   }
 
-  @keyframes confetti-fall {
-    0% { opacity: 0; transform: translate3d(0, -12px, 0) rotate(0deg); }
-    12% { opacity: 1; }
-    100% { opacity: 0; transform: translate3d(var(--confetti-drift), 176px, 0) rotate(var(--confetti-rotate)); }
-  }
-
   .cell-pop {
     animation: cell-pop 260ms ease-out both;
   }
@@ -171,10 +125,7 @@ html, body {
     animation: page-fade-in 150ms ease-out both;
   }
 
-  .confetti-piece {
-    animation: confetti-fall 1.1s ease-in var(--confetti-delay) both;
   }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -182,7 +133,4 @@ html, body {
     transition-duration: 0ms !important;
   }
 
-  .confetti-piece {
-    display: none;
   }
-}
