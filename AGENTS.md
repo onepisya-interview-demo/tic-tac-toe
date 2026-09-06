@@ -128,13 +128,41 @@ Plan: .omo/plans/result-stats-reload.md
 - **Be specific in HOW.** Describe the strategy, not a file-by-file
   recap.
 - **Use clear, conventional phrasing.** Subject is imperative
-  English; body is prose, not bullets.
+  English (or, on this branch, imperative Chinese — see the
+  "中文 commit" sub-section below); body is prose, not bullets.
 - **Wire to automation.** Reference issue/PR ids so changelog and
   CI flows stay linked.
 - **For `prompt:` commits**, append a `<Context>` block with
   dependencies and preconditions so the downstream reviewer sees
   the full picture.
 
+
+### 中文 commit（branch-local 覆盖）
+
+`feat/ux-polish` 上的历史 commit 与新增 commit 在保持 Conventional
+前缀与 lore trailer 键名的前提下，subject / body / trailer 值可以
+是中文。规则由 `tests/qa/commit-audit.mjs`（权威）与
+`commitlint.config.cjs`（独立 runner）共同强制，钩子
+`.git/hooks/commit-msg` 在 `git commit` 时调 audit 拦截违规。
+
+- subject 形如 `<type>(<scope>): <中文描述>`，例如
+  `feat(audio): 在胜利提示之上叠加合成欢呼`。type/scope 仍是
+  Conventional 英文 token，描述部分可中文；长度仍 ≤ 100 字符
+  （按 Unicode 码点计）。
+- body 用中文 prose，仍按 WHAT / WHY / HOW 三段写。
+  WHY/HOW 关键词可在 audit 脚本的 `WHY_RE` / `HOW_RE` 中查；
+  也可直接用显式 heading `WHAT:` `WHY:` `HOW:` 旁路关键词匹配。
+- lore trailer 键名（`Constraint:` `Rejected:` `Confidence:`
+  `Scope-risk:` `Directive:` `Tested:` `Not-tested:` `Plan:` 等）
+  保持英文，因为 commitlint 插件按键名解析；冒号之后的值可中文。
+  `Confidence:` 与 `Scope-risk:` 的取值仍须为 `low|medium|high`
+  与 `narrow|moderate|broad`。
+- `Plan:` 路径保持英文（仓库内设计记录命名约定）。
+- 提交前同样跑 `node tests/qa/commit-audit.mjs`，CI / pre-push 也
+  可用 `pnpm exec commitlint --edit <message-file>` 单独验。
+
+切换语言时不需要新分支；audit / commitlint / 钩子是同一份策略的
+三个观察点，扩词与放宽在 PR 中一并落地。
 
 ## Atomic commits
 
