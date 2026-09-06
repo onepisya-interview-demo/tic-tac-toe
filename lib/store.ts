@@ -15,6 +15,7 @@ import {
   type GameStats,
   type Player,
 } from './game';
+import { playSound } from './sound';
 
 export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
 
@@ -130,6 +131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stats: newStats,
         lastOutcome: win.player,
       });
+      playSound(win.player === s.currentPlayer ? 'win' : 'lose');
       void apiPutStats(newStats).catch(() => {
         /* swallow — UI state already updated */
       });
@@ -146,6 +148,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stats: newStats,
         lastOutcome: 'draw',
       });
+      playSound('draw');
       void apiPutStats(newStats).catch(() => {});
       return;
     }
@@ -154,6 +157,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       board,
       currentPlayer: otherPlayer(s.currentPlayer),
     });
+    playSound('move');
   },
 
   restart: () => {

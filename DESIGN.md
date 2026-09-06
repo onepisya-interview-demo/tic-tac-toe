@@ -1,7 +1,7 @@
 # DESIGN.md — tic-tac-toe (井字棋)
 
 > Source spec: `.omo/ulw-loop/brief.md` (P3 审美段为输入)
-> Stack: Next.js 15 App Router + Tailwind v4 + Zustand + Drizzle/SQLite
+> Stack: Next.js 16 App Router + Tailwind v4 + Zustand + Drizzle/SQLite
 > Generated: 2026-09-07
 > Status: contract for implementation
 
@@ -56,6 +56,7 @@
 - **Card padding**: `p-6` (24px)
 - **Card gap**: `gap-4` (16px)
 - **Cell size**: `w-24 h-24` (96 × 96)
+- **Cell size mobile**: `w-20 h-20` (80 × 80), keeping the board inside the mobile card
 - **Cell gap**: `gap-2` (8px)
 - **Button padding**: `px-4 py-2` (16 × 8)
 - **Section gap**: `gap-8` (32px)
@@ -79,18 +80,26 @@
 | Button hover | `background-color` | 120ms | ease-out |
 | Cell hover | `background-color` | 120ms | ease-out |
 | Cell press | `transform: scale(0.98)` | 80ms | ease-out |
-| Winner reveal | `opacity 0→1`, `scale 0.96→1` | 280ms | ease-out |
+| Cell placement | `opacity`, `transform: scale(0.4→1.08→1)` | 260ms | ease-out |
+| Winner reveal | overlay `opacity`, `transform`, `filter` | 1.4s loop | ease-in-out |
+| Draw feedback | board `transform: translateX()` | 300ms | ease-out |
+| Player indicator | dot/text `opacity`, `transform: scale()` | 1.6s loop | ease-in-out |
+| Stats update | `opacity`, `transform: scale(0.92→1)` | 220ms | ease-out |
+| Result confetti | `opacity`, `transform: translate3d()` | 1.1s once | ease-in |
 | Page transition | `opacity` | 150ms | ease-out |
 
-- **No bounce / no slide-in / no parallax**
+- **No bounce / no slide-in / no parallax**; transitions communicate a move, outcome, or route change only
 - GPU-only (`transform`, `opacity`, `background-color`)
 - `prefers-reduced-motion`: collapse all to `0ms`
+- **Interaction reference**: beui.dev Button / Number / Animated Badge mechanisms; adapted to CSS-only transitions and keyed content swaps
+- **Sound**: optional, muted by default, native Web Audio one-shot tones only; no background music
 
 ## 6. Accessibility
 
 - **Focus ring**: `outline: 2px solid var(--accent); outline-offset: 2px`
-- **Keyboard**: Tab between focusable, Enter/Space to activate
-- **Cell keyboard**: when a cell is focused, Enter / Space makes the move
+- **Keyboard**: roving `tabIndex` with arrow-key movement across the board; Enter/Space activates the focused empty cell
+- **Announcements**: status and result messages use atomic `aria-live` regions; cell labels include position and occupancy
+- **Reduced motion**: every decorative animation has a `prefers-reduced-motion: reduce` no-animation path
 - **Contrast**: every text-on-bg pair ≥ 4.5:1 (verified for `text-primary`/`text-secondary`/`text-muted` on `bg-base`)
 - **No emoji as icons**
 - **`<button>` for actions, never `<div onClick>`**
@@ -114,7 +123,7 @@
 - **No dark / light mode toggle** — single dark mode (per brief P2)
 - **No mobile-optimized layout** — desktop ≥1280px primary (per brief P2)
 - **No i18n** — Chinese only (per brief P2)
-- **No sound** — silent game (per brief P2)
+- **No background music** — optional one-shot sound effects are available through the user-mutable control
 - **No animation library** — CSS transitions only (per brief 不能引入)
 
 ## 9. Quality Gates

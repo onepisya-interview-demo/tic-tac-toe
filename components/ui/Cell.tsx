@@ -8,6 +8,7 @@ type Props = {
   disabled: boolean;
   isWinning: boolean;
   index: number;
+  tabIndex?: number;
 };
 
 const colorClass: Record<Player, string> = {
@@ -15,16 +16,24 @@ const colorClass: Record<Player, string> = {
   O: 'text-player-o',
 };
 
-export function Cell({ value, onClick, disabled, isWinning, index }: Props) {
+export function Cell({ value, onClick, disabled, isWinning, index, tabIndex }: Props) {
+  // Re-keying the inner span on the value forces React to remount it whenever
+  // a mark appears, which restarts the CSS cell-pop animation. The class stays
+  // attached while the value persists, so subsequent re-renders do not re-fire.
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled || value !== null}
-      aria-label={`第 ${index + 1} 格${value ? `，已落 ${value}` : '，空'}`}
+      aria-label={
+        `第 ${index + 1} 格` +
+        (value ? `，已落 ${value}` : '，空') +
+        (isWinning ? '，胜局' : '')
+      }
       data-testid={`cell-${index}`}
+      tabIndex={tabIndex ?? -1}
       className={
-        'w-24 h-24 flex items-center justify-center text-cell font-display font-semibold ' +
+        'relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center text-cell font-display font-semibold ' +
         'bg-bg-elevated border border-border-subtle rounded-md ' +
         'transition-colors duration-[120ms] ease-out ' +
         'hover:bg-bg-hover disabled:hover:bg-bg-elevated disabled:cursor-not-allowed ' +
@@ -33,9 +42,23 @@ export function Cell({ value, onClick, disabled, isWinning, index }: Props) {
         (isWinning ? 'ring-2 ring-accent bg-accent-muted ' : '')
       }
     >
-      <span className={value ? colorClass[value] : 'text-text-muted'}>
-        {value ?? '\u00A0'}
-      </span>
+      {value !== null ? (
+        <span
+          key={value}
+          className={'inline-block cell-pop ' + colorClass[value]}
+          data-value={value}
+          data-testid={`cell-${index}-mark`}
+        >
+          {value}
+        </span>
+      ) : (
+        <span aria-hidden className="text-text-muted inline-block">
+          {'\u00A0'}
+        </span>
+      )}
+      {isWinning ? (
+        <span aria-hidden className="win-glow absolute inset-0 rounded-md" data-testid={`cell-${index}-glow`} />
+      ) : null}
     </button>
   );
 }

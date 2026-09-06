@@ -6,6 +6,8 @@ import { useGameStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { SoundToggle } from '@/components/SoundToggle';
+import { Confetti } from '@/components/Confetti';
 
 export default function ResultPage() {
   const phase = useGameStore((s) => s.phase);
@@ -16,20 +18,17 @@ export default function ResultPage() {
   const restart = useGameStore((s) => s.restart);
   const resetAll = useGameStore((s) => s.resetAll);
 
-  // If someone lands here without finishing a game, send them home.
-  useEffect(() => {
-    if (phase === 'idle') {
-      // soft redirect — they can navigate themselves
-    }
-  }, [phase]);
-
   let headline: string;
+  let headlineClass = 'text-text-primary';
   if (phase === 'won' && winner) {
     headline = `${winner} 获胜`;
+    headlineClass = winner === 'X' ? 'text-player-x' : 'text-player-o';
   } else if (phase === 'drawn') {
     headline = '平局';
+    headlineClass = 'text-text-secondary';
   } else {
     headline = '—';
+    headlineClass = 'text-text-muted';
   }
 
   const streakLabel =
@@ -39,25 +38,37 @@ export default function ResultPage() {
         ? `X 连胜 ${stats.currentStreak}`
         : `O 连胜 ${Math.abs(stats.currentStreak)}`;
 
+  useEffect(() => {
+    // Page-fade-in handles its own animation; nothing else to do.
+  }, []);
+
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-display font-display font-semibold tracking-tight">本局结束</h1>
-        <p
-          className="text-h1 font-display font-medium text-accent"
-          data-testid="result-headline"
-        >
-          {headline}
-        </p>
-        {lastOutcome && (
-          <p className="text-small text-text-muted">结果：{lastOutcome}</p>
-        )}
+    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
+      <header className="flex flex-col gap-2 relative">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-display font-display font-semibold tracking-tight">本局结束</h1>
+          <SoundToggle />
+        </div>
+        <div className="relative">
+          <p
+            className={'text-h1 font-display font-medium ' + headlineClass}
+            data-testid="result-headline"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {headline}
+          </p>
+          {phase === 'won' ? <Confetti /> : null}
+        </div>
+        {lastOutcome ? (
+          <p className="text-small text-text-muted">结果：{lastOutcome === 'draw' ? '平局' : `${lastOutcome} 胜`}</p>
+        ) : null}
       </header>
 
       <Card>
         <div className="flex flex-col gap-4">
           <h2 className="text-h2 font-display font-medium">战绩</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <StatsCard label="总场次" value={stats.totalGames} />
             <StatsCard label="X 胜" value={stats.xWins} emphasis />
             <StatsCard label="O 胜" value={stats.oWins} />

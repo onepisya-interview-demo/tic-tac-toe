@@ -8,6 +8,7 @@ import { Board } from '@/components/Board';
 import { StatusBar } from '@/components/ui/StatusBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { SoundToggle } from '@/components/SoundToggle';
 
 export default function PlayPage() {
   const router = useRouter();
@@ -25,14 +26,19 @@ export default function PlayPage() {
   // Navigate to result when game ends
   useEffect(() => {
     if (phase === 'won' || phase === 'drawn') {
-      router.replace('/result');
+      const t = setTimeout(() => router.replace('/result'), 700);
+      return () => clearTimeout(t);
     }
+    return;
   }, [phase, router]);
 
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-h1 font-display font-semibold">游戏中</h1>
+    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
+      <header className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-h1 font-display font-semibold">游戏中</h1>
+          <SoundToggle />
+        </div>
         <StatusBar phase={phase} currentPlayer={currentPlayer} winner={winner} />
       </header>
 

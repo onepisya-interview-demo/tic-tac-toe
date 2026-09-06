@@ -10,8 +10,10 @@ export function StatsCard({ label, value, emphasis }: Props) {
       <span className="text-small text-text-secondary">{label}</span>
       <span
         className={
-          'text-h3 font-mono ' + (emphasis ? 'text-accent' : 'text-text-primary')
+          'text-h3 font-mono stats-value ' + (emphasis ? 'text-accent' : 'text-text-primary')
         }
+        data-testid="stat-value"
+        data-value={value}
       >
         {value}
       </span>

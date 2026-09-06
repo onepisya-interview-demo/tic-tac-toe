@@ -23,12 +23,24 @@ export function StatusBar({ phase, currentPlayer, winner }: Props) {
     message = '准备开始';
     colorClass = 'text-text-muted';
   }
+
   return (
     <div
       className="text-h2 font-display font-medium text-center"
       data-testid="status-bar"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
     >
-      <span className={colorClass}>{message}</span>
+      {phase === 'playing' && currentPlayer ? (
+        <span
+          aria-hidden
+          className="player-pulse inline-block w-2 h-2 align-middle rounded-full mr-2 bg-accent"
+        />
+      ) : null}
+      <span className={colorClass} data-testid="status-text">
+        {message}
+      </span>
     </div>
   );
 }

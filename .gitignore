@@ -60,11 +60,18 @@ dist/
 # =====================================================
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite-journal
 *.sqlite3
 data/*.db
 drizzle/.snapshot
+
+# =====================================================
+# OMX runtime evidence / state (QA screenshots, plan/ledger, notepad)
+# =====================================================
+.omx/
 
 # =====================================================
 # Testing / Coverage

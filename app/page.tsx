@@ -6,6 +6,7 @@ import { useGameStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { SoundToggle } from '@/components/SoundToggle';
 
 export default function HomePage() {
   const stats = useGameStore((s) => s.stats);
@@ -24,10 +25,15 @@ export default function HomePage() {
         ? `X 连胜 ${stats.currentStreak}`
         : `O 连胜 ${Math.abs(stats.currentStreak)}`;
 
+  const isEmpty = stats.totalGames === 0;
+
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1">
+    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
       <header className="flex flex-col gap-2">
-        <h1 className="text-display font-display font-semibold tracking-tight">井字棋</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-display font-display font-semibold tracking-tight">井字棋</h1>
+          <SoundToggle />
+        </div>
         <p className="text-body text-text-secondary">
           两人同设备轮流下，自动记录战绩。
         </p>
@@ -36,7 +42,15 @@ export default function HomePage() {
       <Card>
         <div className="flex flex-col gap-4">
           <h2 className="text-h2 font-display font-medium">战绩</h2>
-          <div className="grid grid-cols-2 gap-3">
+          {isEmpty ? (
+            <p
+              className="text-small text-text-secondary border border-dashed border-border-strong rounded-md px-3 py-2"
+              data-testid="empty-state"
+            >
+              还没有战绩，下一把开始吧。
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <StatsCard label="总场次" value={stats.totalGames} />
             <StatsCard label="X 胜" value={stats.xWins} emphasis />
             <StatsCard label="O 胜" value={stats.oWins} />
