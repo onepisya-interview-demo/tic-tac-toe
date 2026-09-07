@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board } from '@/lib/game';
+import { playSound } from '@/lib/sound';
+
+vi.mock('@/lib/sound', () => ({
+  playSound: vi.fn(),
+}));
 
 interface FetchCall {
   url: string;
@@ -42,6 +47,7 @@ function resetStore(): void {
 describe('lib/store (zustand game store)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(playSound).mockClear();
     resetStore();
   });
 
@@ -59,6 +65,22 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
+  it('startGame still starts with zero stats when stats GET fails', async () => {
+    const { calls, restore } = mockFetch([{ status: 500, body: {} }]);
+    useGameStore.setState({
+      stats: { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 },
+    });
+    useGameStore.getState().startGame();
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('playing');
+    expect(['X', 'O']).toContain(s.currentPlayer);
+    expect(s.stats).toEqual(emptyStats());
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats');
+    restore();
+  });
+
   it('hydrateStats fetches and stores remote stats', async () => {
     const remote = {
       totalGames: 4,
@@ -67,15 +89,21 @@ describe('lib/store (zustand game store)', () => {
       draws: 1,
       currentStreak: 2,
     };
-    const { restore } = mockFetch([{ status: 200, body: remote }]);
+    const { calls, restore } = mockFetch([{ status: 200, body: remote }]);
     useGameStore.getState().hydrateStats();
     await new Promise((r) => setTimeout(r, 10));
     expect(useGameStore.getState().stats).toEqual(remote);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats');
+    expect(calls[0].init).toEqual({ cache: 'no-store' });
     restore();
   });
 
   it('hydrateStats falls back to zero stats on network error', async () => {
     const { restore } = mockFetch([{ status: 500 }]);
+    useGameStore.setState({
+      stats: { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 },
+    });
     useGameStore.getState().hydrateStats();
     await new Promise((r) => setTimeout(r, 10));
     expect(useGameStore.getState().stats).toEqual(emptyStats());
@@ -122,6 +150,28 @@ describe('lib/store (zustand game store)', () => {
     expect(useGameStore.getState().board[0]).toBeNull();
   });
 
+  it('makeMove ignores a move while the game is idle', () => {
+    useGameStore.setState({
+      phase: 'idle',
+      currentPlayer: 'X',
+      board: createEmptyBoard(),
+    });
+    useGameStore.getState().makeMove(0);
+    const s = useGameStore.getState();
+    expect(s.board[0]).toBeNull();
+    expect(s.currentPlayer).toBe('X');
+  });
+
+  it('makeMove ignores a move when no player is active', () => {
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: null,
+      board: createEmptyBoard(),
+    });
+    useGameStore.getState().makeMove(0);
+    expect(useGameStore.getState().board[0]).toBeNull();
+  });
+
   it('makeMove ending the game sets phase=won and PUTs new stats', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: emptyStats() }, // not used directly here
@@ -146,8 +196,62 @@ describe('lib/store (zustand game store)', () => {
     expect(s.stats.xWins).toBe(1);
     expect(s.stats.totalGames).toBe(1);
     await new Promise((r) => setTimeout(r, 10));
-    expect(calls.some((c) => c.init?.method === 'PUT')).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats');
+    expect(calls[0].init?.method).toBe('PUT');
+    expect(calls[0].init?.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      totalGames: 1,
+      xWins: 1,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 1,
+    });
     restore();
+  });
+
+  it('keeps a finished local result when stats PUT fails', async () => {
+    const { restore } = mockFetch([{ status: 500, body: {} }]);
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+      stats: emptyStats(),
+    });
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.stats.xWins).toBe(1);
+    restore();
+  });
+
+  it('plays the two-layer win celebration exactly once', async () => {
+    vi.useFakeTimers();
+    const { restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+    const board: Board = [
+      'O', null, null,
+      null, 'O', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'O',
+      board: board as unknown as Board,
+      stats: emptyStats(),
+    });
+    useGameStore.getState().makeMove(8);
+    expect(vi.mocked(playSound)).toHaveBeenCalledWith('win');
+    await vi.advanceTimersByTimeAsync(360);
+    expect(vi.mocked(playSound)).toHaveBeenCalledWith('cheer');
+    await vi.runOnlyPendingTimersAsync();
+    restore();
+    vi.useRealTimers();
   });
 
   it('makeMove that fills the board sets phase=drawn and bumps draws', async () => {
@@ -167,9 +271,21 @@ describe('lib/store (zustand game store)', () => {
     useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
+    expect(s.lastOutcome).toBe('draw');
     expect(s.stats.draws).toBe(1);
     expect(s.stats.totalGames).toBe(1);
+    expect(vi.mocked(playSound)).toHaveBeenCalledWith('draw');
     restore();
+  });
+
+  it('plays a sound for an ordinary move', () => {
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: createEmptyBoard(),
+    });
+    useGameStore.getState().makeMove(0);
+    expect(vi.mocked(playSound)).toHaveBeenCalledWith('move');
   });
 
   it('restart resets the game but keeps stats', () => {
@@ -193,15 +309,23 @@ describe('lib/store (zustand game store)', () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: zero },
     ]);
+    useGameStore.setState({
+      stats: { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 },
+    });
     useGameStore.getState().resetAll();
     await new Promise((r) => setTimeout(r, 10));
     expect(useGameStore.getState().stats).toEqual(zero);
-    expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats');
+    expect(calls[0].init?.method).toBe('DELETE');
     restore();
   });
 
   it('resetAll falls back to empty stats on network error', async () => {
-    const { restore } = mockFetch([{ status: 500 }]);
+    const { restore } = mockFetch([{ status: 500, body: {} }]);
+    useGameStore.setState({
+      stats: { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 },
+    });
     useGameStore.getState().resetAll();
     await new Promise((r) => setTimeout(r, 10));
     expect(useGameStore.getState().stats).toEqual(emptyStats());

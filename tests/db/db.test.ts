@@ -127,4 +127,33 @@ describe('lib/db (server-side SQLite + Drizzle)', () => {
     expect(t).toHaveProperty('currentStreak');
     expect(t).toHaveProperty('updatedAt');
   });
+
+  it('creates the SQLite schema with stable physical columns', async () => {
+    const { loadStats, getDb, closeDb } = await import('@/lib/db');
+    const Database = (await import('better-sqlite3')).default;
+    try {
+      loadStats();
+      const raw = new Database(path.join(dir, 'tic-tac-toe.db'), { readonly: true });
+      const columns = raw.prepare('PRAGMA table_info(game_stats)').all() as Array<{
+        name: string;
+        type: string;
+        pk: number;
+      }>;
+      expect(columns.map((column) => column.name)).toEqual([
+        'id',
+        'total_games',
+        'x_wins',
+        'o_wins',
+        'draws',
+        'current_streak',
+        'updated_at',
+      ]);
+      expect(columns.every((column) => column.type === 'INTEGER')).toBe(true);
+      expect(columns.find((column) => column.name === 'id')?.pk).toBe(1);
+      expect(getDb()).toBeDefined();
+      raw.close();
+    } finally {
+      closeDb();
+    }
+  });
 });
