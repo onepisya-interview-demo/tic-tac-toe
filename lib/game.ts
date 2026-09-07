@@ -8,7 +8,6 @@ export type Board = readonly [
   Cell, Cell, Cell,
 ];
 export type Player = 'X' | 'O';
-export type GameStatus = 'idle' | 'playing' | 'won' | 'drawn';
 export type WinLine = readonly [number, number, number];
 
 /** Create a fresh empty board. */

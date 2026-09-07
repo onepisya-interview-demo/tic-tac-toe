@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { useGameStore, selectAvailableMoves } from '@/lib/store';
+import { useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board } from '@/lib/game';
 
 interface FetchCall {
@@ -208,14 +208,4 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
-  it('selectAvailableMoves returns indices of empty cells', () => {
-    const board: Board = [
-      'X', null, 'O',
-      null, null, null,
-      null, null, null,
-    ];
-    useGameStore.setState({ board: board as unknown as Board });
-    const moves = selectAvailableMoves(useGameStore.getState());
-    expect(moves).toEqual([1, 3, 4, 5, 6, 7, 8]);
-  });
 });

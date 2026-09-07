@@ -6,7 +6,6 @@ import {
   checkWinner,
   createEmptyBoard,
   emptyStats,
-  getAvailableMoves,
   isBoardFull,
   otherPlayer,
   randomizeFirstPlayer,
@@ -81,6 +80,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame: () => {
     void apiGetStats()
+      // Network failure still starts the game, just with zero stats —
+      // the same shape as the success path so callers need no branch.
+      .catch(() => emptyStats())
       .then((stats) => {
         const firstPlayer = randomizeFirstPlayer();
         set({
@@ -92,18 +94,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           lastOutcome: null,
           stats,
         });
-      })
-      .catch(() => {
-        const firstPlayer = randomizeFirstPlayer();
-        set({
-          phase: 'playing',
-          board: createEmptyBoard(),
-          currentPlayer: firstPlayer,
-          winner: null,
-          winLine: null,
-          lastOutcome: null,
-          stats: emptyStats(),
-        });
       });
   },
 
@@ -113,12 +103,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (s.currentPlayer === null) return;
     if (s.board[index] !== null) return;
 
-    let board = s.board;
-    try {
-      board = applyMove(board, index, s.currentPlayer);
-    } catch {
-      return;
-    }
+    // The guards above make applyMove's throw paths unreachable: occupied
+    // cells and out-of-range indices (undefined) both fail the !== null
+    // check, so this call cannot throw.
+    const board = applyMove(s.board, index, s.currentPlayer);
 
     const win = checkWinner(board);
     if (win) {
@@ -143,7 +131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         playSound('lose');
       }
       void apiPutStats(newStats).catch(() => {
-        /* swallow — UI state already updated */
+        /* stats PUT failure: local UI state is already correct */
       });
       return;
     }
@@ -159,7 +147,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         lastOutcome: 'draw',
       });
       playSound('draw');
-      void apiPutStats(newStats).catch(() => {});
+      void apiPutStats(newStats).catch(() => {
+        /* stats PUT failure: local UI state is already correct */
+      });
       return;
     }
 
@@ -187,10 +177,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .catch(() => set({ stats: emptyStats() }));
   },
 }));
-
-export function selectAvailableMoves(state: GameStore): readonly number[] {
-  return getAvailableMoves(state.board);
-}
 
 // Client-side: kick off stats hydration once when the store module loads
 // in the browser. Without this, any page that reads `stats` (e.g. /result
