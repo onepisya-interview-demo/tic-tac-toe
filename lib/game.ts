@@ -90,6 +90,14 @@ export function emptyStats(): GameStats {
   };
 }
 
+/** Human label for the signed streak counter: "+N for X, -N for O, 0 = dash". */
+export function streakLabel(currentStreak: number): string {
+  if (currentStreak === 0) return '—';
+  return currentStreak > 0
+    ? `X 连胜 ${currentStreak}`
+    : `O 连胜 ${Math.abs(currentStreak)}`;
+}
+
 /** Update stats given a finished game outcome. */
 export function recordOutcome(
   stats: GameStats,

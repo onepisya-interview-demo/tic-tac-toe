@@ -10,6 +10,7 @@ import {
   randomizeFirstPlayer,
   emptyStats,
   recordOutcome,
+  streakLabel,
   type Board,
   type Player,
   type Cell,
@@ -131,6 +132,7 @@ describe('randomizeFirstPlayer', () => {
   it('uses the provided RNG', () => {
     expect(randomizeFirstPlayer(() => 0)).toBe('X');
     expect(randomizeFirstPlayer(() => 0.9999)).toBe('O');
+    expect(randomizeFirstPlayer(() => 0.5)).toBe('O');
   });
 
   it('distributes roughly 50/50 over many calls', () => {
@@ -159,6 +161,34 @@ describe('recordOutcome', () => {
     s = recordOutcome(s, 'O'); // streak = -1 (switch)
     s = recordOutcome(s, 'O'); // streak = -2
     expect(s.currentStreak).toBe(-2);
+  });
+
+  it('records an O win with every counter', () => {
+    const next = recordOutcome(emptyStats(), 'O');
+    expect(next).toEqual({ totalGames: 1, xWins: 0, oWins: 1, draws: 0, currentStreak: -1 });
+  });
+
+  it('extends an X streak in both directions across switches', () => {
+    const afterLoss = recordOutcome({ totalGames: 1, xWins: 0, oWins: 1, draws: 0, currentStreak: -1 }, 'X');
+    expect(afterLoss.currentStreak).toBe(1);
+    const extended = recordOutcome({ totalGames: 2, xWins: 1, oWins: 1, draws: 0, currentStreak: 1 }, 'X');
+    expect(extended.currentStreak).toBe(2);
+    const switched = recordOutcome(extended, 'O');
+    expect(switched.currentStreak).toBe(-1);
+  });
+});
+
+describe('streakLabel', () => {
+  it('returns a dash for zero streak', () => {
+    expect(streakLabel(0)).toBe('—');
+  });
+
+  it('labels positive streaks as X', () => {
+    expect(streakLabel(3)).toBe('X 连胜 3');
+  });
+
+  it('labels negative streaks as O with absolute count', () => {
+    expect(streakLabel(-2)).toBe('O 连胜 2');
   });
 });
 

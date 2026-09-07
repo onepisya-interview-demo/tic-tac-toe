@@ -119,17 +119,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stats: newStats,
         lastOutcome: win.player,
       });
-      if (win.player === s.currentPlayer) {
-        // Two-layer celebration: short ascending pair to confirm the win,
-        // then a longer arpeggio with vibrato to celebrate it. The 360ms
-        // delay lines up with the end of the 'win' envelopes (2 × 180ms).
-        // playSound('cheer') re-reads getMuted(), so toggling mute mid-
-        // celebration still silences the rest.
-        playSound('win');
-        setTimeout(() => playSound('cheer'), 360);
-      } else {
-        playSound('lose');
-      }
+      // checkWinner is called only after applyMove(board, index, currentPlayer),
+      // so win.player is currentPlayer by construction.
+      playSound('win');
+      // Two-layer celebration: short ascending pair to confirm the win,
+      // then a longer arpeggio with vibrato to celebrate it. The 360ms
+      // delay lines up with the end of the 'win' envelopes (2 × 180ms).
+      // playSound('cheer') re-reads getMuted(), so toggling mute mid-
+      // celebration still silences the rest.
+      setTimeout(() => playSound('cheer'), 360);
       void apiPutStats(newStats).catch(() => {
         /* stats PUT failure: local UI state is already correct */
       });

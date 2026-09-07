@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadStats, saveStats, resetStats } from '@/lib/db';
-import { emptyStats, type GameStats } from '@/lib/game';
+import { type GameStats } from '@/lib/game';
 
 // Force this route to run on the Node.js runtime — better-sqlite3 needs it.
 export const runtime = 'nodejs';
@@ -41,6 +41,3 @@ export async function DELETE() {
   const zero = resetStats();
   return NextResponse.json(zero);
 }
-
-// Silence unused-import warning; keep import for clarity of intent.
-void emptyStats;

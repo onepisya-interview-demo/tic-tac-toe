@@ -1,34 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
 import { useGameStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatsCard } from '@/components/ui/StatsCard';
+import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
 
 export default function HomePage() {
   const stats = useGameStore((s) => s.stats);
   const startGame = useGameStore((s) => s.startGame);
   const resetAll = useGameStore((s) => s.resetAll);
-  const hydrateStats = useGameStore((s) => s.hydrateStats);
-
-  useEffect(() => {
-    hydrateStats();
-  }, [hydrateStats]);
-
-  const streakLabel =
-    stats.currentStreak === 0
-      ? '—'
-      : stats.currentStreak > 0
-        ? `X 连胜 ${stats.currentStreak}`
-        : `O 连胜 ${Math.abs(stats.currentStreak)}`;
 
   const isEmpty = stats.totalGames === 0;
 
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
+    <main className="page-shell page-fade-in">
       <header className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-display font-display font-semibold tracking-tight">井字棋</h1>
@@ -50,13 +37,7 @@ export default function HomePage() {
               还没有战绩，下一把开始吧。
             </p>
           ) : null}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatsCard label="总场次" value={stats.totalGames} />
-            <StatsCard label="X 胜" value={stats.xWins} emphasis />
-            <StatsCard label="O 胜" value={stats.oWins} />
-            <StatsCard label="平局" value={stats.draws} />
-            <StatsCard label="当前连胜" value={streakLabel} />
-          </div>
+          <StatsGrid stats={stats} />
         </div>
       </Card>
 

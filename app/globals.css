@@ -32,6 +32,15 @@
   color-scheme: dark;
 }
 
+/* Page container shared by all three routes (DESIGN.md §3).
+   Single source so layout changes never need three-file edits. */
+.page-shell {
+  @apply mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
+}
+
+/* Focus indication is owned once, globally: *:focus-visible below implements
+   the DESIGN.md §6 ring contract. Interactive components must NOT re-declare
+   Tailwind focus-visible utilities on top of it. */
 html, body {
   background-color: var(--color-bg-base);
   color: var(--color-text-primary);

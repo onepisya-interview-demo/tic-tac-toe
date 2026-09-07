@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatsCard } from '@/components/ui/StatsCard';
+import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
 import { Confetti } from '@/components/Confetti';
 
@@ -31,19 +30,8 @@ export default function ResultPage() {
     headlineClass = 'text-text-muted';
   }
 
-  const streakLabel =
-    stats.currentStreak === 0
-      ? '—'
-      : stats.currentStreak > 0
-        ? `X 连胜 ${stats.currentStreak}`
-        : `O 连胜 ${Math.abs(stats.currentStreak)}`;
-
-  useEffect(() => {
-    // Page-fade-in handles its own animation; nothing else to do.
-  }, []);
-
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
+    <main className="page-shell page-fade-in">
       <header className="flex flex-col gap-2 relative">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-display font-display font-semibold tracking-tight">本局结束</h1>
@@ -68,13 +56,7 @@ export default function ResultPage() {
       <Card>
         <div className="flex flex-col gap-4">
           <h2 className="text-h2 font-display font-medium">战绩</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatsCard label="总场次" value={stats.totalGames} />
-            <StatsCard label="X 胜" value={stats.xWins} emphasis />
-            <StatsCard label="O 胜" value={stats.oWins} />
-            <StatsCard label="平局" value={stats.draws} />
-            <StatsCard label="当前连胜" value={streakLabel} />
-          </div>
+          <StatsGrid stats={stats} />
         </div>
       </Card>
 

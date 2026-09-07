@@ -14,5 +14,13 @@ export function Confetti() {
   useEffect(() => {
     burstConfetti();
   }, []);
-  return null;
+  // canvas-confetti owns the visual canvas; this stable layer exposes the
+  // mounted celebration to QA and DOM tooling without intercepting input.
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="confetti"
+      className="pointer-events-none fixed inset-0 z-50"
+    />
+  );
 }

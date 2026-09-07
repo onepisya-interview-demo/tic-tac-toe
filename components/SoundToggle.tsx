@@ -33,7 +33,7 @@ export function SoundToggle() {
         setMuted(next);
         setLocalMuted(next);
       }}
-      className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors duration-[120ms] ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
+      className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors duration-[120ms] ease-out"
     >
       <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full bg-accent" />
       {muted ? '静音' : '音效开'}

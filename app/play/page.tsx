@@ -33,7 +33,7 @@ export default function PlayPage() {
   }, [phase, router]);
 
   return (
-    <main className="mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1 page-fade-in">
+    <main className="page-shell page-fade-in">
       <header className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-h1 font-display font-semibold">游戏中</h1>
