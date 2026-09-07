@@ -61,6 +61,16 @@ coverage/             v8 coverage html 报告 (gitignored)
 tests/                集成测试 + visual QA
 ```
 
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [DESIGN.md](DESIGN.md) | 设计契约：色彩/字体/间距/动效/可访问性 token |
+| [AGENTS.md](AGENTS.md) | AI 代理与贡献规范：commit 约定、门禁、验证 gate |
+| [docs/testing.md](docs/testing.md) | 测试思路：分层策略、阈值、RED-first、QA 探针设计 |
+| [docs/operations.md](docs/operations.md) | 操作手册：日常命令、DB、QA、提交规范速查、排错 |
+| [docs/learnings.md](docs/learnings.md) | 学习笔记：踩坑记录与版本相关事项 |
+
 ## 部署
 
 直接 push 到 Vercel 即可, SQLite 文件需替换为 Turso/LibSQL (better-sqlite3 在 Vercel serverless 上无法持久化)。当前默认是单机开发目标。

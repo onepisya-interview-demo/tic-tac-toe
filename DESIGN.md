@@ -128,11 +128,13 @@
 
 ## 9. Quality Gates
 
-- `npm run lint` — zero errors
-- `npm run typecheck` — zero errors
-- `npm run build` — succeeds
-- `npm test` — all green, coverage ≥ 80% on `lib/`
-- Visual QA via `omo:visual-qa` after build: dark `#0A0A0A` bg confirmed, Geist / Inter loaded, no FOUT, no emoji, focus rings visible
+门禁清单不在这里重复维护，两处为单一事实源：
+
+- 工具链与阈值（vitest / coverage / mutation / QA 脚本）：README「Gauntlet 工具链」
+- 提交前门禁与审计（commit-audit / vitest / typecheck / lint / build / QA）：AGENTS.md「Verification gate」
+
+本文件的验收域是设计契约本身：视觉 QA 断言暗色 `#0A0A0A` 基底、Geist / Inter 加载（无 FOUT）、
+无 emoji、focus ring 可见、动效符合第 5 节时长/缓动表。
 
 ---
 
