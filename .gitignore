@@ -106,3 +106,10 @@ reports/
 # Vitest tmp (jsdom env cache)
 # =====================================================
 .vitest-tmp/
+
+# =====================================================
+# ULW local runtime state and evidence
+# =====================================================
+/.omo/evidence/
+/.omo/ulw-loop/goals.json
+/.omo/ulw-loop/ledger.jsonl
