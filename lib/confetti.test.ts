@@ -49,6 +49,66 @@ describe('lib/confetti (canvas-confetti burst)', () => {
     expect(origins).toContain(1);
   });
 
+  it('burstConfetti launches from inward bottom origins on desktop viewports', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (q: string) =>
+      ({
+        matches: q === '(min-width: 1280px)',
+        media: q,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+    try {
+      const { burstConfetti } = await import('./confetti');
+      burstConfetti();
+      const origins = confettiMock.mock.calls.map(
+        (c) => (c[0] as { origin?: { x?: number; y?: number } } | undefined)?.origin,
+      );
+      expect(origins.length).toBe(2);
+      expect(origins.map((o) => o?.x ?? -1).sort((a, b) => a - b)).toEqual([0.18, 0.82]);
+      for (const origin of origins) {
+        // Given a desktop viewport, when the burst fires, then origins sit in the bottom 0-5% band.
+        expect(origin?.y).toBe(0.96);
+      }
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('burstConfetti keeps mid-edge origins on tablet/mobile viewports', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (q: string) =>
+      ({
+        matches: false,
+        media: q,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+    try {
+      const { burstConfetti } = await import('./confetti');
+      burstConfetti();
+      const origins = confettiMock.mock.calls.map(
+        (c) => (c[0] as { origin?: { x?: number; y?: number } } | undefined)?.origin,
+      );
+      expect(origins.length).toBe(2);
+      expect(origins.map((o) => o?.x ?? -1).sort((a, b) => a - b)).toEqual([0, 1]);
+      // Given a tablet/mobile viewport, when the burst fires, then origins stay at the legacy mid-edge 0.55.
+      for (const origin of origins) {
+        expect(origin?.y).toBe(0.55);
+      }
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it('burstConfetti is a no-op when prefers-reduced-motion is set', async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = (q: string) =>

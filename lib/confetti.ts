@@ -1,6 +1,8 @@
 // Colorful win-state celebration using canvas-confetti.
-// Renders a full-viewport particle burst that streams from both edges and
-// converges in the middle. Honors prefers-reduced-motion (no-op).
+// Renders a full-viewport particle burst. On desktop (>=1280px) both
+// streams launch from inward points near the bottom and converge upward;
+// smaller viewports keep the legacy mid-edge launch. Honors
+// prefers-reduced-motion (no-op).
 
 import confetti from 'canvas-confetti';
 
@@ -20,13 +22,20 @@ const PALETTE = [
 // delay so the particles cross the viewport mid-air instead of being a wall.
 const BURST_DURATION_MS = 1100;
 const PARTICLES_PER_FRAME = 4;
+const DESKTOP_LEFT_X = 0.18;
+const DESKTOP_RIGHT_X = 0.82;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-function fire(originX: number, angle: number): void {
+function isDesktopLayout(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(min-width: 1280px)').matches;
+}
+
+function fire(originX: number, angle: number, originY: number): void {
   confetti({
     particleCount: PARTICLES_PER_FRAME,
     angle,
@@ -35,7 +44,7 @@ function fire(originX: number, angle: number): void {
     gravity: 0.9,
     ticks: 220,
     scalar: 1.1,
-    origin: { x: originX, y: 0.55 },
+    origin: { x: originX, y: originY },
     colors: PALETTE,
   });
 }
@@ -49,9 +58,13 @@ export function burstConfetti(): void {
   if (prefersReducedMotion()) return;
 
   const start = Date.now();
+  const isDesktop = isDesktopLayout();
+  const originY = isDesktop ? 0.96 : 0.55;
+  const leftX = isDesktop ? DESKTOP_LEFT_X : 0;
+  const rightX = isDesktop ? DESKTOP_RIGHT_X : 1;
   const tick = (): void => {
-    fire(0, 60);   // bottom-left → upper-right
-    fire(1, 120);  // bottom-right → upper-left
+    fire(leftX, 60, originY);   // bottom-left → upper-right
+    fire(rightX, 120, originY); // bottom-right → upper-left
     if (Date.now() - start < BURST_DURATION_MS) {
       requestAnimationFrame(tick);
     }
