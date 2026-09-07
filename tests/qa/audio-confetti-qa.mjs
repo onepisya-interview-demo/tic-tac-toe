@@ -1,9 +1,11 @@
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
-const OUT = '/private/tmp/ulw-demo/.omx/evidence/qa-after';
+import { launchQA, BASE_URL } from './lib/browser.mjs';
+import { driveTopRowWin } from './lib/win-drive.mjs';
+import { ensureDir, writeQaLog } from './lib/evidence.mjs';
+
+const BASE = BASE_URL;
+const OUT = process.env.EVIDENCE_DIR ?? '.omx/evidence/qa-after';
 const findings = [];
 
 async function step(name, fn) {
@@ -20,11 +22,9 @@ async function step(name, fn) {
   }
 }
 
-await fs.mkdir(OUT, { recursive: true });
+await ensureDir(OUT);
 
-const browser = await chromium.launch({ headless: true });
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
+const { browser, ctx, page } = await launchQA();
 page.on('console', (msg) => {
   if (msg.type() === 'error') console.log('  [console error]', msg.text());
 });
@@ -67,16 +67,8 @@ try {
     const firstPlayer = m[1];
     winningPlayer = firstPlayer; // X tops row at 0/1/2, O tops row at 0/1/2 too.
 
-    // Always: first 0, second 3, first 1, second 4, first 2 — first player wins top row.
-    await page.click('[data-testid="cell-0"]');
-    await page.waitForTimeout(120);
-    await page.click('[data-testid="cell-3"]');
-    await page.waitForTimeout(120);
-    await page.click('[data-testid="cell-1"]');
-    await page.waitForTimeout(120);
-    await page.click('[data-testid="cell-4"]');
-    await page.waitForTimeout(120);
-    await page.click('[data-testid="cell-2"]');
+    // First player always wins the top row (see driveTopRowWin).
+    await driveTopRowWin(page);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${OUT}/03-play-win-moment.png` });
   });
@@ -146,7 +138,7 @@ try {
   await page.screenshot({ path: `${OUT}/_failure.png` });
   process.exitCode = 1;
 } finally {
-  await fs.writeFile(`${OUT}/qa-log.json`, JSON.stringify(findings, null, 2));
+  await writeQaLog(OUT, findings);
   await ctx.close();
   await browser.close();
 }

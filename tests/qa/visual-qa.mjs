@@ -2,22 +2,12 @@
 // Runs against the production server on http://localhost:3000.
 // Captures one screenshot per route + a play-through ending in a win.
 
-import { chromium } from 'playwright';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { launchQA, BASE_URL } from './lib/browser.mjs';
+import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
+import { driveTopRowWin } from './lib/win-drive.mjs';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
+const BASE = BASE_URL;
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
-
-async function ensureDir(p) {
-  await fs.mkdir(p, { recursive: true });
-}
-
-async function shoot(page, name) {
-  const p = path.join(EVIDENCE_DIR, name);
-  await page.screenshot({ path: p, fullPage: true });
-  return p;
-}
 
 async function snapshot(page) {
   return page.evaluate(() => ({
@@ -35,9 +25,8 @@ async function snapshot(page) {
 
 async function main() {
   await ensureDir(EVIDENCE_DIR);
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
+  const { browser, ctx, page } = await launchQA();
+  const shoot = shootTo(EVIDENCE_DIR);
 
   const log = [];
 
@@ -60,18 +49,9 @@ async function main() {
   const playSnap = await snapshot(page);
   log.push({ stage: 'play-start', shot: playShot, snapshot: playSnap });
 
-  // ---- 3. Play a winning game: X plays 0,4,8 (top-row + center + bottom-right diagonal) ----
-  // X starts (first player randomized; we accept either and adapt).
-  // We'll click cells in a fixed sequence and check the winner cell highlighting.
-  await page.click('[data-testid="cell-0"]'); // first move
-  await page.waitForTimeout(120);
-  await page.click('[data-testid="cell-3"]'); // second move (other player)
-  await page.waitForTimeout(120);
-  await page.click('[data-testid="cell-1"]'); // first player again
-  await page.waitForTimeout(120);
-  await page.click('[data-testid="cell-4"]'); // other player again
-  await page.waitForTimeout(120);
-  await page.click('[data-testid="cell-2"]'); // first player wins top row
+  // ---- 3. Play a winning game: whoever goes first wins the top row ----
+  // (First player is randomized; driveTopRowWin adapts to either.)
+  await driveTopRowWin(page);
   await page.waitForURL(`${BASE}/result`, { timeout: 5000 });
   await page.waitForSelector('[data-testid="result-headline"]');
   await page.waitForTimeout(300);
@@ -105,13 +85,10 @@ async function main() {
   const replaySnap = await snapshot(page);
   log.push({ stage: 'play-again', shot: replayShot, snapshot: replaySnap });
 
+  await ctx.close();
   await browser.close();
 
-  // Write evidence summary
-  await fs.writeFile(
-    path.join(EVIDENCE_DIR, 'qa-log.json'),
-    JSON.stringify(log, null, 2),
-  );
+  await writeQaLog(EVIDENCE_DIR, log);
   console.log('QA complete. Screenshots and qa-log.json written to', EVIDENCE_DIR);
 }
 

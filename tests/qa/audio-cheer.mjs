@@ -4,16 +4,13 @@
 //   (a) the win-to-cheer gap is at least 300ms (sequencing fired)
 //   (b) the cheer creates ≥6 oscillators with the C5-E5-G5-C6-E6 frequencies
 //       (the actual arpeggio notes, not the move/win envelopes)
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
-const BASE = 'http://localhost:3000';
-const browser = await chromium.launch({
-  headless: true,
-  args: ['--autoplay-policy=no-user-gesture-required'],
-});
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
+import { launchQA, BASE_URL } from './lib/browser.mjs';
+import { driveTopRowWin } from './lib/win-drive.mjs';
+
+const BASE = BASE_URL;
+const { browser, ctx, page } = await launchQA({ autoplay: true });
 
 await page.request.delete(`${BASE}/api/stats`);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
@@ -61,11 +58,7 @@ const firstPlayer = firstStatus?.match(/轮到 ([XO])/)?.[1];
 
 // Click the 5 moves back-to-back; the winning move triggers win → setTimeout
 // for cheer ~360ms later.
-const moves = [0, 3, 1, 4, 2];
-for (const i of moves) {
-  await page.click(`[data-testid="cell-${i}"]`);
-  await page.waitForTimeout(60);
-}
+await driveTopRowWin(page, { clickGapMs: 60 });
 
 // 4. Wait long enough for the setTimeout to fire and the cheer to schedule.
 await page.waitForURL('**/result', { timeout: 4000 });

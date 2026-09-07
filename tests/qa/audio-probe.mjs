@@ -2,16 +2,13 @@
 // inspect the running oscillator count after triggering a win with sound
 // unmuted. We can't actually hear audio in headless Chromium, but we can
 // prove that the Web Audio path is live and producing nodes.
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
-const BASE = 'http://localhost:3000';
-const browser = await chromium.launch({
-  headless: true,
-  args: ['--autoplay-policy=no-user-gesture-required'],
-});
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
+import { launchQA, BASE_URL } from './lib/browser.mjs';
+import { driveTopRowWin } from './lib/win-drive.mjs';
+
+const BASE = BASE_URL;
+const { browser, ctx, page } = await launchQA({ autoplay: true });
 
 await page.request.delete(`${BASE}/api/stats`);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
@@ -52,10 +49,7 @@ await page.evaluate(() => {
 // 4. Drive a win: whoever goes first wins top row.
 const firstStatus = await page.locator('[data-testid="status-text"]').textContent();
 const firstPlayer = firstStatus?.match(/轮到 ([XO])/)?.[1];
-for (const i of [0, 3, 1, 4, 2]) {
-  await page.click(`[data-testid="cell-${i}"]`);
-  await page.waitForTimeout(120);
-}
+await driveTopRowWin(page);
 
 // 5. Allow the page to settle so playSound('win') ran.
 await page.waitForURL('**/result', { timeout: 4000 });

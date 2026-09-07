@@ -2,13 +2,13 @@
 // Pre-seeds localStorage with a non-default value ('0' = unmuted),
 // navigates to all three routes, and asserts that no React hydration
 // warning appears in the browser console.
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
-const BASE = 'http://localhost:3000';
-const browser = await chromium.launch({ headless: true });
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
+import { launchQA, BASE_URL } from './lib/browser.mjs';
+import { driveTopRowWin } from './lib/win-drive.mjs';
+
+const BASE = BASE_URL;
+const { browser, ctx, page } = await launchQA();
 
 const hydrationWarnings = [];
 const consoleErrors = [];
@@ -52,11 +52,7 @@ await page.waitForSelector('[data-testid="board"]');
 
 const firstStatus = await page.locator('[data-testid="status-text"]').textContent();
 const firstPlayer = firstStatus?.match(/轮到 ([XO])/)?.[1];
-
-for (const i of [0, 3, 1, 4, 2]) {
-  await page.click(`[data-testid="cell-${i}"]`);
-  await page.waitForTimeout(120);
-}
+await driveTopRowWin(page);
 
 await page.waitForURL('**/result', { timeout: 4000 });
 await page.waitForSelector('[data-testid="result-headline"]');
