@@ -25,6 +25,30 @@ playSound('cheer') 内部重读 mute，中途静音仍会静下来。
 Conventional 前缀保留英文 token（工具兼容），subject/body/trailer 值可中文；trailer 键名必须英文
 （插件按键名解析）。审计关键词在 tests/qa/commit-audit.mjs 与 commitlint.config.cjs 双处登记。
 
+### 6. UI 里的复制逻辑 = 不可测逻辑（深模块清理轮）
+streakLabel（符号连胜 → 中文标签）曾在 home/result 两页逐字复制且零测试。下沉 lib/game.ts 纯函数后
+获得 3 个单测并用突变探针验证过敏感性。教训：同一段派生逻辑出现第二次时就该进 lib/。
+
+### 7. hydrate 触发点只能有一个
+store 模块加载时的 kickoff（见 lib/store.ts 尾部）已覆盖所有页面的战绩水合；home 页又挂了一个
+useEffect 触发，导致每次进首页 GET /api/stats 两次。教训：副作用触发点要先找"谁已经做了"，再决定要不要加。
+
+### 8. 焦点样式的所有权在全局 CSS
+globals.css 的 :focus-visible 全局规则就是 DESIGN §6 的实现；Button/Cell/SoundToggle 曾各自复制一份
+Tailwind focus 类，与全局规则形成两套竞争实现。删除组件级拷贝，平台规则是唯一来源。
+
+### 9. Stryker 10 × Vitest 5 会伪造高存活率
+Stryker 10 的 Vitest runner 用空格拼接 test name，再传给 `--testNamePattern`；
+Vitest 5 实际报告 `suite > test`。结果是过滤器匹配不到测试，覆盖内突变也会“0 个测试后存活”。
+解法是 pnpm patch：把 runner 生成的 regex 改成允许空格或 `>` 分隔（见
+`patches/@stryker-mutator__vitest-runner@10.0.0.patch`）。修复后同一套测试的总分从
+71.97% 回到真实基线，后续补测试再到 84.50%。依赖升级时必须重跑 Stryker，直到上游合并这个适配。
+
+### 10. 树外特效也需要可观察契约
+canvas-confetti 把画布直接挂到 `document.body`，而 `Confetti` 原本返回 `null`，结果页看似有庆祝组件，
+QA 却找不到任何稳定节点。现在组件保留一个 `pointer-events-none` 且 `aria-hidden` 的
+`data-testid="confetti"` 层，庆祝是否挂载成为可断言契约；真实视觉仍完全交给第三方库。
+
 ## 版本相关
 
 | 事项 | 说明 |
@@ -33,5 +57,5 @@ Conventional 前缀保留英文 token（工具兼容），subject/body/trailer �
 | React 19 + App Router | Server Component 默认，交互组件显式 'use client' |
 | Tailwind v4 | @theme 自定义 token（DESIGN.md 契约），不用 stock 色板 |
 | vitest 5 | 启动时有 configLoader native 警告（ESM 语法被按 CJS 加载）；无害，未来大版本会变默认 |
-| Stryker | 沙箱目录 .stryker-tmp/ 需在 vitest exclude 里，否则变异运行会误收集依赖测试 |
+| Stryker 10 | Vitest runner 由 pnpm patch 适配 Vitest 5；沙箱目录 .stryker-tmp/ 必须在 vitest exclude 里，否则变异运行会误收集依赖测试 |
 | Drizzle + better-sqlite3 | 单行战绩表 id=1，WAL 模式；Vercel 部署需换 Turso/LibSQL（README 已注明） |

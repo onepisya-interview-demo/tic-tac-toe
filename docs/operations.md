@@ -58,3 +58,5 @@ UX_STRICT=1（启用 ux 合约断言）。证据目录已 gitignore。
 - hydration mismatch → 任何读 localStorage 的 UI 必须默认值首渲 + useEffect 后同步（SoundToggle 模式）。
 - 音频无声 → 用户手势后才 lazy 建 AudioContext；QA 加 --autoplay-policy=no-user-gesture-required。
 - commit 被拒 → 看钩子输出的规则编号（R1 subject / R3 WHAT-WHY-HOW / R4 trailers / R5 Plan）。
+- 变异分数异常低/大量假存活 → 先确认 Stryker×Vitest 兼容补丁仍被 pnpm 安装，再重跑
+  `pnpm test:mutation`；升级 Stryker 或 Vitest 后检查上游是否已改用 Vitest 5 兼容的 test name 过滤。
