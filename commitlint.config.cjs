@@ -5,7 +5,7 @@ module.exports = {
   extends: ["@commitlint/config-conventional"],
   parserPreset: {
     parserOpts: {
-      headerPattern: /^(prompt\([^)]+\)|(feat|fix|refactor|test|docs|chore|build|ci|perf))(\([^)]+\))?!?: /,
+      headerPattern: /^(prompt|feat|fix|refactor|test|docs|chore|build|ci|perf)(\([^)]+\))?(?:!)?: (.+)/,
       headerCorrespondence: ["type", "scope", "subject"],
     },
   },
