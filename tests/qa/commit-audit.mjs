@@ -14,16 +14,69 @@ import { readFileSync } from "node:fs";
 const args = parseArgs(process.argv.slice(2));
 
 
-// WHY/HOW keyphrase sets include CJK literals because the same audit
-// policy now covers both English and Chinese commit bodies. English
-// tokens keep their `\b` anchors (word boundaries); CJK tokens are
-// matched as raw substrings because JavaScript `\b` does not fire
-// between an ASCII word boundary and an ideograph. CJK keyphrases
-// are 2+ characters, so substring matching avoids accidental hits.
+// English and Chinese bodies share the same WHY/HOW policy. English tokens
+// keep word boundaries; Chinese keyphrases are matched literally because
+// JavaScript `\b` does not fire around CJK ideographs. Keep Chinese entries
+// at two or more characters so a stray character cannot satisfy the policy.
 const TYPE_RE = /^(feat|fix|refactor|test|docs|chore|build|ci|perf)(\([^)]+\))?!?: /;
 const PROMPT_RE = /^prompt\([^)]+\)!?: /;
-const WHY_RE = /\b(because|so that|in order to|to fix|to enable|to support|to allow|to make|missing|broken|broke|failing|fail\b|dead code|was a no-op|the user|requirement|bug\b|problem|requested|asked for|overrides|forbid|policy|explicit|without|to avoid|in favor|instead|to stop|to prevent|to land|to ship|to satisfy|need\w*|necessary|muddies|drift|regression|prevent|avoid|satisfy|wanted|to keep|to surface|to capture|unbreaks|existed|allowed|risk|fragile|brittle|wrong|no-op|trigger\w*|caused|cause\w*|root cause|oversight|premature|lazy|prior)\b|因为|由于|为了|满足|修复|用户要求|用户希望|缺失|暴露|防止|阻止|错误|故障|不一致|不够|避免|风险|失败|拒绝|不允许|依赖|缺口|不符合|违反|拦截|防御|覆盖|全量|要求|希望|用户|问题|依赖项|前提|原因|动机|诉求|决策|取舍/i;
-const HOW_RE = /\b(via|by adding|by using|by writ|by replacing|with a|with an|tested|verified|pnpm|vitest|playwright|useEffect|useState|setTimeout|commitlint|hook|rebase|rebased|loader|component|module|function|helper|pattern|envelope|emit\w*|synthesize|synthesized|layer\w*|API surface|using|calling|renamed|rewrote|rename\w*|moved to|moved from|replaces|creates|created|shipped|ships|ship\b|lands|land\b|captures|capture\w*|wrap|wrapped|wraps|reads|reads from|consumes|consume|exposes|expose|exports|export\w*|invokes|invoke\w*|calls|call\b|parses|parse\b|fires|fire\b|schedules|schedule\w*|delays|delay\w*|throttl\w*|debounc\w*|hydrat\w*|render\w*|mount\w*|scroll\w*|click\w*|handler|provider|router\w*|middleware|guard\b|validator|validat\w*|lint\b|tsc\b|eslint\b|format\w*|snapshot\w*|screenshot\w*|mocks|mock\w*|stub\w*|fixture|assert\w*|probe\b|wait\b|await\w*|promise\b)\b|通过|使用|验证|测试|钩子|脚本|命令|重写|备份|提交|审计|改写|扩展|拦截|重命名|增加|修改|删除|调整|锁定|引入|安装|调用|部署|触发|运行|执行|打包|接入|纳入|加载|注入|对齐|合并|拆分|回放|整理|对接|导出|落地|排查|诊断|定位|修复|覆盖|加固|起效|生效|打通|拦截|重写|扫一遍|补上|新加|写|改/i;
+
+const ENGLISH_WHY_TOKENS = [
+  "because", "so that", "in order to", "to fix", "to enable", "to support",
+  "to allow", "to make", "missing", "broken", "broke", "failing", "fail\\b",
+  "dead code", "was a no-op", "the user", "requirement", "bug\\b", "problem",
+  "requested", "asked for", "overrides", "forbid", "policy", "explicit",
+  "without", "to avoid", "in favor", "instead", "to stop", "to prevent",
+  "to land", "to ship", "to satisfy", "need\\w*", "necessary", "muddies",
+  "drift", "regression", "prevent", "avoid", "satisfy", "wanted", "to keep",
+  "to surface", "to capture", "unbreaks", "existed", "allowed", "risk",
+  "fragile", "brittle", "wrong", "no-op", "trigger\\w*", "caused",
+  "cause\\w*", "root cause", "oversight", "premature", "lazy", "prior",
+];
+const CJK_WHY_KEYPHRASES = [
+  "因为", "由于", "为了", "满足", "修复", "用户要求", "用户希望", "缺失",
+  "暴露", "防止", "阻止", "错误", "故障", "不一致", "不够", "避免", "风险",
+  "失败", "拒绝", "不允许", "依赖", "依赖项", "缺口", "不符合", "违反",
+  "拦截", "防御", "覆盖", "全量", "要求", "希望", "问题", "前提", "原因",
+  "动机", "诉求", "决策", "取舍",
+];
+const ENGLISH_HOW_TOKENS = [
+  "via", "by adding", "by using", "by writ", "by replacing", "with a",
+  "with an", "tested", "verified", "pnpm", "vitest", "playwright",
+  "useEffect", "useState", "setTimeout", "commitlint", "hook", "rebase",
+  "rebased", "loader", "component", "module", "function", "helper",
+  "pattern", "envelope", "emit\\w*", "synthesize", "synthesized",
+  "layer\\w*", "API surface", "using", "calling", "renamed", "rewrote",
+  "rename\\w*", "moved to", "moved from", "replaces", "creates", "created",
+  "shipped", "ships", "ship\\b", "lands", "land\\b", "captures",
+  "capture\\w*", "wrap", "wrapped", "wraps", "reads", "reads from",
+  "consumes", "consume", "exposes", "expose", "exports", "export\\w*",
+  "invokes", "invoke\\w*", "calls", "call\\b", "parses", "parse\\b",
+  "fires", "fire\\b", "schedules", "schedule\\w*", "delays", "delay\\w*",
+  "throttl\\w*", "debounc\\w*", "hydrat\\w*", "render\\w*", "mount\\w*",
+  "scroll\\w*", "click\\w*", "handler", "provider", "router\\w*",
+  "middleware", "guard\\b", "validator", "validat\\w*", "lint\\b", "tsc\\b",
+  "eslint\\b", "format\\w*", "snapshot\\w*", "screenshot\\w*", "mocks",
+  "mock\\w*", "stub\\w*", "fixture", "assert\\w*", "probe\\b", "wait\\b",
+  "await\\w*", "promise\\b",
+];
+const CJK_HOW_KEYPHRASES = [
+  "通过", "使用", "验证", "测试", "钩子", "脚本", "命令", "重写", "备份",
+  "提交", "审计", "改写", "扩展", "拦截", "重命名", "增加", "修改", "删除",
+  "调整", "锁定", "引入", "安装", "调用", "部署", "触发", "运行", "执行",
+  "打包", "接入", "纳入", "加载", "注入", "对齐", "合并", "拆分", "回放",
+  "整理", "对接", "导出", "落地", "排查", "诊断", "定位", "修复", "覆盖",
+  "加固", "起效", "生效", "打通", "扫一遍", "补上", "新加",
+];
+
+const WHY_RE = new RegExp(
+  `\\b(?:${ENGLISH_WHY_TOKENS.join("|")})\\b|(?:${CJK_WHY_KEYPHRASES.join("|")})`,
+  "i",
+);
+const HOW_RE = new RegExp(
+  `\\b(?:${ENGLISH_HOW_TOKENS.join("|")})\\b|(?:${CJK_HOW_KEYPHRASES.join("|")})`,
+  "i",
+);
 const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Tested|Not-tested|Plan|Refs|Closes|Fixes|Breaking|See-also|Co-authored-by|Signed-off-by|Reviewer|Reviewed-by):\s/;
 
 function parseArgs(argv) {
