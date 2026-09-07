@@ -24,7 +24,9 @@ const config = {
   // Keep things moving; vitest runner is heavier than mocha.
   timeoutMS: 120000,
   timeoutFactor: 1.5,
-  ignoredMutations: ['StringLiteral'],
+  // NOTE: patches/@stryker-mutator__vitest-runner@10.0.0.patch adapts the
+  // runner to Vitest 5's "suite > test" testNamePattern contract. Remove it
+  // when upstream ships the same behavior.
   thresholds: {
     high: 80,
     low: 60,
