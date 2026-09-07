@@ -1,5 +1,5 @@
 // Targeted probe for the win-confetti launch origins (AGENTS verification gate).
-// Desktop (>=1280px) must launch from inward origins near 18%/82% width;
+// Desktop (>=1280px) must launch from inward mid-height origins near 18%/82% width;
 // tablet/mobile (<1280px) must keep the legacy mid-edge launch; the central
 // result UI must stay visible and clickable while the burst is live.
 // Run: node tests/qa/confetti-origin-qa.mjs
@@ -159,14 +159,10 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
 
     let series;
     await step(`${name}: confetti launches from the ${origin} origin at both sides`, async () => {
-      // Confetti leaves the 5% launch band within a few frames. Sample at
-      // frame cadence instead of the prior 100ms cadence so the probe sees
-      // the launch origin rather than only its aftermath.
+      // Particles rise quickly from the shared mid-height launch band, so
+      // sample at frame cadence to catch that origin before dispersal.
       series = await sampleSeries(page, 24, 25, sampling);
       assert.ok(series.length >= 6, `confetti canvas missing in ${series.length}/24 samples`);
-      const maxBottom = Math.max(
-        ...series.map((s) => Math.min(s.bottomLeft, s.bottomRight)),
-      );
       const maxMid = Math.max(...series.map((s) => Math.min(s.midLeft, s.midRight)));
       const maxCorridor = Math.max(
         ...series.map((s) => Math.min(s.leftCorridor, s.rightCorridor)),
@@ -174,8 +170,8 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
       findings.push({ name: `${name}-bands`, status: 'INFO', series });
       if (origin === 'inward') {
         assert.ok(
-          maxBottom >= 10,
-          `expected inward bottom particles on both sides, max(min(left,right))=${maxBottom}`,
+          maxMid >= 10,
+          `expected inward mid-height particles on both sides, max(min(left,right))=${maxMid}`,
         );
         assert.ok(
           maxCorridor >= 10,

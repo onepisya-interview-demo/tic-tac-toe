@@ -49,7 +49,7 @@ describe('lib/confetti (canvas-confetti burst)', () => {
     expect(origins).toContain(1);
   });
 
-  it('burstConfetti launches from inward bottom origins on desktop viewports', async () => {
+  it('burstConfetti launches from inward mid origins on desktop viewports', async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = (q: string) =>
       ({
@@ -71,8 +71,8 @@ describe('lib/confetti (canvas-confetti burst)', () => {
       expect(origins.length).toBe(2);
       expect(origins.map((o) => o?.x ?? -1).sort((a, b) => a - b)).toEqual([0.18, 0.82]);
       for (const origin of origins) {
-        // Given a desktop viewport, when the burst fires, then origins sit in the bottom 0-5% band.
-        expect(origin?.y).toBe(0.96);
+        // Given a desktop viewport, when the burst fires, then its launch height matches the mobile path.
+        expect(origin?.y).toBe(0.55);
       }
     } finally {
       window.matchMedia = originalMatchMedia;

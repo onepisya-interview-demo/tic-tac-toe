@@ -1,6 +1,6 @@
 // Colorful win-state celebration using canvas-confetti.
 // Renders a full-viewport particle burst. On desktop (>=1280px) both
-// streams launch from inward points near the bottom and converge upward;
+// streams launch from inward mid-height points and converge upward;
 // smaller viewports keep the legacy mid-edge launch. Honors
 // prefers-reduced-motion (no-op).
 
@@ -59,7 +59,7 @@ export function burstConfetti(): void {
 
   const start = Date.now();
   const isDesktop = isDesktopLayout();
-  const originY = isDesktop ? 0.96 : 0.55;
+  const originY = 0.55;
   const leftX = isDesktop ? DESKTOP_LEFT_X : 0;
   const rightX = isDesktop ? DESKTOP_RIGHT_X : 1;
   const tick = (): void => {
