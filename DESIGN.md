@@ -41,13 +41,13 @@
 | `text-display` | Geist | 48 / 56 | Page title (one per screen) |
 | `text-h1` | Geist | 32 / 40 | Section heading |
 | `text-h2` | Geist | 24 / 32 | Sub-heading |
-| `text-h3` | Inter | 20 / 28 | Card title |
-| `text-body` | Inter | 16 / 24 | Default |
-| `text-small` | Inter | 14 / 20 | Hint, secondary |
-| `text-mono` | JetBrains Mono | 14 / 20 | Stats values, debug |
+| `text-h3` | Geist | 20 / 28 | Card title |
+| `text-body` | Geist | 16 / 24 | Default |
+| `text-small` | Geist | 14 / 20 | Hint, secondary |
+| `text-mono` | Geist Mono | 14 / 20 | Stats values, debug |
 | `text-cell` | Geist | 48 / 1 | Tic-tac-toe X / O marker |
 
-**Loading**: `next/font/google` (Inter, JetBrains Mono) + `next/font/local` (Geist via `geist/font`).
+**Loading**: `next/font/google` (Geist, Geist Mono) + `next/font/local` (Geist via `geist/font`).
 
 ## 3. Spacing & Layout
 
