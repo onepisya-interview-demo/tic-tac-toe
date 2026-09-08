@@ -4,31 +4,28 @@ import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
-import { gameStats, type GameStatsRow } from '../db/schema';
+import { gameStats } from '../db/schema';
 import { emptyStats, type GameStats } from './game';
 
 const STATS_ROW_ID = 1;
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'tic-tac-toe.db');
 
-function resolveDbPath(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) return DEFAULT_DB_PATH;
-  return url.startsWith('file:') ? url.slice('file:'.length) : url;
-}
-
-function ensureDir(p: string): void {
-  const dir = path.dirname(p);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
 let cachedDb: BetterSQLite3Database<typeof schema> | null = null;
 let cachedSqlite: Database.Database | null = null;
 
 export function getDb(): BetterSQLite3Database<typeof schema> {
   if (cachedDb) return cachedDb;
-  const dbPath = resolveDbPath();
-  ensureDir(dbPath);
+  const url = process.env.DATABASE_URL;
+  const dbPath = !url
+    ? DEFAULT_DB_PATH
+    : url.startsWith('file:')
+      ? url.slice('file:'.length)
+      : url;
+  {
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  }
   cachedSqlite = new Database(dbPath);
   cachedSqlite.pragma('journal_mode = WAL');
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
@@ -47,21 +44,19 @@ export function getDb(): BetterSQLite3Database<typeof schema> {
   return cachedDb;
 }
 
-function rowToStats(row: GameStatsRow): GameStats {
-  return {
-    totalGames: row.totalGames,
-    xWins: row.xWins,
-    oWins: row.oWins,
-    draws: row.draws,
-    currentStreak: row.currentStreak,
-  };
-}
-
 /** Read stats; creates the row if absent. Returns zero-stats on first read. */
 export function loadStats(): GameStats {
   const db = getDb();
   const existing = db.select().from(gameStats).where(eq(gameStats.id, STATS_ROW_ID)).get();
-  if (existing) return rowToStats(existing);
+  if (existing) {
+    return {
+      totalGames: existing.totalGames,
+      xWins: existing.xWins,
+      oWins: existing.oWins,
+      draws: existing.draws,
+      currentStreak: existing.currentStreak,
+    };
+  }
   const now = new Date();
   db.insert(gameStats).values({ id: STATS_ROW_ID, updatedAt: now }).run();
   return emptyStats();

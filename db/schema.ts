@@ -16,4 +16,3 @@ export const gameStats = sqliteTable('game_stats', {
     .$defaultFn(() => new Date()),
 });
 
-export type GameStatsRow = typeof gameStats.$inferSelect;
