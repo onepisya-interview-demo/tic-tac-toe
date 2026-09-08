@@ -92,7 +92,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## 备注
 
-- lib/db.ts 会初始化并缓存 WAL SQLite；测试通过 DATABASE_URL/临时目录隔离，并调用 closeDb()。
+- lib/db.ts 通过 @libsql/client + Drizzle 初始化并缓存 libsql 客户端；测试通过 DATABASE_URL/临时目录隔离，并调用 closeDb()。
 - 战绩表唯一行是 id=1；即使 PUT 失败，本地 UI 状态仍保持正确。
 - next-env.d.ts 是已跟踪的生成文件；切换构建模式时，它的引用发生变化是合理的。
 

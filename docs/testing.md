@@ -48,7 +48,7 @@ vitest coverage（`pnpm test:coverage`）：lines/functions/statements ≥ 80%�
 
 ## 当前规模
 
-vitest：78 例（6 文件，含 property 与 DB 集成）。QA 脚本 7 个（hydration / audio×2 / confetti / ux / visual / commit-audit）。
+vitest：84 例（6 文件，含 property 与 DB 集成）。QA 脚本 7 个（hydration / audio×2 / confetti / ux / visual / commit-audit）。
 变异测试：Stryker 只对 lib/game.ts、lib/db.ts、lib/store.ts、db/schema.ts 做变异（stryker.config.mjs），
 分数为信息性门禁（break: null），结果在 reports/mutation/。
 
