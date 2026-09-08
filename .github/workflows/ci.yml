@@ -86,3 +86,56 @@ jobs:
           path: .next
           retention-days: 3
           if-no-files-found: error
+
+  visual-qa:
+    name: Visual QA (Playwright probe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/visual-qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server
+        run: |
+          set -euo pipefail
+          pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "Server ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run visual-qa probe
+        run: pnpm exec node tests/qa/visual-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-qa-evidence
+          path: ${RUNNER_TEMP}/visual-qa
+          retention-days: 7
+          if-no-files-found: warn
