@@ -2,7 +2,7 @@
 // Commit-policy audit.
 //
 // Two modes:
-//   node tests/qa/commit-audit.mjs                  # audit all commits on feat/ux-polish
+//   node tests/qa/commit-audit.mjs                  # audit all commits on main
 //   node tests/qa/commit-audit.mjs --branch <name>  # audit all commits on <name>
 //   node tests/qa/commit-audit.mjs --message-file F # audit a single commit message file
 //
@@ -170,7 +170,7 @@ function main() {
     process.exit(1);
   }
 
-  const branch = args.branch ?? "feat/ux-polish";
+  const branch = args.branch ?? "main";
   const shas = git("log", "--reverse", "--format=%H", branch).split("\n").filter(Boolean);
   const results = shas.map((sha) => {
     const raw = git("log", "-1", "--format=%B", sha);
