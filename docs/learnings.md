@@ -49,6 +49,22 @@ canvas-confetti 把画布直接挂到 `document.body`，而 `Confetti` 原本返
 QA 却找不到任何稳定节点。现在组件保留一个 `pointer-events-none` 且 `aria-hidden` 的
 `data-testid="confetti"` 层，庆祝是否挂载成为可断言契约；真实视觉仍完全交给第三方库。
 
+### 11. VM69 悬案：举报人就是浏览器调试器自己（2026-09-08）
+
+“开始游戏 → 返回首页”偶发 `Cannot read properties of undefined (reading 'startTime')`，stack 只给
+`VM69` 这种匿名地址，源码和 Next 产物里怎么也搜不到 `entryGroupId`。刷新后现场又常消失，像幽灵报错。
+后来趁页面未刷新用 CDP 反向枚举脚本，抓到 20KB 的 `VM69`
+（SHA-256 `0f2eb3b63431416befd0d826255fb1736117e0ddbca120c5c3e54aca03a1810d`）。
+
+真相是 Chrome DevTools 的 Live Metrics 注入器：它观察 INP，把 App Router 的软导航也当成 performance
+场景；web-vitals v6 在 soft navigation 后可能产生 `entries: []` 的 dummy INP，旧注入脚本却直接读
+`entries[0].startTime`。上游 DevTools commit `6a47f93393a7` 已用 optional chaining 修掉。当前
+Chrome 152 的临时解法是关闭 DevTools 设置 `timeline-enable-soft-navigations`；实测 10 次
+“开始 → 落子 → 返回首页”无异常。
+
+教训：匿名 VM stack 别急着往应用代码上安罪名；刷新前先用 CDP 抓现场。浏览器 API 是案发现场，
+不一定是凶手——有时办案工具自己也在现场。
+
 ## 版本相关
 
 | 事项 | 说明 |
