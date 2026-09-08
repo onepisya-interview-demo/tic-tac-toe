@@ -17,6 +17,8 @@
   - `http://`、`https://`、`libsql://` — Turso 远程 HTTP client；需配 `DATABASE_AUTH_TOKEN`。
 - `DATABASE_AUTH_TOKEN` — 仅 http(s)/libsql URL 必填；file: 路径下忽略。
 
+真实 Turso 库联调流程（建库、取 URL、取 token、冒烟）参见 [本地联调 Turso 指南](local-turso-setup.md)。
+
 ## 日常命令
 
 | 目的 | 命令 |

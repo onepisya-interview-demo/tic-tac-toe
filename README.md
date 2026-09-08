@@ -50,6 +50,8 @@ pnpm build && pnpm start
 默认 `DATABASE_URL=file:./data/tic-tac-toe.db`，数据落在 `data/tic-tac-toe.db`。
 HTTP 部署详见下方"部署"章节。
 
+想用真实 Turso 库联调？参见 [本地联调 Turso 指南](docs/local-turso-setup.md)。
+
 ## Gauntlet 工具链
 
 | 层 | 工具 | 命令 |
