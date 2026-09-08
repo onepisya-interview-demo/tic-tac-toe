@@ -1,0 +1,67 @@
+name: Feature Request
+description: 提议一个新功能或对现有功能的改进。先在 Discussions 讨论后再开 issue。
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new functionality or improvements to existing
+        features. Pure UI tweaks go under "Polish" instead. Bug reports use
+        the Bug Report template.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user pain point does this address? One paragraph.
+      placeholder: |
+        Players who lose 5 games in a row have no visual cue; the streak
+        counter only goes up, never down. New players feel the app is
+        punishing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the behaviour you propose. Mockups / wireframes welcome.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app does this touch?
+      options:
+        - Board / game logic (lib/)
+        - Stats / persistence (db/, lib/db.ts)
+        - UI / accessibility (components/, app/globals.css)
+        - Tooling (vitest, ESLint, Stryker, Playwright)
+        - Documentation (docs/, AGENTS.md, README)
+        - CI / GitHub Actions
+      validations:
+        required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope signals
+      description: Tick whichever applies. Helps reviewers triage scope.
+      options:
+        - label: Touches `lib/` or `app/` (needs design record in `.omo/plans/`)
+        - label: Touches DB schema or Drizzle models
+        - label: Touches the design system (DESIGN.md / tokens)
+        - label: Only docs / tooling
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other shapes did you consider? Why this one?
+    validations:
+      required: false

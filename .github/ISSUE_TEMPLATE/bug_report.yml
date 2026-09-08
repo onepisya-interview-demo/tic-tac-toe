@@ -1,0 +1,85 @@
+name: Bug Report
+description: 报告一个具体的 bug 或异常行为。请先在 README / docs/operations.md 中排查，再提交。
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Fill in the template below; missing fields
+        will slow triage. Security issues go to SECURITY.md, **not** here.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A clear one-paragraph description of the bug.
+      placeholder: |
+        On the home page I clicked "Start game" and the page jumped to /play
+        but the score card was empty for a moment, then re-rendered.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behaviour.
+      placeholder: |
+        1. Open /
+        2. Click "Start game"
+        3. Observe score card flash empty
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How broken is it?
+      options:
+        - Blocker (game unusable)
+        - Major (visible bug, workaround exists)
+        - Minor (cosmetic / edge case)
+      validations:
+        required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Browser, OS, Node / pnpm version. `node -v && pnpm -v`.
+      placeholder: "Node v22.x / pnpm 10.x / Chrome 130 / macOS 15"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant console output, terminal logs, or attach screenshots.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      description: Confirm you've done these before submitting.
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I reproduced on the latest `main` (no uncommitted changes)
+          required: true
+        - label: I read [docs/operations.md](docs/operations.md) troubleshooting section
+          required: false
