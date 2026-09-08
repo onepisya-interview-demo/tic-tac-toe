@@ -6,7 +6,7 @@
 const STORAGE_KEY = 'ttt.sound.muted';
 const VOLUME = 0.18;
 
-type Tone = 'move' | 'win' | 'draw' | 'lose' | 'cheer';
+type Tone = 'move' | 'win' | 'draw' | 'cheer';
 
 interface ProgramStep {
   freq: number;
@@ -23,10 +23,6 @@ const PROGRAMS: Record<Tone, ProgramStep[]> = {
     { freq: 659.25, dur: 0.18, type: 'triangle' },
   ],
   draw: [{ freq: 220, dur: 0.32, type: 'sine' }],
-  lose: [
-    { freq: 392, dur: 0.18, type: 'sine' },
-    { freq: 196, dur: 0.32, type: 'sine' },
-  ],
   // Ascending C-major arpeggio with a sustained, vibrato-tailed top note.
   // Total duration ~1.02s — short enough not to collide with the next round.
   cheer: [
