@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { loadStats, saveStats, resetStats } from '@/lib/db';
 import { type GameStats } from '@/lib/game';
 
-// Force this route to run on the Node.js runtime — better-sqlite3 needs it.
+// Force this route to run on the Node.js runtime — @libsql/client's file:
+// branch needs the native sqlite module, and the route must remain async to
+// await loadStats/saveStats/resetStats on every request.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +21,7 @@ function isGameStats(v: unknown): v is GameStats {
 }
 
 export async function GET() {
-  const stats = loadStats();
+  const stats = await loadStats();
   return NextResponse.json(stats);
 }
 
@@ -33,11 +35,11 @@ export async function PUT(request: Request) {
   if (!isGameStats(body)) {
     return NextResponse.json({ error: 'invalid stats shape' }, { status: 400 });
   }
-  saveStats(body);
+  await saveStats(body);
   return NextResponse.json(body);
 }
 
 export async function DELETE() {
-  const zero = resetStats();
+  const zero = await resetStats();
   return NextResponse.json(zero);
 }

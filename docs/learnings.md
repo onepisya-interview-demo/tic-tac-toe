@@ -74,4 +74,4 @@ Chrome 152 的临时解法是关闭 DevTools 设置 `timeline-enable-soft-naviga
 | Tailwind v4 | @theme 自定义 token（DESIGN.md 契约），不用 stock 色板 |
 | vitest 5 | 启动时有 configLoader native 警告（ESM 语法被按 CJS 加载）；无害，未来大版本会变默认 |
 | Stryker 10 | Vitest runner 由 pnpm patch 适配 Vitest 5；沙箱目录 .stryker-tmp/ 必须在 vitest exclude 里，否则变异运行会误收集依赖测试 |
-| Drizzle + better-sqlite3 | 单行战绩表 id=1，WAL 模式；Vercel 部署需换 Turso/LibSQL（README 已注明） |
+| Drizzle + @libsql/client | 单行战绩表 id=1，文件 / Turso HTTP 双分支；本地默认 file:./data/tic-tac-toe.db，Vercel 部署设 DATABASE_URL=libsql://... + DATABASE_AUTH_TOKEN（README §部署） |

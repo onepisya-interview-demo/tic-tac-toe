@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | L1 纯函数 + 属性 | lib/game.test.ts | vitest + fast-check | 棋盘/胜负/战绩纯逻辑；不变量（otherPlayer 对合、recordOutcome 单调、空格计数一致，200 次采样） |
 | L2 状态集成 | tests/store/store.test.ts | vitest + fetch mock | Zustand 状态机与 /api/stats GET/PUT/DELETE 契约、网络失败回退 |
-| L3 数据层 | tests/db/db.test.ts | vitest + better-sqlite3 | 真 SQLite 往返；每测试 tmpdir 隔离 + 模块 reset |
+| L3 数据层 | tests/db/db.test.ts | vitest + @libsql/client | 真本地 sqlite file: 往返 + spy http(s) 分支；每测试 tmpdir 隔离 + 模块 reset |
 | L4 组件 | components/SoundToggle.test.tsx | RTL + renderToString | 交互回归 + SSR 输出恒为静音（hydration 防护） |
 | L5 音频/庆祝 | lib/sound.test.ts, lib/confetti.test.ts | vitest + mocks | Web Audio 振荡器计数、cheer 序列、confetti 形状、reduced-motion no-op |
 | L6 浏览器 QA | tests/qa/*.mjs | Playwright（真实 server） | 真实 AudioContext 探针（计数/频率/时序）、hydration 警告监听、UX 合约断言、截图证据 |

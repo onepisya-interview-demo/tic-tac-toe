@@ -13,20 +13,22 @@
 暗色克制工程师感 (Linear + Vercel 风)。
 
 技术栈：Next.js 16 (App Router) + React 19 + TypeScript (strict) + Tailwind v4
-+ Zustand + Drizzle ORM + better-sqlite3。
++ Zustand + Drizzle ORM + @libsql/client（本地 file: sqlite / Vercel 走
+Turso HTTP）。
 
 ## Features
 
 - 🎯 **Pass-and-play**：同设备轮流落子，零网络依赖，纯前端 + Node API。
-- 💾 **战绩持久化**：胜 / 负 / 平 / 连胜通过 SQLite 单行表落盘，刷新即用。
+- 💾 **战绩持久化**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
+  file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
 - ⌨️ **键盘优先**：棋盘使用 roving focus，落子、回车、回溯全部键控可触。
 - 🔇 **音效懒加载**：AudioContext 仅在用户首次手势后创建，默认关闭且持久化。
 - ✨ **彩纸无障碍**：`prefers-reduced-motion` 下走无动效路径，data-testid 稳定。
 - 🧪 **Gauntlet 测试栈**：vitest + fast-check（属性）+ Stryker（突变）+ commitlint
   + commit-audit，强制单测 80% 行 / 70% 分支。
-- 🚀 **Vercel-ready**：构建产物经过 Turbopack 验证，SQLite 替换为 Turso/LibSQL
-  即可直接上 Vercel serverless。
+- 🚀 **Vercel-ready**：`@libsql/client` 的 http(s) 分支在 Vercel serverless 上
+  直接连 Turso，零原生模块、零 fs 依赖。
 
 ## 路由
 
@@ -45,8 +47,8 @@ pnpm dev              # http://localhost:3000
 pnpm build && pnpm start
 ```
 
-数据落在 `data/tic-tac-toe.db`，通过 `DATABASE_URL` 环境变量可改路径
-（默认 `file:./data/tic-tac-toe.db`）。
+默认 `DATABASE_URL=file:./data/tic-tac-toe.db`，数据落在 `data/tic-tac-toe.db`。
+HTTP 部署详见下方"部署"章节。
 
 ## Gauntlet 工具链
 
@@ -70,16 +72,16 @@ app/                  App Router 路由 + API route handler
   page.tsx            首页 (Client)
   play/page.tsx       游戏页 (Client)
   result/page.tsx     结算页 (Client)
-  api/stats/route.ts  /api/stats (GET/PUT/DELETE)
+  api/stats/route.ts  /api/stats (GET/PUT/DELETE, await lib/db)
   globals.css         @theme tokens, 暗色基底
 components/           Board + ui/* (Button/Card/Cell/StatsCard/StatusBar)
 db/schema.ts          Drizzle schema (game_stats 单行表)
 lib/
   game.ts             纯函数: 棋盘/胜负/可用格/先手随机/战绩累计
   game.test.ts        单元 + fast-check 属性测试 (同目录)
-  db.ts               better-sqlite3 + Drizzle 封装
+  db.ts               @libsql/client + Drizzle 封装（file:/http(s): 自适应）
   store.ts            Zustand store: phase/board/currentPlayer + /api/stats 同步
-data/                 SQLite 文件 (gitignored)
+data/                 本地 SQLite 文件 (gitignored)
 reports/mutation/     Stryker html + json 报告 (gitignored)
 coverage/             v8 coverage html 报告 (gitignored)
 tests/qa/             Playwright 视觉 + 提交审计
@@ -101,9 +103,10 @@ public/               静态资源 (logo / favicon)
 
 ## FAQ
 
-**为什么不用 Vercel 默认部署？** 项目默认是单机开发目标，better-sqlite3 在
-Vercel serverless 无法持久化。要上 Vercel 必须先把 `lib/db.ts` 切到
-Turso/LibSQL HTTP 驱动，部署说明会随之更新。
+**怎么切到 Vercel 持久化？** 默认 `DATABASE_URL=file:./...` 在 Vercel serverless
+上是临时 fs，不会持久。把 `DATABASE_URL` 改成 `https://<db>.turso.io`（或
+`libsql://<db>.turso.io`），并设置 `DATABASE_AUTH_TOKEN=<turso-issued-token>`。
+`lib/db.ts` 会自动走 http(s) 分支，不再碰文件系统和原生 sqlite。详见下方"部署"。
 
 **怎么清战绩？** 首页"重置战绩"按钮调用 `DELETE /api/stats`，单行表 id=1
 会被清零；本地 UI 状态不依赖服务端响应也能保持正确。
@@ -120,8 +123,25 @@ PR 评审以 vitest + 浏览器 QA 探针为准。跑挂时优先排查 `docs/op
 
 ## 部署
 
-直接 push 到 Vercel 即可，SQLite 文件需替换为 Turso/LibSQL（better-sqlite3
-在 Vercel serverless 上无法持久化）。当前默认是单机开发目标。
+### 单机 / 本地（默认）
+
+`DATABASE_URL` 不设或设成 `file:./data/tic-tac-toe.db`，数据落在仓库下
+`data/tic-tac-toe.db`，不需要任何 token。
+
+### Vercel + Turso
+
+1. [turso.tech](https://turso.tech) 建库：`turso db create tic-tac-toe`。
+2. 拿 libsql URL：`turso db show tic-tac-toe --url` → 例如
+   `libsql://tic-tac-toe-yourname.aws-us-east-1.turso.io`。
+3. 拿 auth token：`turso db tokens create tic-tac-toe` → JWT。
+4. Vercel 项目 → Settings → Environment Variables，新增两条：
+   - `DATABASE_URL` = `libsql://tic-tac-toe-yourname.aws-us-east-1.turso.io`
+     （`lib/db.ts` 把 `libsql://` 当 `https://` 一样处理）
+   - `DATABASE_AUTH_TOKEN` = 步骤 3 的 JWT
+5. `git push` 到 Vercel，`/api/stats` 自动用 Turso HTTP client 持久化。
+
+不要在 Vercel 上保留 `file:` URL——serverless 容器只有临时 fs，数据不会跨
+请求保留。
 
 ## License
 

@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3';
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { createClient, type Client, type Config } from '@libsql/client';
+import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -11,25 +11,72 @@ const STATS_ROW_ID = 1;
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'tic-tac-toe.db');
 
-let cachedDb: BetterSQLite3Database<typeof schema> | null = null;
-let cachedSqlite: Database.Database | null = null;
+type CreateClientFn = (config: Config) => Client;
 
-export function getDb(): BetterSQLite3Database<typeof schema> {
-  if (cachedDb) return cachedDb;
+// Test seam — replaced by tests to capture config without hitting a real DB.
+let createClientFn: CreateClientFn = createClient;
+
+/**
+ * Swap the factory used by `getDb`. Pass `null` to restore the default
+ * `@libsql/client` createClient. Test-only — production code must not call.
+ */
+export function __setCreateClientForTests(fn: CreateClientFn | null): void {
+  createClientFn = fn ?? createClient;
+}
+
+let cachedDb: LibSQLDatabase<typeof schema> | null = null;
+let cachedClient: Client | null = null;
+
+/**
+ * Resolve DATABASE_URL + DATABASE_AUTH_TOKEN into an @libsql/client Config.
+ *
+ * - http(s)://... or libsql://...  →  remote Turso client (passes authToken when set)
+ * - file:./path/to.db              →  local sqlite file (auto-creates the parent dir)
+ * - undefined                      →  file:./data/tic-tac-toe.db under CWD
+ *
+ * Anything else falls through to the URL as-is so the underlying client can
+ * surface its own protocol error.
+ */
+function resolveDbConfig(): Config {
   const url = process.env.DATABASE_URL;
-  const dbPath = !url
-    ? DEFAULT_DB_PATH
-    : url.startsWith('file:')
-      ? url.slice('file:'.length)
-      : url;
-  {
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const authToken = process.env.DATABASE_AUTH_TOKEN;
+
+  if (!url) {
+    return { url: `file:${DEFAULT_DB_PATH}` };
   }
-  cachedSqlite = new Database(dbPath);
-  cachedSqlite.pragma('journal_mode = WAL');
+
+  if (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('libsql:')
+  ) {
+    return authToken ? { url, authToken } : { url };
+  }
+
+  if (url.startsWith('file:')) {
+    const filePath = url.slice('file:'.length);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return { url };
+  }
+
+  // Unrecognized scheme — pass through. @libsql/client will error with a
+  // clear protocol message rather than us silently coercing to a file path.
+  return authToken ? { url, authToken } : { url };
+}
+
+/**
+ * Open the libsql client, bootstrap the game_stats table, and return a
+ * Drizzle wrapper. Cached per process; pair every successful `getDb()`
+ * with a `closeDb()` in tests.
+ */
+export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
+  if (cachedDb) return cachedDb;
+  const config = resolveDbConfig();
+  cachedClient = createClientFn(config);
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
-  cachedSqlite.exec(`
+  // DDL via the raw client ensures the schema exists before drizzle hits it.
+  await cachedClient.execute(`
     CREATE TABLE IF NOT EXISTS game_stats (
       id INTEGER PRIMARY KEY,
       total_games INTEGER NOT NULL DEFAULT 0,
@@ -40,14 +87,18 @@ export function getDb(): BetterSQLite3Database<typeof schema> {
       updated_at INTEGER NOT NULL
     );
   `);
-  cachedDb = drizzle(cachedSqlite, { schema });
+  cachedDb = drizzle(cachedClient, { schema });
   return cachedDb;
 }
 
 /** Read stats; creates the row if absent. Returns zero-stats on first read. */
-export function loadStats(): GameStats {
-  const db = getDb();
-  const existing = db.select().from(gameStats).where(eq(gameStats.id, STATS_ROW_ID)).get();
+export async function loadStats(): Promise<GameStats> {
+  const db = await getDb();
+  const existing = await db
+    .select()
+    .from(gameStats)
+    .where(eq(gameStats.id, STATS_ROW_ID))
+    .get();
   if (existing) {
     return {
       totalGames: existing.totalGames,
@@ -58,15 +109,19 @@ export function loadStats(): GameStats {
     };
   }
   const now = new Date();
-  db.insert(gameStats).values({ id: STATS_ROW_ID, updatedAt: now }).run();
+  await db
+    .insert(gameStats)
+    .values({ id: STATS_ROW_ID, updatedAt: now })
+    .run();
   return emptyStats();
 }
 
 /** Write stats (overwrite fields, bump updated_at). */
-export function saveStats(stats: GameStats): void {
-  const db = getDb();
+export async function saveStats(stats: GameStats): Promise<void> {
+  const db = await getDb();
   const now = new Date();
-  db.insert(gameStats)
+  await db
+    .insert(gameStats)
     .values({
       id: STATS_ROW_ID,
       totalGames: stats.totalGames,
@@ -91,17 +146,17 @@ export function saveStats(stats: GameStats): void {
 }
 
 /** Reset stats to zero. */
-export function resetStats(): GameStats {
+export async function resetStats(): Promise<GameStats> {
   const zero = emptyStats();
-  saveStats(zero);
+  await saveStats(zero);
   return zero;
 }
 
-/** Close the underlying sqlite handle (used by tests / shutdown). */
-export function closeDb(): void {
-  if (cachedSqlite) {
-    cachedSqlite.close();
-    cachedSqlite = null;
+/** Close the cached client (used by tests / shutdown). */
+export async function closeDb(): Promise<void> {
+  if (cachedClient) {
+    await cachedClient.close();
+    cachedClient = null;
     cachedDb = null;
   }
 }

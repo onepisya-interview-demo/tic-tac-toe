@@ -16,9 +16,10 @@ Copilot picks up the same contract as Codex / Claude Code / Cursor.
 ## Project at a glance
 
 - Two-player pass-and-play tic-tac-toe on a single device. Stats persist
-  via SQLite (better-sqlite3 + Drizzle).
+  via SQLite (file:) locally or Turso HTTP (libsql://) on Vercel, both through
+  @libsql/client + Drizzle.
 - Tech: Next.js 16 App Router, React 19, TypeScript strict, Tailwind v4
-  design tokens, Zustand store, Drizzle ORM.
+  design tokens, Zustand store, Drizzle ORM, @libsql/client.
 - Single-row game_stats table; PUT/DELETE idempotent.
 
 ## Hard rules
