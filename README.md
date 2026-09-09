@@ -143,6 +143,20 @@ PR 评审以 vitest + 浏览器 QA 探针为准。跑挂时优先排查 `docs/op
 `DATABASE_URL` 不设或设成 `file:./data/tic-tac-toe.db`，数据落在仓库下
 `data/tic-tac-toe.db`，不需要任何 token。
 
+### 驱动层（深模块）
+
+`lib/db.ts` 把 driver 选型封在文件内部：同时 import `@libsql/client`（原生 sqlite）
+和 `@libsql/client/web`（HTTP 客户端），由 `selectDriver(url)` 工厂按
+`DATABASE_URL` 自动选：
+
+| URL 形态 | 走的 driver | 适用 |
+| --- | --- | --- |
+| `file:...` | `@libsql/client` 原生 | 本地 / CI / 单机；自带嵌入式 sqlite，零配置 |
+| `http://` / `https://` / `libsql://` | `@libsql/client/web` | Vercel serverless / Edge；走 Turso HTTP，避开原生 binding |
+
+调用方（`app/api/stats/route.ts`、`lib/store.ts`）**零改动**——只 import
+`loadStats / saveStats / resetStats / closeDb`，driver 选型完全藏在 db 模块里。
+
 ### Vercel + Turso 首次部署
 
 1. [turso.tech](https://turso.tech) 建库：`turso db create <your-db-name>`。
@@ -176,6 +190,22 @@ PR 评审以 vitest + 浏览器 QA 探针为准。跑挂时优先排查 `docs/op
   `turso db tokens create <your-db-name>` 并更新 Vercel。
 - **build 失败**：先核对两个变量名必须一字不差——`DATABASE_URL` 和
   `DATABASE_AUTH_TOKEN`，大小写和下划线都不能变。
+
+- **CLI 部署 vs Git 自动部署（错误信号对照）**：
+
+  本仓库支持两种部署方式：Phase 1 `vercel --prod` 手动，Phase 2 `git push` 触发。
+  同一个项目可以混用——错误信号和查的位置不一样：
+
+  | 现象 | CLI 部署（`vercel --prod`） | Git 自动部署（push 触发） |
+  | --- | --- | --- |
+  | 部署没启动 | 终端立即报错 + 非零退出码 | Dashboard 60s 内仍 "Queued" → 检查 GitHub Webhook |
+  | build 失败 | stderr 里有失败 step + 文件路径 | Dashboard → Deployments → 点进 deployment 看 build log |
+  | env var 缺失 | `vercel env ls production` 复核 | Dashboard → Settings → Environment Variables |
+  | 部署成功但 5xx | curl + `vercel logs <deployment-url>` | Dashboard → Deployments → Runtime Logs |
+  | 想回滚 | Dashboard → Deployments → "Promote to Production" | 同左（两种方式产生的 deployment 互相可见） |
+
+  应急入口：当 Git 自动部署链路挂掉时，CLI 部署仍可独立推 production，
+  不依赖 GitHub Webhook 状态。
 
 ### 生产 vs 开发的数据库选择
 
