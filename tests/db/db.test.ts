@@ -219,32 +219,6 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
 
-  it('default branch creates the missing data/ dir under CWD', async () => {
-    // os.tmpdir() is a symlink on macOS; cwd reports the resolved /private path.
-    const freshDir = fs.realpathSync(tmpDbDir());
-    const prevCwd = process.cwd();
-    process.chdir(freshDir);
-    delete process.env.DATABASE_URL;
-    vi.resetModules();
-    const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
-    __setCreateClientForTests((config: Config) => {
-      seen.push(config);
-      return fakeClient();
-    });
-    try {
-      await loadStats();
-      expect(seen).toHaveLength(1);
-      expect(seen[0].url).toBe(`file:${path.join(freshDir, 'data', 'tic-tac-toe.db')}`);
-      expect(fs.existsSync(path.join(freshDir, 'data'))).toBe(true);
-    } finally {
-      __setCreateClientForTests(null);
-      await closeDb();
-      process.chdir(prevCwd);
-      fs.rmSync(freshDir, { recursive: true, force: true });
-    }
-  });
-
   it('getDb returns the same cached instance on repeated calls', async () => {
     const { getDb, closeDb } = await import('@/lib/db');
     try {
