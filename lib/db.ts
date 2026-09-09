@@ -42,6 +42,8 @@ function resolveDbConfig(): Config {
   const authToken = process.env.DATABASE_AUTH_TOKEN;
 
   if (!url) {
+    const dir = path.dirname(DEFAULT_DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     return { url: `file:${DEFAULT_DB_PATH}` };
   }
 
