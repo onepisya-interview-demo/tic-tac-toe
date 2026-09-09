@@ -1,4 +1,6 @@
-import { createClient, type Client, type Config } from '@libsql/client';
+import * as nativeClient from '@libsql/client';
+import { type Client, type Config } from '@libsql/client';
+import * as webClient from '@libsql/client/web';
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import { eq } from 'drizzle-orm';
 import path from 'node:path';
@@ -13,15 +15,31 @@ const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'tic-tac-toe.db');
 
 type CreateClientFn = (config: Config) => Client;
 
+/**
+ * Pick the @libsql client module to use for the given DATABASE_URL.
+ * - `file:` URLs go to the native client (in-process sqlite, needs node runtime).
+ * - Anything else (http://, https://, libsql://) goes to /web (HTTP transport,
+ *   edge/serverless friendly, smaller serverless bundle).
+ * Exported for tests; production callers should not need it.
+ */
+export function selectDriver(url: string): { createClient: (config: Config) => Client } {
+  if (url.startsWith('file:')) return nativeClient;
+  return webClient;
+}
+
+/** Default factory: pick the driver that matches the URL, then create the client. */
+const defaultCreateClient: CreateClientFn = (config) =>
+  selectDriver(config.url).createClient(config);
+
 // Test seam — replaced by tests to capture config without hitting a real DB.
-let createClientFn: CreateClientFn = createClient;
+let createClientFn: CreateClientFn = defaultCreateClient;
 
 /**
  * Swap the factory used by `getDb`. Pass `null` to restore the default
- * `@libsql/client` createClient. Test-only — production code must not call.
+ * `selectDriver`-based createClient. Test-only — production code must not call.
  */
 export function __setCreateClientForTests(fn: CreateClientFn | null): void {
-  createClientFn = fn ?? createClient;
+  createClientFn = fn ?? defaultCreateClient;
 }
 
 let cachedDb: LibSQLDatabase<typeof schema> | null = null;

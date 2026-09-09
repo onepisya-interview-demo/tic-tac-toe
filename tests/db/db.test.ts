@@ -305,4 +305,32 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       await closeDb();
     }
   });
+
+  it('selectDriver returns the native client for file: URLs', async () => {
+    const { selectDriver } = await import('@/lib/db');
+    const nativeClient = await import('@libsql/client');
+    const webClient = await import('@libsql/client/web');
+    const driver = selectDriver('file:./data/x.db');
+    // Object.is handles module-realm identity correctly (=== can fail across realms).
+    expect(Object.is(driver.createClient, nativeClient.createClient)).toBe(true);
+    expect(Object.is(driver.createClient, webClient.createClient)).toBe(false);
+  });
+
+  it('selectDriver returns the /web client for libsql:// URLs', async () => {
+    const { selectDriver } = await import('@/lib/db');
+    const nativeClient = await import('@libsql/client');
+    const webClient = await import('@libsql/client/web');
+    const driver = selectDriver('libsql://x.turso.io');
+    expect(Object.is(driver.createClient, webClient.createClient)).toBe(true);
+    expect(Object.is(driver.createClient, nativeClient.createClient)).toBe(false);
+  });
+
+  it('selectDriver returns the /web client for https:// URLs', async () => {
+    const { selectDriver } = await import('@/lib/db');
+    const nativeClient = await import('@libsql/client');
+    const webClient = await import('@libsql/client/web');
+    const driver = selectDriver('https://x.turso.io');
+    expect(Object.is(driver.createClient, webClient.createClient)).toBe(true);
+    expect(Object.is(driver.createClient, nativeClient.createClient)).toBe(false);
+  });
 });
