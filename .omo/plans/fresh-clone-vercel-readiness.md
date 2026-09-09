@@ -159,7 +159,7 @@ Final verification wave F1-F4 runs in parallel after W3.2.
   QA scenarios: happy: all three grep checks pass; 适用 blockquote remains byte-identical; cross-link insertion is line-isolated. Evidence: `.omx/evidence/fresh-clone-smoke/task-8-local-turso-xref.txt`
   Commit: N | (rolled into final commit at task 10)
 
-- [ ] 9. Static re-verify: pnpm typecheck && pnpm lint && pnpm vitest run
+- [x] 9. Static re-verify: pnpm typecheck && pnpm lint && pnpm vitest run
   What to do / Must NOT do: Run all three commands sequentially from /private/tmp/ulw-demo. All must exit 0. Do NOT modify tests, package.json, or build config to make things pass. Do NOT use `--no-verify` or any flag that bypasses checks.
   Parallelization: Wave 3 | Blocked by: 2, 3, 4, 5, 6, 7, 8 | Blocks: 10
   References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/package.json (scripts: typecheck, lint, test); /private/tmp/ulw-demo/vitest.config.ts (thresholds)
@@ -167,7 +167,7 @@ Final verification wave F1-F4 runs in parallel after W3.2.
   QA scenarios: happy: `pnpm typecheck && pnpm lint && pnpm vitest run; echo "combined=$?"` shows combined=0. failure: any non-zero exit fails this task. Evidence: `.omx/evidence/fresh-clone-smoke/task-9-static.txt`
   Commit: N | (rolled into final commit at task 10)
 
-- [ ] 10. Single lore-protocol chore commit with Plan footer
+- [x] 10. Single lore-protocol chore commit with Plan footer
   What to do / Must NOT do: `git add` ONLY these 6 paths: `README.md`, `.env.example`, `CONTRIBUTING.md`, `docs/operations.md`, `docs/local-turso-setup.md`, `.omo/plans/fresh-clone-vercel-readiness.md`. Verify with `git status -s` before commit — only those 6 paths should appear. Do NOT add `.env.local` (it is gitignored and must STAY local). Do NOT use `git commit --no-verify`. Do NOT use `git add -A`. Do NOT commit secrets (sanity: `grep -E 'eyJ[A-Za-z0-9_-]{20,}' .env.local` returns 0). Subject: `chore(docs): make fresh-clone + Vercel deploy paths discoverable`. Body: WHAT / WHY / HOW three sections. Footer: `Plan: .omo/plans/fresh-clone-vercel-readiness.md` plus lore trailers (`Confidence: high`, `Scope-risk: narrow`, `Constraint:`, `Directive:`, `Tested:`, `Not-tested:`). Run `node tests/qa/commit-audit.mjs --message-file <draft>` BEFORE committing to verify the hook will pass.
   Parallelization: Wave 3 | Blocked by: 9 | Blocks: F1, F2, F3, F4
   References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/.git/hooks/commit-msg (calls tests/qa/commit-audit.mjs); /private/tmp/ulw-demo/tests/qa/commit-audit.mjs (the audit script); /private/tmp/ulw-demo/commitlint.config.cjs (subject rules); /private/tmp/ulw-demo/.gitignore:45-50 (confirms .env.local stays local); /private/tmp/ulw-demo/.omo/plans/fresh-clone-vercel-readiness.md (the Plan: footer target)
@@ -177,19 +177,19 @@ Final verification wave F1-F4 runs in parallel after W3.2.
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit
+- [x] F1. Plan compliance audit
   What to do: Re-read the plan file vs the actual diff. Every Must-have scope item has a corresponding change in the diff. Every Must-NOT-have item is absent.
   Acceptance: `git show --stat HEAD` shows exactly the 6 paths listed in task 10; no other paths appear. `grep -c 'tic-tac-toe-onepisya' README.md` returns 0 (public repo hygiene).
   Evidence: `.omx/evidence/fresh-clone-smoke/F1-plan-compliance.txt`
-- [ ] F2. Code quality review
+- [x] F2. Code quality review
   What to do: Run `pnpm typecheck && pnpm lint && pnpm vitest run` once more after commit. Run `git diff HEAD~1 -- lib/ app/ db/ package.json next.config.ts vercel.json` and confirm it is empty (no accidental edits to the must-NOT-touch files).
   Acceptance: combined exit 0; the diff above is empty.
   Evidence: `.omx/evidence/fresh-clone-smoke/F2-quality.txt`
-- [ ] F3. Real manual QA
+- [x] F3. Real manual QA
   What to do: After commit, re-run the fresh-clone smoke ONCE more from a clean tmpdir, to prove the committed state still works. Capture full GET/PUT/GET/DELETE output.
   Acceptance: round-trip succeeds; `data/tic-tac-toe.db` is materialized; port 3000 freed.
   Evidence: `.omx/evidence/fresh-clone-smoke/F3-real-qa.txt` + `.omx/evidence/fresh-clone-smoke/F3-cleanup.txt`
-- [ ] F4. Scope fidelity
+- [x] F4. Scope fidelity
   What to do: Confirm `.env.local` is gitignored (re-run `git check-ignore -v .env.local`) AND that the public README uses `<your-db-name>` placeholders (not the specific `tic-tac-toe-onepisya`). Confirm `lib/db.ts` is byte-identical to HEAD~1.
   Acceptance: gitignore check exits 0; `grep -c '<your-db-name>' README.md` >= 1; `git diff HEAD~1 -- lib/db.ts` is empty.
   Evidence: `.omx/evidence/fresh-clone-smoke/F4-scope.txt`
