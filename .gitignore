@@ -115,7 +115,7 @@ reports/
 /.omo/ulw-loop/ledger.jsonl
 
 # =====================================================
-# OMX runtime work state and plan drafts
+# OMO plan-workflow runtime state (boulder / drafts / start-work ledger)
 # =====================================================
 /.omo/boulder.json
 /.omo/drafts/
