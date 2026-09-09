@@ -187,6 +187,14 @@ PR 评审以 vitest + 浏览器 QA 探针为准。跑挂时优先排查 `docs/op
 
 [MIT](LICENSE) — Copyright (c) 2026 onepisYa.
 
+## Publishing
+
+This is a Next.js application, not a library. The npm package name
+`tic-tac-toe` already exists on the npm registry, and there is no plan
+to publish this codebase there. Do not run `npm publish` from this repo
+without renaming + scoping first (e.g. `@<your-handle>/tic-tac-toe`) to
+avoid E409 conflicts on the public registry.
+
 ## Funding
 
 如果这个项目对你有用，欢迎在 [GitHub Sponsors](https://github.com/sponsors)
