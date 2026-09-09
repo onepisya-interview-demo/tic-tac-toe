@@ -2,6 +2,8 @@
 
 把战绩从本地 sqlite 切到真实 Turso 库的 5 分钟操作手册。**Vercel 部署走的是同一条线路但配环境变量的地方不同**；那条放在 README §部署，本文档专注本机。
 
+→ Vercel 部署详见 [README §部署](README.md#部署)。
+
 > 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
 
 ## 前置

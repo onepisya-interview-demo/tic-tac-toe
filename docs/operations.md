@@ -4,7 +4,9 @@
 
 ## 前置
 
-- pnpm（包管理）、Node.js ≥ 20、Playwright 浏览器（`pnpm exec playwright install`）
+> 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
+
+- pnpm ≥ 10（包管理）、Node.js ≥ 20、Turso CLI ≥ 0.100、Playwright 浏览器（`pnpm exec playwright install`）
 - @libsql/client 的 file: 分支依赖原生 sqlite（由包内 os 分发，自动安装）；切 Node 大版本
   后只需 `pnpm install` 重新拉链。
 
@@ -52,10 +54,11 @@ UX_STRICT=1（启用 ux 合约断言）、DATABASE_URL（覆盖默认 file: 路�
 
 ## 部署
 
-- 本机：留 `DATABASE_URL` 默认值，`pnpm start` 即可。
-- Vercel + Turso：设 `DATABASE_URL=libsql://<db>.turso.io` 与
-  `DATABASE_AUTH_TOKEN=<jwt>`，详见 README.md §部署。**不要**在 Vercel 上保留
-  `file:` URL——容器 fs 是临时的，重启即丢。
+- 本机：见 [README §单机 / 本地](README.md#单机-本地默认)。
+- Vercel + Turso：见 [README §Vercel + Turso 首次部署](README.md#vercel--turso-首次部署)。
+- **前置**：`lib/db.ts` 在 `DATABASE_URL` 未设时走 `file:` 本地 sqlite；Vercel
+  必须设 `DATABASE_URL=libsql://...` + `DATABASE_AUTH_TOKEN`，否则容器 fs
+  是临时的、重启即丢。
 
 ## 提交规范速查
 

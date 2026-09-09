@@ -16,6 +16,10 @@ pnpm typecheck         # tsc --noEmit
 pnpm lint              # eslint
 ```
 
+无需配置 `.env.local` — `lib/db.ts` 默认走本地 sqlite（`@libsql/client`
+嵌入式）。完整 env-var 契约见
+[docs/operations.md §环境变量](docs/operations.md#环境变量)。
+
 The full toolchain and command reference is in `docs/operations.md`.
 
 ## Reporting bugs and proposing features

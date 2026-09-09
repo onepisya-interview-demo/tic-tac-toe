@@ -1,5 +1,7 @@
 # 井字棋 (tic-tac-toe)
 
+> 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
+
 <p align="left">
   <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://www.typescriptlang.org"><img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6.svg"></a>
@@ -15,6 +17,14 @@
 技术栈：Next.js 16 (App Router) + React 19 + TypeScript (strict) + Tailwind v4
 + Zustand + Drizzle ORM + @libsql/client（本地 file: sqlite / Vercel 走
 Turso HTTP）。
+
+## Quick start
+
+1. `git clone <this-repo> && cd tic-tac-toe`
+2. `pnpm install`
+3. `pnpm dev` → http://localhost:3000
+4. 完成——本地开发不需要 `.env.local`、不需要任何 env vars；战绩自动持久化
+   到本地 sqlite：`data/tic-tac-toe.db`。
 
 ## Features
 
@@ -48,6 +58,9 @@ pnpm build && pnpm start
 ```
 
 默认 `DATABASE_URL=file:./data/tic-tac-toe.db`，数据落在 `data/tic-tac-toe.db`。
+**首次 clone 后不需要建 `.env.local`** — `lib/db.ts` 默认走
+`file:./data/tic-tac-toe.db` 嵌入式 sqlite（`@libsql/client` 自带）。
+`.env.example` 仅在你切到 Turso 或自定义路径时才需要复制。
 HTTP 部署详见下方"部署"章节。
 
 想用真实 Turso 库联调？参见 [本地联调 Turso 指南](docs/local-turso-setup.md)。
@@ -125,25 +138,50 @@ PR 评审以 vitest + 浏览器 QA 探针为准。跑挂时优先排查 `docs/op
 
 ## 部署
 
-### 单机 / 本地（默认）
+### 单机 / 本地
 
 `DATABASE_URL` 不设或设成 `file:./data/tic-tac-toe.db`，数据落在仓库下
 `data/tic-tac-toe.db`，不需要任何 token。
 
-### Vercel + Turso
+### Vercel + Turso 首次部署
 
-1. [turso.tech](https://turso.tech) 建库：`turso db create tic-tac-toe`。
-2. 拿 libsql URL：`turso db show tic-tac-toe --url` → 例如
-   `libsql://tic-tac-toe-yourname.aws-us-east-1.turso.io`。
-3. 拿 auth token：`turso db tokens create tic-tac-toe` → JWT。
+1. [turso.tech](https://turso.tech) 建库：`turso db create <your-db-name>`。
+2. 拿 libsql URL：`turso db show <your-db-name> --url`。
+3. 拿 auth token：`turso db tokens create <your-db-name>` → JWT。
 4. Vercel 项目 → Settings → Environment Variables，新增两条：
-   - `DATABASE_URL` = `libsql://tic-tac-toe-yourname.aws-us-east-1.turso.io`
-     （`lib/db.ts` 把 `libsql://` 当 `https://` 一样处理）
-   - `DATABASE_AUTH_TOKEN` = 步骤 3 的 JWT
+
+   | 变量 | 值 | 说明 |
+   | --- | --- | --- |
+   | `DATABASE_URL` | `libsql://<your-db-name>-<your-org>.turso.io` | `lib/db.ts` 把 `libsql://` 走 HTTP 分支 |
+   | `DATABASE_AUTH_TOKEN` | 步骤 3 的 JWT | 只存 Vercel，不进 git |
+
+   > **在第一次 push 之前配好**——否则首次部署就以未设 `DATABASE_URL` 的
+   > 形态构建，战绩落进临时 fs。
 5. `git push` 到 Vercel，`/api/stats` 自动用 Turso HTTP client 持久化。
+
+**推之前先本地模拟**：把上面两条 env vars 写进 `.env.local`（已 gitignore），
+`pnpm build && pnpm start` 后 `curl localhost:3000/api/stats` 确认读写正常，
+通过再 push。
 
 不要在 Vercel 上保留 `file:` URL——serverless 容器只有临时 fs，数据不会跨
 请求保留。
+
+### Vercel 排错
+
+- **战绩被清零 / 过段时间没了**：Vercel 上残留了 `file:` URL。serverless fs
+  是临时的，重启即丢；删掉该变量或换成 `libsql://`。
+- **fetch failed**：`DATABASE_URL` 拼错（漏 `libsql://` 前缀或域名错误）。
+  未知 scheme 会被 `lib/db.ts` 原样透传，由 client 报协议错。
+- **401 / 403**：`DATABASE_AUTH_TOKEN` 缺失、过期或不属于这个库。重新
+  `turso db tokens create <your-db-name>` 并更新 Vercel。
+- **build 失败**：先核对两个变量名必须一字不差——`DATABASE_URL` 和
+  `DATABASE_AUTH_TOKEN`，大小写和下划线都不能变。
+
+### 生产 vs 开发的数据库选择
+
+本仓库同一份 `lib/db.ts` 同时支持两种部署形态：`DATABASE_URL` 未设或为
+`file:` 时走嵌入式本地 sqlite（`@libsql/client` 自带）；`libsql://` /
+`http(s)://` 时走 Turso HTTP。切换形态只改环境变量，不改代码、不加依赖。
 
 ## License
 
