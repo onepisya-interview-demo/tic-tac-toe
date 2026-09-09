@@ -72,6 +72,8 @@ Chrome 152 的临时解法是关闭 DevTools 设置 `timeline-enable-soft-naviga
 | Next.js 16.3.4 | 项目自述"不是你认识的 Next.js"：node_modules/next/dist/docs/ 有内置指南；代理规则块由 next dev 自动再生成，next-env.d.ts 的 dev-types 路径被刻意跟踪（e21d7ff） |
 | React 19 + App Router | Server Component 默认，交互组件显式 'use client' |
 | Tailwind v4 | @theme 自定义 token（DESIGN.md 契约），不用 stock 色板 |
-| vitest 5 | 启动时有 configLoader native 警告（ESM 语法被按 CJS 加载）；无害，未来大版本会变默认 |
+| vitest 5 | 启动时有 configLoader native 警告（ESM 语法被按 CJS 加载）；无害，未来大版本会变默认。
+修复：把 `vitest.config.ts` 改名 `vitest.config.mts`，或在 `package.json` 加 `"type": "module"`（前者更稳）。
+上游追踪：[vitejs/vite#21546](https://github.com/vitejs/vite/issues/21546)（milestone Vite 9.0，open）。|
 | Stryker 10 | Vitest runner 由 pnpm patch 适配 Vitest 5；沙箱目录 .stryker-tmp/ 必须在 vitest exclude 里，否则变异运行会误收集依赖测试 |
 | Drizzle + @libsql/client | 单行战绩表 id=1，文件 / Turso HTTP 双分支；本地默认 file:./data/tic-tac-toe.db，Vercel 部署设 DATABASE_URL=libsql://... + DATABASE_AUTH_TOKEN（README §部署） |
