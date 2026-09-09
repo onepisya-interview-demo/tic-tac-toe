@@ -120,3 +120,4 @@ reports/
 /.omo/boulder.json
 /.omo/drafts/
 /.omo/start-work/
+.env*
