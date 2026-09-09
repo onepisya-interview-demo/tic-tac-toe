@@ -165,6 +165,20 @@ turso db shell <db-name> \
 `pnpm build && pnpm start`；本地冒烟用同一个 build（dev server 不行——见
 [README §部署排错](README.md#vercel-排错)）。
 
+### 当前部署示例（截至 2026-09-09 runbook 完成时）
+
+- **项目名**：`tic-tac-toe`（Vercel projectId `prj_MOOcP0A5uSKcqkARJdR1XXGarMaA`）
+- **生产 URL**：`https://tic-tac-toe-onepisyas-projects.vercel.app`（canonical alias）
+- **别名**：暂无自定义 `tic-tac-toe.vercel.app`（该 alias 被 Vercel 全局占用，添加时报 `already in use`）
+- **本地目录**：`/private/tmp/tic-tac-toe`（2026-09-10 从 `ulw-demo` 改名，与项目名一致）
+- **Turso db**：`tic-tac-toe-onepisya`（aws-us-east-1，region 建库后不可改）
+- **部署方式**：Vercel CLI（Phase 1）。Phase 2（Vercel for GitHub）待 GitHub 仓库创建后启用。
+- **回滚**：`vercel rollback` 或 Dashboard → Deployments → "Promote to Production"。
+
+历史 deployments 列表保留在 Vercel Dashboard；旧 `ulw-demo-*` 的 deployment 仍
+可访问（作为历史快照），新部署只走 `tic-tac-*` 前缀的 URL。
+
+
 ## 提交规范速查
 
 - Conventional subject（中文描述可），≤100 字符。
