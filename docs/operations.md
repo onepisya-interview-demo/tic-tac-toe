@@ -54,11 +54,116 @@ UX_STRICT=1（启用 ux 合约断言）、DATABASE_URL（覆盖默认 file: 路�
 
 ## 部署
 
-- 本机：见 [README §单机 / 本地](README.md#单机-本地默认)。
-- Vercel + Turso：见 [README §Vercel + Turso 首次部署](README.md#vercel--turso-首次部署)。
-- **前置**：`lib/db.ts` 在 `DATABASE_URL` 未设时走 `file:` 本地 sqlite；Vercel
-  必须设 `DATABASE_URL=libsql://...` + `DATABASE_AUTH_TOKEN`，否则容器 fs
-  是临时的、重启即丢。
+仓库用 Next.js 16 + @libsql/client + Turso，driver 由 `lib/db.ts` 内 `selectDriver(url)`
+按 `DATABASE_URL` 自动选：`file:` 走原生 sqlite，其他走 `@libsql/client/web`（HTTP，
+serverless/Edge 友好）。详细 driver 说明见 [README §驱动层（深模块）](README.md#驱动层深模块)。
+本节只讲**怎么把代码推上线**。
+
+部署分两阶段，CLI 优先于 Git：
+
+### Phase 1 · Vercel CLI 手动部署（首次上线 / 应急回滚入口）
+
+适用：首次把仓库部署到 Vercel；或者 Git 自动部署链路挂掉时作为应急入口。
+
+前置（一次性）：
+
+- `pnpm install`
+- `turso auth whoami` 确认 Turso CLI 已登录；按 [本地联调 Turso 指南](local-turso-setup.md)
+  建库 + 取 URL + 拿 token，写进 `.env.local`（已 gitignore）。
+- `vercel login` 确认 Vercel CLI 已登录。
+- **新项目注意**：Vercel 默认开启 Vercel Authentication，curl / 浏览器都会被
+  401/302 重定向。**首次部署后立刻**关掉：
+  ```bash
+  vercel project protection disable --sso
+  ```
+
+部署流程：
+
+1. **关联项目**（一次性）：
+
+   ```bash
+   vercel link --yes
+   # 会在 .vercel/project.json 写 projectId + orgId；非生产文件，已 gitignore
+   ```
+
+2. **写环境变量到 Production**（一次性；env 只在 Production，不在 Preview/Development，
+   否则 preview 静默继承生产变量、可能误写战绩）：
+
+   ```bash
+   URL=$(grep '^DATABASE_URL=' .env.local | cut -d= -f2-)
+   TOKEN=$(grep '^DATABASE_AUTH_TOKEN=' .env.local | cut -d= -f2-)
+   vercel env add DATABASE_URL production --value "$URL" --yes
+   vercel env add DATABASE_AUTH_TOKEN production --value "$TOKEN" --sensitive --yes
+   vercel env ls production   # 确认两个都在
+   vercel env ls preview      # 应该空
+   ```
+
+3. **推 production**：
+
+   ```bash
+   vercel --prod --yes
+   # 记录输出的 Production URL（形如 https://<project>-<hash>-<team>.vercel.app）
+   ```
+
+4. **端到端验证**（详见下方"生产 URL 验证"小节）。
+
+### Phase 2 · Vercel for GitHub 自动部署（push 即 deploy）
+
+适用：开发迭代；每次 `git push origin main` 触发自动 build + 部署到 production URL。
+
+前置（一次性）：
+
+- GitHub 仓库存在（默认名 `onepisya/tic-tac-toe`、public、默认分支 `main`）。
+  本地加 remote 并首推：
+  ```bash
+  git remote add origin git@github.com:onepisya/tic-tac-toe.git
+  git push -u origin main
+  ```
+- Vercel Dashboard → Add New → Project → Import `onepisya/tic-tac-toe` →
+  勾选 **Vercel for GitHub** 集成 → framework preset 选 Next.js →
+  **Production Branch = `main`** → Deploy。
+- env vars 已从 Phase 1 带入；如未带，回 Phase 1 step 2。
+
+日常：
+
+```bash
+git commit -m "feat: ..."
+git push origin main        # Vercel Dashboard 60s 内出现 "Building" → "Ready"
+```
+
+非 main 分支 push 自动得到 preview URL（preview 环境**没有** `DATABASE_URL`，
+所以 preview 写不进生产战绩；如果想开 preview db 走单独 token，需要先在
+`vercel env add ... preview` 显式开，并在 Dashboard 关闭 preview 写生产）。
+
+### 两阶段的关系 / 何时用哪个
+
+- **日常迭代用 Phase 2**（push 即 deploy，省 CLI 步骤）。
+- **CLI 应急**：Git 自动部署挂掉（GitHub Webhook 失败、main branch 误删、
+  Dashboard 临时维护）时，`vercel --prod` 仍可独立推 production；不依赖
+  GitHub / Vercel for GitHub 集成。
+- **回滚用 Dashboard**：Deployments → 选前一个绿色 → "Promote to Production"，
+  立刻把旧版本切回 production；两种部署方式产生的 deployment 互相可见，
+  可跨阶段回滚。
+
+### 生产 URL 验证（两阶段共享）
+
+部署成功后跑 4 步 curl（用实际生产 URL 替换占位）：
+
+```bash
+PROD=https://<project>-<hash>-<team>.vercel.app
+curl -i $PROD/api/stats                    # GET → 200, 全 0
+curl -i -X PUT -H 'content-type: application/json' \
+  -d '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1}' \
+  $PROD/api/stats                          # PUT → 200
+curl -i $PROD/api/stats                    # GET → 200, 1,1,0,0,1
+curl -i -X DELETE $PROD/api/stats          # DELETE → 200, 全 0
+turso db shell <db-name> \
+  "SELECT id, total_games, x_wins FROM game_stats;"  # 1 行，确认落库
+```
+
+补充：`/api/stats` 用 `runtime='nodejs'` + `dynamic='force-dynamic'`，build 走
+`pnpm build && pnpm start`；本地冒烟用同一个 build（dev server 不行——见
+[README §部署排错](README.md#vercel-排错)）。
 
 ## 提交规范速查
 
