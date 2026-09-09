@@ -2,6 +2,33 @@
   "name": "tic-tac-toe",
   "version": "0.1.0",
   "private": false,
+  "description": "Two-player pass-and-play tic-tac-toe / 两人同设备 pass-and-play 井字棋 — Next.js 16 + React 19 + Zustand + Drizzle + @libsql/client",
+  "author": "onepisYa <pis1@qq.com> (https://github.com/onepisya)",
+  "license": "MIT",
+  "homepage": "https://github.com/onepisya/tic-tac-toe#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onepisya/tic-tac-toe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/onepisya/tic-tac-toe/issues"
+  },
+  "keywords": [
+    "tic-tac-toe",
+    "nextjs",
+    "react",
+    "typescript",
+    "tailwindcss",
+    "zustand",
+    "drizzle-orm",
+    "libsql",
+    "playwright",
+    "vercel"
+  ],
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
