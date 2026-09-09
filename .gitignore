@@ -113,3 +113,10 @@ reports/
 /.omo/evidence/
 /.omo/ulw-loop/goals.json
 /.omo/ulw-loop/ledger.jsonl
+
+# =====================================================
+# OMX runtime work state and plan drafts
+# =====================================================
+/.omo/boulder.json
+/.omo/drafts/
+/.omo/start-work/
