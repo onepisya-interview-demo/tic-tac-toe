@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="tic-tac-toe logo">
+  <title>tic-tac-toe</title>
+  <rect width="64" height="64" rx="12" fill="#0b0f17"/>
+  <g stroke="#e2e8f0" stroke-width="3" stroke-linecap="round">
+    <line x1="22" y1="10" x2="22" y2="54"/>
+    <line x1="42" y1="10" x2="42" y2="54"/>
+    <line x1="10" y1="22" x2="54" y2="22"/>
+    <line x1="10" y1="42" x2="54" y2="42"/>
+  </g>
+  <g stroke="#22d3ee" stroke-width="4" stroke-linecap="round" fill="none">
+    <line x1="14" y1="14" x2="30" y2="30"/>
+    <line x1="30" y1="14" x2="14" y2="30"/>
+  </g>
+  <circle cx="52" cy="50" r="8" fill="none" stroke="#f472b6" stroke-width="4"/>
+</svg>
