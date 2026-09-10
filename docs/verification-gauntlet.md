@@ -14,7 +14,7 @@
 | Lint | eslint 9 + eslint-config-next/core-web-vitals + typescript，`pnpm lint = eslint`（不传参；等价于 `eslint .` 由 `eslint.config.mjs` 默认 targets + `globalIgnores(['tests/qa/**', ...])` 共同决定） | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm lint 通过」 |
 | Changed-line coverage | vitest --coverage（v8 provider，scope = `lib/**` + `db/**`，thresholds: lines 80 / functions 80 / branches 70 / statements 80） | ⚠️ 部分配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖 app/ + tests/qa/ + docs/，详见 §2 on-demand 规则）；未来 commit 触及 `lib/db` 时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
 | Mutation | Stryker 10 + vitest-runner（scope = `lib/game.ts` + `lib/db.ts` + `lib/store.ts` + `db/schema.ts`，break: null 信息性） | ✅ 已配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖本次改动）；未来 commit 触及 4 个文件时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
-| Property-based | fast-check 4 已装；`pnpm test:property = vitest run lib/**/*.property.test.ts`（仓库当前 0 个 `*.property.test.ts` 文件；`lib/game.test.ts` 用了 fast-check 但归在 `*.test.ts` 里，走 `pnpm test` 路径） | ⚠️ 部分配（脚本是空跑） | ❌ 本计划所有 commit **不跑**（不新增 lib/ 纯函数）；未来 commit 新增 `lib/X.ts` 纯函数时必跑 + 配套 `lib/X.property.test.ts` | ❌ AGENTS.md §验证门禁未列；AGENTS.md 也未提及 `pnpm test:property` |
+| Property-based | fast-check 4 已装；`pnpm test:property = vitest run property`（substring 过滤命中 `lib/game.property.test.ts`） | ✅ 已配 | ⚠️ on-demand：commit 新增 `lib/X.ts` 纯函数时必跑 + 配套 `lib/X.property.test.ts`（当前 `lib/game.property.test.ts` 5 条不变量） | ❌ AGENTS.md §验证门禁未列；AGENTS.md 也未提及 `pnpm test:property` |
 
 ## 2. On-demand 触发规则
 
@@ -45,9 +45,10 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 ### Property-based 触发
 
 - **条件**：commit 新增 `lib/X.ts` 纯函数（非 React 组件、非副作用模块）。
-- **启用步骤**：新增 `lib/X.property.test.ts`（必须命名遵循此 pattern 才会被
-  `pnpm test:property` glob 命中），用 `fast-check` 的 `fc.assert(fc.property(...))`
-  形式写出至少一条不变量；`pnpm test:property` 必须通过。
+- **启用步骤**：新增 `lib/X.property.test.ts`（命名遵循 `*.property.test.ts` 即可，
+  `pnpm test:property` 用 vitest substring 过滤 `property` 命中），用 `fast-check`
+  的 `fc.assert(fc.property(...))` 形式写出至少一条不变量；`pnpm test:property`
+  必须通过。当前仓库代表：`lib/game.property.test.ts`（5 条不变量）。
 - **Tested trailer 模板**：`Tested: pnpm test:property PASS (新增 lib/X.ts 配套
   lib/X.property.test.ts，覆盖 ≤ N 条不变量)`。
 
@@ -67,12 +68,14 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    等价于 `eslint .` 由 `eslint.config.mjs` 默认 targets + `globalIgnores(['tests/qa/**',
    ...])` 共同决定；用户表里写的 `npx eslint .` 与 `pnpm lint` 在本项目结果一致，
    **不需要改命令**。
-4. **`pnpm test:property` 是空跑脚本**：仓库 0 个 `*.property.test.ts` 文件，实际的
-   fast-check 性质测试（`lib/game.test.ts` 里 200-sample 不变量）走的是 `pnpm test`
-   而不是 `pnpm test:property`。要么把 `lib/game.test.ts` 里的 fast-check 块搬到
-   `lib/game.property.test.ts` 让 `test:property` 真跑出东西；要么把
-   `pnpm test:property` 从 `package.json` 删掉，避免「存在但永远 0 测试」的伪门禁。
-   **本次不动**（守住范围边界），作为 follow-up anchor 保留在此。
+4. ~~**`pnpm test:property` 是空跑脚本**~~ —— 已 follow-up commit 解决：
+   把 `lib/game.test.ts` 里的 fast-check describe 块（5 条不变量）搬到新建
+   `lib/game.property.test.ts`，并把 `package.json#scripts.test:property` 从
+   `vitest run lib/**/*.property.test.ts`（vitest 不识别 shell glob）改为
+   `vitest run property`（vitest substring 过滤）；`pnpm test:property` 现在
+   输出 Test Files 1 passed / Tests 5 passed。仓库首次出现 `*.property.test.ts`
+   文件（`lib/game.property.test.ts`），未来新增 `lib/X.ts` 纯函数时按
+   `lib/X.property.test.ts` 同模板配套。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 
