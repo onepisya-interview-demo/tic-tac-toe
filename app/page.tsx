@@ -1,16 +1,12 @@
-'use client';
-
-import Link from 'next/link';
-import { useGameStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
+import { ResetStatsButton } from '@/components/ResetStatsButton';
+import { StartGameButton } from '@/components/StartGameButton';
+import { loadStats } from '@/lib/db';
 
-export default function HomePage() {
-  const stats = useGameStore((s) => s.stats);
-  const startGame = useGameStore((s) => s.startGame);
-  const resetAll = useGameStore((s) => s.resetAll);
+export default async function HomePage() {
+  const stats = await loadStats();
 
   const isEmpty = stats.totalGames === 0;
 
@@ -42,19 +38,8 @@ export default function HomePage() {
       </Card>
 
       <div className="flex flex-row gap-3">
-        <Link href="/play" className="flex-1" onClick={startGame}>
-          <Button variant="primary" className="w-full" data-testid="start-game">
-            开始游戏
-          </Button>
-        </Link>
-        <Button
-          variant="ghost"
-          onClick={resetAll}
-          data-testid="reset-stats"
-          aria-label="重置战绩"
-        >
-          重置战绩
-        </Button>
+        <StartGameButton />
+        <ResetStatsButton />
       </div>
     </main>
   );
