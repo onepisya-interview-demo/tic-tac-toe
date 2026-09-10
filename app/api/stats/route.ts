@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { loadStats, saveStats, resetStats } from '@/lib/db';
 import { type GameStats } from '@/lib/game';
 
-// Force this route to run on the Node.js runtime — @libsql/client's file:
-// branch needs the native sqlite module, and the route must remain async to
-// await loadStats/saveStats/resetStats on every request.
+// Run this route on the Vercel Node.js runtime. Earlier exploration tried
+// `runtime='edge'` for low-latency global distribution; Next.js 16 deprecates
+// the Edge runtime and Vercel's Node runtime already serves from edge nodes
+// with comparable UX, so Node wins on simplicity. @libsql/client's native
+// sqlite module needs Node built-ins (`node:fs`, `node:path`), which is the
+// reason this route stays on Node rather than Edge.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
