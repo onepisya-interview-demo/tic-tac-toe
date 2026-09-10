@@ -24,7 +24,6 @@ export interface GameState {
   currentPlayer: Player | null;
   winner: Player | null;
   winLine: readonly [number, number, number] | null;
-  stats: GameStats;
   lastOutcome: 'X' | 'O' | 'draw' | null;
 }
 
@@ -33,7 +32,8 @@ export interface GameActions {
   makeMove: (index: number) => void;
   restart: () => void;
   resetAll: () => void;
-  hydrateStats: () => void;
+  setInitialStats: (stats: GameStats) => void;
+  __resetInternalForTests: () => void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -44,15 +44,14 @@ const initial: GameState = {
   currentPlayer: null,
   winner: null,
   winLine: null,
-  stats: emptyStats(),
   lastOutcome: null,
 };
 
-async function apiGetStats(): Promise<GameStats> {
-  const r = await fetch('/api/stats', { cache: 'no-store' });
-  if (!r.ok) throw new Error(`stats GET ${r.status}`);
-  return (await r.json()) as GameStats;
-}
+// Internal stats cache (NOT in GameState type). RSC pages hydrate this via
+// setInitialStats on mount so makeMove's recordOutcome has the current
+// baseline; otherwise the first PUT would overwrite DB with values computed
+// from emptyStats() instead of the real on-disk stats.
+let internalStats: GameStats = emptyStats();
 
 async function apiPutStats(stats: GameStats): Promise<void> {
   const r = await fetch('/api/stats', {
@@ -69,54 +68,46 @@ async function apiDeleteStats(): Promise<GameStats> {
   return (await r.json()) as GameStats;
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
+export const useGameStore = create<GameStore>((set) => ({
   ...initial,
 
-  hydrateStats: () => {
-    void apiGetStats()
-      .then((stats) => set({ stats }))
-      .catch(() => set({ stats: emptyStats() }));
+  setInitialStats: (stats) => {
+    internalStats = stats;
+  },
+
+  __resetInternalForTests: () => {
+    internalStats = emptyStats();
   },
 
   startGame: () => {
-    void apiGetStats()
-      // Network failure still starts the game, just with zero stats —
-      // the same shape as the success path so callers need no branch.
-      .catch(() => emptyStats())
-      .then((stats) => {
-        const firstPlayer = randomizeFirstPlayer();
-        set({
-          phase: 'playing',
-          board: createEmptyBoard(),
-          currentPlayer: firstPlayer,
-          winner: null,
-          winLine: null,
-          lastOutcome: null,
-          stats,
-        });
-      });
+    const firstPlayer = randomizeFirstPlayer();
+    set({
+      phase: 'playing',
+      board: createEmptyBoard(),
+      currentPlayer: firstPlayer,
+      winner: null,
+      winLine: null,
+      lastOutcome: null,
+    });
   },
 
   makeMove: (index: number) => {
-    const s = get();
+    const s = useGameStore.getState();
     if (s.phase !== 'playing') return;
     if (s.currentPlayer === null) return;
     if (s.board[index] !== null) return;
 
-    // The guards above make applyMove's throw paths unreachable: occupied
-    // cells and out-of-range indices (undefined) both fail the !== null
-    // check, so this call cannot throw.
     const board = applyMove(s.board, index, s.currentPlayer);
 
     const win = checkWinner(board);
     if (win) {
-      const newStats = recordOutcome(s.stats, win.player);
+      const newStats = recordOutcome(internalStats, win.player);
+      internalStats = newStats;
       set({
         board,
         phase: 'won',
         winner: win.player,
         winLine: win.line,
-        stats: newStats,
         lastOutcome: win.player,
       });
       // checkWinner is called only after applyMove(board, index, currentPlayer),
@@ -135,13 +126,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (isBoardFull(board)) {
-      const newStats = recordOutcome(s.stats, 'draw');
+      const newStats = recordOutcome(internalStats, 'draw');
+      internalStats = newStats;
       set({
         board,
         phase: 'drawn',
         winner: null,
         winLine: null,
-        stats: newStats,
         lastOutcome: 'draw',
       });
       playSound('draw');
@@ -171,17 +162,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetAll: () => {
     void apiDeleteStats()
-      .then((zero) => set({ stats: zero }))
-      .catch(() => set({ stats: emptyStats() }));
+      .then((zero) => {
+        internalStats = zero;
+      })
+      .catch(() => {
+        internalStats = emptyStats();
+      });
   },
 }));
-
-// Client-side: kick off stats hydration once when the store module loads
-// in the browser. Without this, any page that reads `stats` (e.g. /result
-// after a hard refresh) sees the emptyStats() initial state until the user
-// first clicks "start-game", because `startGame` is the only other caller
-// of apiGetStats. The fetch is fire-and-forget; on failure the store
-// stays at emptyStats() and the next write path will overwrite anyway.
-if (typeof window !== 'undefined') {
-  useGameStore.getState().hydrateStats();
-}

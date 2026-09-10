@@ -3,6 +3,7 @@ import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
 import { ResetStatsButton } from '@/components/ResetStatsButton';
 import { StartGameButton } from '@/components/StartGameButton';
+import { StatsHydrator } from '@/components/StatsHydrator';
 import { loadStats } from '@/lib/db';
 
 export default async function HomePage() {
@@ -12,6 +13,7 @@ export default async function HomePage() {
 
   return (
     <main className="page-shell page-fade-in">
+      <StatsHydrator stats={stats} />
       <header className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-display font-display font-semibold tracking-tight">井字棋</h1>
