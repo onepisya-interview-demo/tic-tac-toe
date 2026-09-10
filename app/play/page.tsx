@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Board } from '@/components/Board';
-import { StatusBar } from '@/components/ui/StatusBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { SoundToggle } from '@/components/SoundToggle';
