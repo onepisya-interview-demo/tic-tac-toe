@@ -171,6 +171,25 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 [docs/verification-gauntlet.md](docs/verification-gauntlet.md)；本文 §验证门禁 是
 入口，详细契约以 docs/verification-gauntlet.md 为准。
 
+**engines.node 与 Node 运行时的三环境对齐（vite-plus shim 注意）**：本仓库
+`package.json#engines.node` 必须与「Vercel project Node.js Version setting」+「CI
+.github/workflows 设定的 Node 版本」+「本地 vite-plus runtime 解析到的 Node major」三者
+对齐，否则会触发：(a) Vercel「Skipping build cache since Node.js version changed」
+信息行（pin 与 project default 不一致，强制降级/升级丢 cache）+ (b) Vercel「Detected
+"engines": { node: ... } in your package.json that will automatically upgrade when
+a new major Node.js Version is released」警告（major 没 pin 触发）+ (c) 本地 vitest
+fork pool 退化为 undici 8 报错（pin 与 vite-plus 解析到的 Node major 不一致时
+`webidl.util.markAsUncloneable is not a function`）。本仓库当前对齐状态：
+engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `22`（`.nvmrc=22`，
+但 `setup-node@v4 node-version: 22` 与 engines.node `24.x` 不严格对齐，详见
+`docs/verification-gauntlet.md` Gap 5 候选）↔ vite-plus shim 当前解析到 `24.21.0`
+（shim 在不同 session 可能切换到 `22.23.2` / `24.21.0`，每次启动 `node --version`
+确认）。任何 commit 修改 `engines.node` 时必须：(1) `pnpm vitest run` 实测本地 fork
+pool 不退化；(2) `vercel --prod` 部署后 build log 同时确认 0 条 Detected engines 警告
++ 0 条 Skipping build cache 信息行；(3) CI workflow Node 版本若与新 engines.node
+冲突，需要同步更新 `.github/workflows/*.yml` 或 `.nvmrc`。历史决策链见 commit
+`cd47efb` (20.x) → `875877c` (24.x)，迭代 3 次才稳定。
+
 ## commit-msg hook
 
 .git/hooks/commit-msg 会调用 node tests/qa/commit-audit.mjs --message-file "$1"。消息不合规时提交失败；禁止用 git commit --no-verify 绕过。需要独立校验时使用 pnpm exec commitlint --edit <message-file>。
