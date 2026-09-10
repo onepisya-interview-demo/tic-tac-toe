@@ -101,3 +101,5 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
   docs/operations.md §部署 的边界」一节明确说本文不重复部署告警解决方案。
 - 两文不重复同一份事实：当某条规则在两处都出现时，必须能在一文里找到另一文的引用
   链接（本文 §4 引 operations.md，operations.md「已解决部署警告」表引本文）。
+
+> 2026-09-11 更新：`lib/store.ts` 在 RSC refactor C4 之后不再持有 `stats` 字段，mutation target 仍为 `lib/store.ts` 但内容已收缩（无 `hydrateStats`、无 stats set 分支）。如发现 mutation 得分变化，在本文件记录新基线。
