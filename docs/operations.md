@@ -188,6 +188,36 @@ turso db shell <db-name> \
 `{99,50,40,9,7}` → `GET` 验证 PUT 生效 → `DELETE` 清零 → `PUT` 还原真实值
 `{6,4,2,0,2}` → `GET` 验证还原。期间用户战绩未破坏。
 
+### 已解决部署警告（代码侧）
+
+最近一轮部署日志里两条 Node engines / pnpm build scripts warning 已通过 commit
+落地解决，对应文件与 commit 可在 `git log --grep="build(vercel)\|feat(layout)\|feat(analytics)"` 锚定：
+
+| 警告 | 解决方案 | 提交 / 文件 |
+| --- | --- | --- |
+| Node engines 自动升级 | `engines.node` pin 到 major（与 .nvmrc 22 对齐，vitest 5 fork pool 校验一致） | `cd47efb` `package.json#engines.node` |
+| pnpm Ignored build scripts | `pnpm.onlyBuiltDependencies` 白名单 better-sqlite3 + esbuild | `cd47efb` `package.json#pnpm.onlyBuiltDependencies` |
+| 浏览器 tab 显示 Next.js 默认 logo | 删除 `app/favicon.ico`，新增 `app/icon.svg`（与 `public/logo.svg` 字节一致） | `955b24d` `app/{favicon.ico,icon.svg}` |
+| 移动端 chrome 地址栏色条跟随 OS | Next.js 16 `viewport.themeColor` 导出 + 字面量 `#0A0A0A` 镜像 `--color-bg-base` | `955b24d` `app/layout.tsx` |
+| 缺 metadataBase 导致相对路径 metadata 解析为 localhost | `metadata.metadataBase` 用生产域名 | `955b24d` `app/layout.tsx` |
+| 缺 Vercel Analytics 真实访问数据 | `<Analytics />` 挂载 + visual-qa 探针扩展 `analyticsScript` 字段 | `e7100e6` `app/layout.tsx` + `tests/qa/visual-qa.mjs` |
+
+### 待人工操作（Vercel Dashboard）
+
+下面 5 项是 Vercel Dashboard 推送的部署警告，**当前 executor turn 无法触达**（需要用户登录 Dashboard 操作，或需 Pro / Enterprise 计划 / GitHub Connect），列为人工清单；未来跟进此清单时按行号定位。
+
+| 项 | 决定 | 一句话理由 | Dashboard 配置入口 |
+| --- | --- | --- | --- |
+| Build Multiple Deployments Simultaneously | skip | Hobby plan 限定 1 concurrent build，升级 Pro 才解锁；本项目 traffic 量级不需要并发 build | https://vercel.com/docs/builds/build-queues |
+| Prevent Frontend-Backend Mismatches（Skew Protection） | skip | 仅支持 Next.js 14+ 多版本部署共存场景，本项目是单页 Next.js 应用无需 skew 防护 | https://vercel.com/docs/skew-protection |
+| Secure Preview Deployments | out-of-scope | Password Protection 需 Enterprise 或 Pro + Advanced Deployment Protection add-on，Hobby plan 不可用 | https://vercel.com/docs/security/deployment-protection |
+| Deployment Protection | out-of-scope | 同上，Hobby plan 不支持 Password Protection / Trusted IPs | https://vercel.com/docs/security/deployment-protection |
+| Preview Deployment（每 push 自动 preview URL） | **out-of-scope（最高优先级）** | 当前 GitHub 仓库还没 Connect，导致 Vercel 完全不发 preview URL，是 deployment warning 的最大来源；Project Settings → Git → Connect GitHub Repository → 选 `onepisya/tic-tac-toe` → production branch = `main` 即可一键启用 | https://vercel.com/docs/deployments/environments#preview-environment-pre-production |
+
+注：「决定」列含义：`do` = 在 Dashboard 已配置；`skip` = 主动决定不开；`out-of-scope` =
+executor 不可触达，等用户登录 Dashboard 操作。本表是稳态锚点，下次有人跟进时按 Dashboard
+入口 URL 直接定位，无需再调研 warning 来源。
+
 
 ## 提交规范速查
 

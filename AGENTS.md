@@ -150,6 +150,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - pnpm build 通过；纯文档提交不改 Next route 数量。
 - 触及浏览器界面时，运行相关的 tests/qa/*.mjs 探针。
 
+**完整 6 层 Gauntlet 现状 + on-demand 触发规则**见
+[docs/verification-gauntlet.md](docs/verification-gauntlet.md)。本节列出的 6 件是
+「每 commit 必跑」；coverage / mutation / property 三层在 `package.json` 已 wire 完
+脚本但**不在每 commit 闸门里**——其启用条件为：(a) coverage：commit 修改 `lib/**`
+或 `db/**` 下任意文件；(b) mutation：commit 修改 `lib/game.ts` / `lib/db.ts` /
+`lib/store.ts` / `db/schema.ts` 任何一项；(c) property：commit 新增 `lib/X.ts` 纯
+函数（必须配套 `lib/X.property.test.ts`）。触发后 lore trailer `Not-tested:` 改为
+`Tested:` + 触发原因。
+
 ## commit-msg hook
 
 .git/hooks/commit-msg 会调用 node tests/qa/commit-audit.mjs --message-file "$1"。消息不合规时提交失败；禁止用 git commit --no-verify 绕过。需要独立校验时使用 pnpm exec commitlint --edit <message-file>。
