@@ -10,17 +10,34 @@ const BASE = BASE_URL;
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
 
 async function snapshot(page) {
-  return page.evaluate(() => ({
-    url: location.href,
-    title: document.title,
-    h1: document.querySelector('h1')?.innerText ?? null,
-    buttons: Array.from(document.querySelectorAll('button')).map((b) => b.innerText),
-    statsValues: Array.from(document.querySelectorAll('[class*="font-mono"]')).map((s) => s.innerText).filter(Boolean),
-    bodyBg: getComputedStyle(document.body).backgroundColor,
-    bodyColor: getComputedStyle(document.body).color,
-    fontFamily: getComputedStyle(document.body).fontFamily,
-    fontLoaded: document.fonts.size > 0,
-  }));
+  return page.evaluate(() => {
+    // Read the @vercel/analytics injected script tag (production HTML only).
+    // The component injects a <script> that loads /_vercel/insights/script.js
+    // and registers window.va. We accept either presence as the
+    // machine-readable contract that Analytics is wired up.
+    const analyticsScript = (() => {
+      const scripts = Array.from(document.querySelectorAll('script[src]'));
+      const vercelInsight = scripts.find((s) => /vercel.*insights|vercel-insights|_vercel\/insights/.test(s.getAttribute('src') ?? ''));
+      if (vercelInsight) return 'present';
+      const inline = Array.from(document.querySelectorAll('script:not([src])')).find((s) => /window\.va\(|__VERCEL_INSIGHTS__/.test(s.textContent ?? ''));
+      return inline ? 'present' : 'absent';
+    })();
+    return {
+      url: location.href,
+      title: document.title,
+      h1: document.querySelector('h1')?.innerText ?? null,
+      buttons: Array.from(document.querySelectorAll('button')).map((b) => b.innerText),
+      statsValues: Array.from(document.querySelectorAll('[class*="font-mono"]')).map((s) => s.innerText).filter(Boolean),
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      bodyColor: getComputedStyle(document.body).color,
+      fontFamily: getComputedStyle(document.body).fontFamily,
+      fontLoaded: document.fonts.size > 0,
+      // Next.js 16 metadata contracts (commit 1 + commit 2):
+      iconHref: document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null,
+      themeColor: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
+      analyticsScript,
+    };
+  });
 }
 
 async function main() {
