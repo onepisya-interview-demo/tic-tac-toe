@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 export function ResultActions() {
+  const router = useRouter();
   const startGame = useGameStore((s) => s.startGame);
   const restart = useGameStore((s) => s.restart);
   const resetAll = useGameStore((s) => s.resetAll);
@@ -26,6 +28,8 @@ export function ResultActions() {
         onClick={() => {
           resetAll();
           restart();
+          // After DELETE, RSC needs to re-fetch stats so <StatsGrid> shows zeros.
+          router.refresh();
         }}
         data-testid="reset-stats-result"
       >
