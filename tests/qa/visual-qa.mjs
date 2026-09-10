@@ -49,6 +49,8 @@ async function snapshot(page) {
       fontLoaded: document.fonts.size > 0,
       // Next.js 16 metadata contracts (commit 1 + commit 2):
       iconHref: document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null,
+      appleTouchIconHref: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href') ?? null,
+      monoPreloadAbsent: !document.querySelector('link[rel="preload"][href*="797e433ab948586e"]'),
       themeColor: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
       analyticsScript,
     };
