@@ -11,6 +11,7 @@ const geist = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 // Next.js 16 `viewport` field must be a literal CSS color value at the type
