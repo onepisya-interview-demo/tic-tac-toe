@@ -53,11 +53,11 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 
 ## 3. Gap 清单（不在本次范围内，作为 follow-up anchor）
 
-1. **AGENTS.md §验证门禁只列了 3 层（test/typecheck/lint）+ build + commit-audit +
-   browser QA**——6 层 gauntlet 实际能跑 4 层（test/typecheck/lint/build），coverage /
-   mutation / property 只在「命令」段提到、不在门禁。本文 §1 已是 single source of
-   truth，AGENTS.md §验证门禁末尾追加指针段；后续单独提 `chore(docs): AGENTS.md
-   §验证门禁补全 6 层 gauntlet inline 摘要` follow-up 才动 AGENTS.md 本体。
+1. ~~**AGENTS.md §验证门禁只列了 3 层（test/typecheck/lint）+ build + commit-audit +
+   browser QA**~~ —— 已 follow-up commit 解决：AGENTS.md §验证门禁 末尾追加 9 行 inline
+   6 层摘要（Tests / Types / Lint / Build / Commit-audit / Browser QA 每 commit + 
+   Coverage / Mutation / Property-based on-demand 三层），本文仍是 single source of 
+   truth（thresholds / scope 数组 / 启用步骤 / Tested trailer 模板 / 其余 Gap 仍以本文为准）。
 2. **Coverage / mutation / property 三层 scope 都不覆盖 `app/`、`components/`、
    `tests/qa/`**。本次 favicon-analytics-warnings 计划改动恰好命中这三个目录的
    边缘，所以三层在本计划所有 commit 主动跳过并在每个 commit 的 lore `Not-tested:`

@@ -151,13 +151,25 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 触及浏览器界面时，运行相关的 tests/qa/*.mjs 探针。
 
 **完整 6 层 Gauntlet 现状 + on-demand 触发规则**见
-[docs/verification-gauntlet.md](docs/verification-gauntlet.md)。本节列出的 6 件是
-「每 commit 必跑」；coverage / mutation / property 三层在 `package.json` 已 wire 完
-脚本但**不在每 commit 闸门里**——其启用条件为：(a) coverage：commit 修改 `lib/**`
-或 `db/**` 下任意文件；(b) mutation：commit 修改 `lib/game.ts` / `lib/db.ts` /
-`lib/store.ts` / `db/schema.ts` 任何一项；(c) property：commit 新增 `lib/X.ts` 纯
-函数（必须配套 `lib/X.property.test.ts`）。触发后 lore trailer `Not-tested:` 改为
-`Tested:` + 触发原因。
+[docs/verification-gauntlet.md](docs/verification-gauntlet.md)。下面是 6 层 inline
+摘要 + on-demand 触发条件，把上面 6 条「每 commit 必跑」放回全 6 层视图里对齐：
+
+| 层 | 工具 / scope | 跑吗 | 触发条件 |
+| --- | --- | --- | --- |
+| Tests | vitest 5 + jsdom 30（88 例） | ✅ 每 commit | — |
+| Types | tsc 5 strict | ✅ 每 commit | — |
+| Lint | eslint 9（含 tests/qa/** ignore） | ✅ 每 commit | — |
+| Build | next build | ✅ 每 commit | — |
+| Commit-audit | tests/qa/commit-audit.mjs --branch main | ✅ 每 commit | — |
+| Browser QA | tests/qa/*.mjs 探针 | ✅ 触及 UI 时 | — |
+| Coverage | vitest --coverage（v8, `lib/**`+`db/**`, thresholds 80/80/70/80） | ⚠️ on-demand | commit 修改 `lib/**` 或 `db/**` 下任意文件 |
+| Mutation | Stryker（scope 4 个文件：`lib/game.ts` `lib/db.ts` `lib/store.ts` `db/schema.ts`，break: null） | ⚠️ on-demand | commit 修改 4 个 Stryker scope 文件任一个 |
+| Property-based | fast-check（`lib/**/*.property.test.ts`，当前 0 个文件） | ⚠️ on-demand | commit 新增 `lib/X.ts` 纯函数（必须配套 `lib/X.property.test.ts`） |
+
+触发后 lore trailer `Not-tested:` 改为 `Tested:` + 触发原因。6 层全表 + on-demand
+规则细节（thresholds / scope 数组 / 启用步骤 / Tested trailer 模板 / Gap 清单）见
+[docs/verification-gauntlet.md](docs/verification-gauntlet.md)；本文 §验证门禁 是
+入口，详细契约以 docs/verification-gauntlet.md 为准。
 
 ## commit-msg hook
 
