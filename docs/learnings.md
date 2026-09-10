@@ -94,3 +94,19 @@ await page.evaluate((hash) => {
 内部用，必须显式通过参数传。如果忘了这点，运行时会抛
 `ReferenceError: <NAME> is not defined`，且报错来自浏览器 context
 而非 Node，定位容易跑偏到别的方向（看起来像 snapshot 函数本身坏）。
+
+### 27. RSC leaf boundary refactor（commit C1–C5）
+
+将 3 个 page（`/`、`/play`、`/result`）从 `'use client'` 改为 RSC；交互逻辑收敛到叶子 client 组件（`<StartGameButton>` / `<ResetStatsButton>` / `<PlayController>` / `<StatusBarClient>` / `<RestartButton>` / `<ResultBanner>` / `<ResultActions>`）；`stats` 数据由 RSC `await loadStats()` 直读 `lib/db.ts`，`useGameStore` 仍持有 stats 直到 C4 删除。
+
+设计记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 5 份 sub-plan。
+
+收益：
+- 首屏 HTML 含战绩（之前需 hydration 后 fetch）；
+- `useRouter` / `useEffect` 不再被 page 直接 import，Next router glue 不进首屏；
+- store 类型干净（stats 字段在 C4 之后被删除）。
+
+反模式注意：
+- 不要再把整个 page 改回 `'use client'`；新加交互请用叶子 client 组件。
+- SoundToggle **不**上移到 layout（每 page header 留 slot；v0.2 用户决策）。
+- RSC → client 边界不能传 function（render-prop 跨 server→client 边界 build 报错）；用 thin-client-wrapper 模式（client 组件 subscribe store 后渲染 RSC 组件）。
