@@ -12,13 +12,28 @@ const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
 async function snapshot(page) {
   return page.evaluate(() => {
     // Read the @vercel/analytics injected script tag (production HTML only).
-    // The component injects a <script> that loads /_vercel/insights/script.js
-    // and registers window.va. We accept either presence as the
-    // machine-readable contract that Analytics is wired up.
+    // The component injects a <script> at one of two URLs:
+    //   - local / preview: /_vercel/insights/script.js
+    //   - production:       /<numeric-sandbox-id>/script.js  (Vercel assigns
+    //                       a project-local sandbox ID at deploy time and
+    //                       rewrites the SDK endpoint to that path)
+    // Both URLs serve the same gzip'd Vercel Web Analytics SDK and register
+    // window.va. We accept either presence as the machine-readable contract
+    // that Analytics is wired up. Inline `<script>window.va=` or
+    // `__VERCEL_INSIGHTS__` sentinel checks still apply for any future
+    // pre-mount injection mode.
     const analyticsScript = (() => {
       const scripts = Array.from(document.querySelectorAll('script[src]'));
-      const vercelInsight = scripts.find((s) => /vercel.*insights|vercel-insights|_vercel\/insights/.test(s.getAttribute('src') ?? ''));
+      const srcs = scripts.map((s) => s.getAttribute('src') ?? '');
+      // Local / preview endpoint
+      const vercelInsight = srcs.find((src) => /vercel.*insights|vercel-insights|_vercel\/insights/.test(src));
       if (vercelInsight) return 'present';
+      // Production endpoint: /<numeric-sandbox-id>/script.js (Vercel assigns
+      // a project-local sandbox ID at deploy time and rewrites the SDK URL
+      // to that path).
+      const productionEndpoint = srcs.find((src) => /^\/\d+\/script\.js$/.test(src));
+      if (productionEndpoint) return 'present';
+      // Inline sentinel for any future pre-mount injection
       const inline = Array.from(document.querySelectorAll('script:not([src])')).find((s) => /window\.va\(|__VERCEL_INSIGHTS__/.test(s.textContent ?? ''));
       return inline ? 'present' : 'absent';
     })();
