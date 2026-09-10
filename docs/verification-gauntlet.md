@@ -76,22 +76,15 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    输出 Test Files 1 passed / Tests 5 passed。仓库首次出现 `*.property.test.ts`
    文件（`lib/game.property.test.ts`），未来新增 `lib/X.ts` 纯函数时按
    `lib/X.property.test.ts` 同模板配套。
-5. **`package.json#engines.node` 与 CI `.github/workflows/*.yml` Node 版本不严格对齐**——
-   当前 engines.node = `24.x`、CI `.nvmrc=22` / `setup-node@v4 node-version: 22`
-   跑 Node 22，Vercel project Node.js Version = `24.x`。三方不是严格对齐：
-   engines.node pin 到 24.x 时 Vercel 不报 Detected engines 警告且 build cache
-   复用，但 CI 跑 Node 22 不在 engines.node 范围内（`24.x` ⊄ `>=22`，但 22 < 24
-   严格违反 semver）—— 当前 CI 任务只跑 lint / typecheck / vitest 不打 Node
-   原生模块，所以实际上没踩坑，但严格说 engines.node 24.x 应该跟 CI 一起升到
-   Node 24 或 engines.node 放回 >=22 + 接受 Vercel 警告。本次保留 engines.node=24.x
-   + CI Node=22 的「实际工作但语义不一致」状态，并把详细对位关系写到
-   `AGENTS.md §验证门禁 末尾`（最近一次 follow-up commit 加的 inline 段落）。
-   完整对位状态：engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ 
-   CI Node = `22`（`.nvmrc=22`）↔ vite-plus shim 当前解析到 `24.21.0`（shim
-   不同 session 可能切到 22.23.2 / 24.21.0）。任何 commit 修改 engines.node 时
-   必须实测 (1) pnpm vitest run 验证本地 fork pool；(2) vercel --prod 验证 build
-   log 同时 0 条 Detected engines + 0 条 Skipping build cache；(3) CI workflow 
-   Node 版本若冲突需要同步更新。
+5. ~~**`package.json#engines.node` 与 CI `.github/workflows/*.yml` Node 版本不严格对齐**~~ ——
+   已 follow-up commit 解决：`.github/workflows/ci.yml` 5 处 `setup-node@v4 node-version: 22`
+   全部改为 `node-version: 24`，`.nvmrc` 从 `22` 改为 `24`，CI Node 与
+   engines.node / Vercel project default 严格对齐到 24.x。本仓库三方对齐状态：
+   engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `24`
+   ↔ vite-plus shim 当前解析到 `24.21.0`（shim 不同 session 可能切到 22.23.2 /
+   24.21.0）。任何 commit 修改 engines.node 时仍需实测 (1) pnpm vitest run 验证
+   本地 fork pool；(2) vercel --prod 验证 build log 同时 0 条 Detected engines
+   + 0 条 Skipping build cache；(3) CI workflow Node 版本若冲突需要同步更新。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 

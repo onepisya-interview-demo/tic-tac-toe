@@ -180,15 +180,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 a new major Node.js Version is released」警告（major 没 pin 触发）+ (c) 本地 vitest
 fork pool 退化为 undici 8 报错（pin 与 vite-plus 解析到的 Node major 不一致时
 `webidl.util.markAsUncloneable is not a function`）。本仓库当前对齐状态：
-engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `22`（`.nvmrc=22`，
-但 `setup-node@v4 node-version: 22` 与 engines.node `24.x` 不严格对齐，详见
-`docs/verification-gauntlet.md` Gap 5 候选）↔ vite-plus shim 当前解析到 `24.21.0`
+engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `24`（`.nvmrc=24`，
+`setup-node@v4 node-version: 24` 5 处全部统一）↔ vite-plus shim 当前解析到 `24.21.0`
 （shim 在不同 session 可能切换到 `22.23.2` / `24.21.0`，每次启动 `node --version`
 确认）。任何 commit 修改 `engines.node` 时必须：(1) `pnpm vitest run` 实测本地 fork
 pool 不退化；(2) `vercel --prod` 部署后 build log 同时确认 0 条 Detected engines 警告
 + 0 条 Skipping build cache 信息行；(3) CI workflow Node 版本若与新 engines.node
 冲突，需要同步更新 `.github/workflows/*.yml` 或 `.nvmrc`。历史决策链见 commit
-`cd47efb` (20.x) → `875877c` (24.x)，迭代 3 次才稳定。
+`cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)，迭代 3 次才稳定；CI Node 24
+升级由 commit（本次）落地。
 
 ## commit-msg hook
 
