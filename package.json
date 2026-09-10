@@ -26,7 +26,7 @@
     "vercel"
   ],
   "engines": {
-    "node": ">=20",
+    "node": "22.x",
     "pnpm": ">=10"
   },
   "scripts": {
@@ -53,6 +53,12 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zustand": "^5.0.15"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
