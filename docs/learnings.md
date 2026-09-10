@@ -77,3 +77,20 @@ Chrome 152 的临时解法是关闭 DevTools 设置 `timeline-enable-soft-naviga
 上游追踪：[vitejs/vite#21546](https://github.com/vitejs/vite/issues/21546)（milestone Vite 9.0，open）。|
 | Stryker 10 | Vitest runner 由 pnpm patch 适配 Vitest 5；沙箱目录 .stryker-tmp/ 必须在 vitest exclude 里，否则变异运行会误收集依赖测试 |
 | Drizzle + @libsql/client | 单行战绩表 id=1，文件 / Turso HTTP 双分支；本地默认 file:./data/tic-tac-toe.db，Vercel 部署设 DATABASE_URL=libsql://... + DATABASE_AUTH_TOKEN（README §部署） |
+
+### 12. page.evaluate 顶层 const 不自动注入（commit fe1e788）
+Playwright 的 `page.evaluate(() => { ... })` 在浏览器 context 运行，**Node 顶层
+`const` 不可见**。要把模块作用域的值传进去，必须用 page.evaluate 的第二个参数：
+
+```js
+await page.evaluate((hash) => {
+  document.querySelector(`...${hash}...`);
+}, GEIST_MONO_FONT_HASH);
+```
+
+或用 `page.addInitScript()` 把变量注入到每个新 document。
+
+教训：任何写在 tests/qa/visual-qa.mjs 顶层的常量，如果要在 `page.evaluate`
+内部用，必须显式通过参数传。如果忘了这点，运行时会抛
+`ReferenceError: <NAME> is not defined`，且报错来自浏览器 context
+而非 Node，定位容易跑偏到别的方向（看起来像 snapshot 函数本身坏）。

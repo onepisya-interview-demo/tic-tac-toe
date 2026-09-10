@@ -16,6 +16,11 @@ const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
 const GEIST_MONO_FONT_HASH = "797e433ab948586e";
 
 async function snapshot(page) {
+  // page.evaluate runs in the browser context, so top-level `const`s in this file
+  // are NOT visible inside the closure. Top-level values (like
+  // GEIST_MONO_FONT_HASH) must be passed as the 2nd argument so Playwright
+  // serializes them across the CDP boundary.
+  // See docs/learnings.md #12 for the full pattern.
   return page.evaluate((hash) => {
     // Read the @vercel/analytics injected script tag (production HTML only).
     // The component injects a <script> at one of two URLs:
