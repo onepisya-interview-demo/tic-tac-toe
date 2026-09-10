@@ -111,8 +111,14 @@ reports/
 # ULW local runtime state and evidence
 # =====================================================
 /.omo/evidence/
-/.omo/ulw-loop/goals.json
-/.omo/ulw-loop/ledger.jsonl
+/.omo/ulw-loop/
+
+# =====================================================
+# mise.toml — omo ulw-loop auto-generated, conflicts with .nvmrc (22) which is the
+# canonical Node version pin (commit c36c49c). Vercel actually runs on 24.x via
+# package.json#engines.node + project setting, but pinning in .nvmrc wins locally.
+# =====================================================
+/mise.toml
 
 # =====================================================
 # OMO plan-workflow runtime state (boulder / drafts / start-work ledger)
