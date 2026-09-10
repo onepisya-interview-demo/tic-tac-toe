@@ -10,7 +10,27 @@ const ICON_COLORS = {
 
 const SCALE = 180 / 64;
 const BOARD_LINE_WIDTH = 3 * SCALE;
-const MARK_WIDTH = 4 * SCALE;
+const MARK_STROKE_WIDTH = 4 * SCALE;
+
+// app/icon.svg viewBox is 0..64; we render at 180x180.
+// Mark centers in SVG coordinates, mirroring app/icon.svg:
+//   X drawn between top-left (cell 0) and top-mid (cell 1) so it spans the grid intersection
+//   O drawn in the bottom-right cell (cell 8)
+const X_CENTER_SVG = 22;
+const X_CENTER_Y_SVG = 22;
+const O_CENTER_SVG = 52;
+const O_CENTER_Y_SVG = 50;
+const O_RADIUS_SVG = 8;
+// X bar length chosen so the rotated X reads visually similar to the SVG 16-unit arms
+// once the 4-unit stroke is added on each end.
+const X_LENGTH_SVG = 22.75;
+
+const X_CENTER = X_CENTER_SVG * SCALE;
+const X_CENTER_Y = X_CENTER_Y_SVG * SCALE;
+const O_CENTER = O_CENTER_SVG * SCALE;
+const O_CENTER_Y = O_CENTER_Y_SVG * SCALE;
+const O_RADIUS = O_RADIUS_SVG * SCALE;
+const X_LENGTH = X_LENGTH_SVG * SCALE;
 
 const BOARD_LINES = [
   { left: 22 * SCALE, top: 10 * SCALE, width: BOARD_LINE_WIDTH, height: 44 * SCALE },
@@ -19,7 +39,7 @@ const BOARD_LINES = [
   { left: 10 * SCALE, top: 42 * SCALE, width: 44 * SCALE, height: BOARD_LINE_WIDTH },
 ] as const;
 
-const X_LINES = ["rotate(45deg)", "rotate(-45deg)"] as const;
+const X_ROTATIONS = ["rotate(45deg)", "rotate(-45deg)"] as const;
 const BOARD_LINE_STYLE = {
   position: "absolute",
   backgroundColor: ICON_COLORS.board,
@@ -49,18 +69,29 @@ export default function AppleIcon() {
             style={{ ...BOARD_LINE_STYLE, ...style } satisfies CSSProperties}
           />
         ))}
-        {X_LINES.map((transform) => (
-          <div key={transform} style={{ position: "absolute", left: 29.875, top: 56.25, width: 64, height: MARK_WIDTH, backgroundColor: ICON_COLORS.x, transform }} />
+        {X_ROTATIONS.map((transform) => (
+          <div
+            key={transform}
+            style={{
+              position: "absolute",
+              left: X_CENTER - X_LENGTH / 2,
+              top: X_CENTER_Y - MARK_STROKE_WIDTH / 2,
+              width: X_LENGTH,
+              height: MARK_STROKE_WIDTH,
+              backgroundColor: ICON_COLORS.x,
+              transform,
+            }}
+          />
         ))}
         <div
           style={{
             position: "absolute",
-            left: 123.75,
-            top: 118.125,
-            width: 45,
-            height: 45,
+            left: O_CENTER - O_RADIUS,
+            top: O_CENTER_Y - O_RADIUS,
+            width: O_RADIUS * 2,
+            height: O_RADIUS * 2,
             boxSizing: "border-box",
-            border: `${MARK_WIDTH}px solid ${ICON_COLORS.o}`,
+            border: `${MARK_STROKE_WIDTH}px solid ${ICON_COLORS.o}`,
             borderRadius: 999,
           }}
         />

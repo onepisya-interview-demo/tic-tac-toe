@@ -9,8 +9,14 @@ import { driveTopRowWin } from './lib/win-drive.mjs';
 const BASE = BASE_URL;
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
 
+// Geist Mono's woff2 hash as observed in production HTML pre-preload-false.
+// When the layout fix removes the preload link, this query must return null.
+// Update this constant only if Next.js regenerates the Geist Mono asset (rare;
+// each next/font build with a different font version may produce a new hash).
+const GEIST_MONO_FONT_HASH = "797e433ab948586e";
+
 async function snapshot(page) {
-  return page.evaluate(() => {
+  return page.evaluate((hash) => {
     // Read the @vercel/analytics injected script tag (production HTML only).
     // The component injects a <script> at one of two URLs:
     //   - local / preview: /_vercel/insights/script.js
@@ -50,11 +56,11 @@ async function snapshot(page) {
       // Next.js 16 metadata contracts (commit 1 + commit 2):
       iconHref: document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null,
       appleTouchIconHref: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href') ?? null,
-      monoPreloadAbsent: !document.querySelector('link[rel="preload"][href*="797e433ab948586e"]'),
+      monoPreloadAbsent: !document.querySelector(`link[rel="preload"][href*="${hash}"]`),
       themeColor: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
       analyticsScript,
     };
-  });
+  }, GEIST_MONO_FONT_HASH);
 }
 
 async function main() {
@@ -124,6 +130,21 @@ async function main() {
 
   await writeQaLog(EVIDENCE_DIR, log);
   console.log('QA complete. Screenshots and qa-log.json written to', EVIDENCE_DIR);
+
+  // Programmatic contract: every snapshot must have a non-null appleTouchIconHref
+  // and monoPreloadAbsent === true. Guards against silent regressions in commit 1
+  // (apple-icon) and commit 2 (mono preload).
+  const failures = log
+    .filter((entry) => entry.snapshot)
+    .filter((entry) => !entry.snapshot.appleTouchIconHref || entry.snapshot.monoPreloadAbsent !== true);
+  if (failures.length > 0) {
+    console.error(`QA contract failed for ${failures.length} stage(s):`);
+    for (const f of failures) {
+      console.error(`  - ${f.stage}: appleTouchIconHref=${JSON.stringify(f.snapshot.appleTouchIconHref)} monoPreloadAbsent=${JSON.stringify(f.snapshot.monoPreloadAbsent)}`);
+    }
+    process.exit(1);
+  }
+  console.log(`QA contract verified: ${log.filter((e) => e.snapshot).length} stages all pass.`);
 }
 
 main().catch((e) => {
