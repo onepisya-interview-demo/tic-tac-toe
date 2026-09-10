@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geist = Geist({
@@ -25,6 +26,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://3t-tic-tac-toe.vercel.app/"),
   title: "井字棋 · 同设备 pass-and-play",
   description: "两人同设备轮流下的井字棋，自动记录战绩。",
+  // PWA install metadata — Next.js auto-injects the <link rel="manifest">
+  // from `manifest` and the apple-mobile-web-app-* <meta> tags from
+  // `appleWebApp`. Plan: .omo/plans/pwa-install-experience.md.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "井字棋", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = {
@@ -45,6 +51,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
         {children}
         <Analytics />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

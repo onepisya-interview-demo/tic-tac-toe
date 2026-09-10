@@ -43,6 +43,7 @@ const TARGETS = [
   { file: "public/favicon-48x48.png", size: 48 },
   { file: "public/icon-192.png", size: 192 },
   { file: "public/icon-512.png", size: 512 },
+  { file: "public/icon-maskable-512.png", size: 512, maskable: true },
   { file: "public/apple-touch-icon.png", size: 180 },
 ];
 
@@ -85,17 +86,50 @@ mkdirSync(tmpDir, { recursive: true });
 // Use a tempdir so we never leave half-rendered PNGs in public/ on failure.
 for (const { file, size } of TARGETS) {
   const out = join(tmpDir, `${size}.png`);
+  const target = TARGETS.find((t) => t.file === file);
+  const isMaskable = Boolean(target?.maskable);
+  // Maskable icons: shrink the source logo to 80% (safe zone per
+  // web.dev/articles/maskable-icon) and composite centered on a
+  // 512x512 #0b0f17 canvas. The canvas colour matches
+  // app/apple-icon.tsx ICON_COLORS.background so the icon's background
+  // is the same dark navy as the rest of the brand asset set, while
+  // the manifest theme_color stays #0A0A0A (browser chrome / status
+  // bar surface, set in app/layout.tsx THEME_COLOR).
+  const resizeSize = isMaskable ? "410x410" : `${size}x${size}`;
   execFileSync("magick", [
     source,
     "-filter",
     "Lanczos",
     "-resize",
-    `${size}x${size}`,
+    resizeSize,
     "-define",
     "png:exclude-chunks=tIME,tEXt,zTXt,iTXt",
     out,
   ]);
-  execFileSync("magick", [out, "-define", "png:exclude-chunks=tIME,tEXt,zTXt,iTXt", file]);
+  if (isMaskable) {
+    const bg = join(tmpDir, `${size}-bg.png`);
+    execFileSync("magick", [
+      "-size",
+      "512x512",
+      "canvas:#0b0f17",
+      "-define",
+      "png:exclude-chunks=tIME,tEXt,zTXt,iTXt",
+      bg,
+    ]);
+    execFileSync("magick", [
+      bg,
+      out,
+      "-gravity",
+      "center",
+      "-composite",
+      "-define",
+      "png:exclude-chunks=tIME,tEXt,zTXt,iTXt",
+      file,
+    ]);
+    execFileSync("rm", [bg]);
+  } else {
+    execFileSync("magick", [out, "-define", "png:exclude-chunks=tIME,tEXt,zTXt,iTXt", file]);
+  }
   execFileSync("rm", [out]);
 }
 
