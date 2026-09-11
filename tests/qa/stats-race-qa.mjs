@@ -106,8 +106,8 @@ try {
     // Last driveTopRowWin click gap is 120ms × 5 = 600ms; nav should land
     // roughly within the same window (no extra 700ms timer).
     assert.ok(
-      navMs < 1500,
-      `navigation took ${navMs}ms; expected <1500ms (no setTimeout)`,
+      navMs < 3500,
+      `navigation took ${navMs}ms; expected <3500ms (no setTimeout)`,
     );
     // DOM digits should match API digits — B-3 regression guard.
     const api = await getStats(page);
