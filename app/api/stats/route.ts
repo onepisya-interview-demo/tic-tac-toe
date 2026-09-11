@@ -28,6 +28,14 @@ export async function GET() {
   return NextResponse.json(stats);
 }
 
+/**
+ * @deprecated Clients must NOT call this endpoint. The stats race fix in
+ * stats-server-authoritative-delta moves client writes to
+ * `POST /api/stats/outcome` (server-authoritative delta). This PUT remains
+ * ONLY for QA seed (`tests/qa/ux-qa.mjs:39`), admin tooling, and one-off
+ * migrations. Its request/response shape and 4xx/2xx behavior are unchanged.
+ */
+
 export async function PUT(request: Request) {
   let body: unknown;
   try {
