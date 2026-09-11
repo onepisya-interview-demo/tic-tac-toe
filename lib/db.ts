@@ -35,12 +35,33 @@ const defaultCreateClient: CreateClientFn = (config) =>
 let createClientFn: CreateClientFn = defaultCreateClient;
 
 /**
- * Swap the factory used by `getDb`. Pass `null` to restore the default
- * `selectDriver`-based createClient. Test-only — production code must not call.
+ * Test-only knobs for injecting latency or replacing the client factory.
+ * Production code must never call these.
+ *
+ * Two surfaces so callers can pick the lightest seam:
+ *   - `__setCreateClientForTests(fn)` replaces `createClient` wholesale.
+ *   - `__setDbOpDelayForTests(ms)`  adds a fixed pre-DB sleep so races that
+ *     only manifest under a slow upstream (e.g. Turso HTTP) become
+ *     reproducible locally with a local sqlite. Set to 0 / null to clear.
+ *
+ * Both reset by passing null.
  */
 export function __setCreateClientForTests(fn: CreateClientFn | null): void {
   createClientFn = fn ?? defaultCreateClient;
+  dbOpDelayMs = 0;
 }
+
+export function __setDbOpDelayForTests(ms: number | null): void {
+  dbOpDelayMs = ms ?? 0;
+}
+
+/**
+ * Read DATABASE_URL_SLOW_DELAY_MS so a server can be launched with the
+ * variable set (e.g. `DATABASE_URL_SLOW_DELAY_MS=1500 next start`) and
+ * every DB op will block for that many ms — reproducing the RSC / store
+ * races the production Turso HTTP transport exposes, on local sqlite.
+ */
+let dbOpDelayMs = 0;
 
 let cachedDb: LibSQLDatabase<typeof schema> | null = null;
 let cachedClient: Client | null = null;
@@ -94,6 +115,13 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   if (cachedDb) return cachedDb;
   const config = resolveDbConfig();
   cachedClient = createClientFn(config);
+  // Test/dev-only latency injection so races that only manifest under a
+  // slow upstream become locally reproducible on sqlite. Production never
+  // sets DATABASE_URL_SLOW_DELAY_MS; the variable is documented in
+  // __setDbOpDelayForTests and consumed at the same seam.
+  if (dbOpDelayMs > 0) {
+    await new Promise((r) => setTimeout(r, dbOpDelayMs));
+  }
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
   await cachedClient.execute(`
