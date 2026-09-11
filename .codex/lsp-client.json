@@ -1,0 +1,13 @@
+{
+  "lsp": {
+    "typescript": {
+      "priority": 100
+    },
+    "bash": {
+      "priority": 100
+    },
+    "yaml-ls": {
+      "priority": 100
+    }
+  }
+}

@@ -73,6 +73,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 不要使用 div onClick、emoji 图标、组件级 focus ring，或新增第二个水合触发点。
 - 不要用 --no-verify 绕过 commit-msg hook。
 - 契约要求生产构建时，不要对 dev server 跑浏览器 QA。
+- **LSP 服务端工具（typescript-language-server / yaml-language-server / bash-language-server）允许作为 devDependency** —— 它们是本地编辑器 / Codex `lsp.*` MCP 的语言服务端，永不进 Next.js runtime bundle；项目本地安装是为了与项目 typescript 编译器版本对齐（vp 全局 shim 与 typescript-language-server 的 tsserver 查找路径有冲突，2026-09-12 实证：`vp add -g` 后 server 报 `Could not find a valid TypeScript installation`）。任何 LSP 改动必须：(1) 三个 server 同时增删，保持列表一致；(2) `.codex/lsp-client.json` 同步；(3) 跑 `pnpm vitest run` + `pnpm typecheck` 确认不破 Gauntlet。
 - **RSC 页面读取可变数据必须声明 `dynamic = 'force-dynamic'`** —— Next.js 16 默认静态优化可能烘焙 build-time 异步数据（如 Drizzle DB 调用）的结果到 HTML，runtime 返回脏数据直到下次 build。B-3a 实证：首屏 HTML 显示旧战绩而 DB 已是新战绩。
 - **Service Worker fetch handler 必须按方法门控** —— `event.respondWith(fetch(event.request))` 无门控会让 PUT/POST/DELETE 被发两次（浏览器观察到两条 outbound 请求）。可安装但不缓存的 SW 范式：`if (event.request.method !== 'GET') return;` 后再 respondWith。B-1 实证：生产 DevTools Network 面板观察到 2 行 PUT。
 - **store 的网络写 action 必须返回 Promise** —— 让调用方可以 await 后再调 `router.refresh()`。在 `force-dynamic` 下无需 `revalidatePath`（冗余）；在 ISR 下 Route Handler 必须调 `revalidatePath('/')` + `revalidatePath('/result')`。B-2 + B-3b 实证：setTimeout 700ms 与 PUT 落库时刻不固定；resetAll fire-and-forget DELETE 后同步 router.refresh() 会读到旧值。
