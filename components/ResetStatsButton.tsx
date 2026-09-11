@@ -10,9 +10,10 @@ export function ResetStatsButton() {
   return (
     <Button
       variant="ghost"
-      onClick={() => {
-        resetAll();
-        // After DELETE, RSC needs to re-fetch stats so <StatsGrid> shows zeros.
+      onClick={async () => {
+        // Await the DELETE before refreshing so the next RSC fetch sees
+        // zeros (force-dynamic means no ISR fallback to invalidate).
+        await resetAll();
         router.refresh();
       }}
       data-testid="reset-stats"

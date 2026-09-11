@@ -25,10 +25,12 @@ export function ResultActions() {
       </Link>
       <Button
         variant="ghost"
-        onClick={() => {
-          resetAll();
+        onClick={async () => {
+          // Await the DELETE so the refresh below observes zeros; restart()
+          // then resets the local board/phase before the user can navigate
+          // back to /play.
+          await resetAll();
           restart();
-          // After DELETE, RSC needs to re-fetch stats so <StatsGrid> shows zeros.
           router.refresh();
         }}
         data-testid="reset-stats-result"
