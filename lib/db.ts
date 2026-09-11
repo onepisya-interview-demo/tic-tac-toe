@@ -7,7 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
 import { gameStats } from '../db/schema';
-import { emptyStats, type GameStats } from './game';
+import { emptyStats, recordOutcome, type GameStats } from './game';
 
 const STATS_ROW_ID = 1;
 
@@ -112,16 +112,19 @@ function resolveDbConfig(): Config {
  * with a `closeDb()` in tests.
  */
 export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
-  if (cachedDb) return cachedDb;
-  const config = resolveDbConfig();
-  cachedClient = createClientFn(config);
   // Test/dev-only latency injection so races that only manifest under a
   // slow upstream become locally reproducible on sqlite. Production never
   // sets DATABASE_URL_SLOW_DELAY_MS; the variable is documented in
-  // __setDbOpDelayForTests and consumed at the same seam.
+  // __setDbOpDelayForTests and consumed at the same seam. Runs before the
+  // cache check so EVERY DB op pays the delay — not just the first connect
+  // — letting probes reproduce per-op slow-DB interleavings (e.g. two
+  // loadStats before either saveStats lands).
   if (dbOpDelayMs > 0) {
     await new Promise((r) => setTimeout(r, dbOpDelayMs));
   }
+  if (cachedDb) return cachedDb;
+  const config = resolveDbConfig();
+  cachedClient = createClientFn(config);
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
   await cachedClient.execute(`
@@ -191,6 +194,24 @@ export async function saveStats(stats: GameStats): Promise<void> {
       },
     })
     .run();
+}
+
+/**
+ * Server-authoritative accumulation for one finished game: read the current
+ * row, apply the outcome via the pure `recordOutcome` rule (lib/game.ts), and
+ * write the new full row back. Returns the new stats.
+ *
+ * Single Node process serializes callers, so load → record → save cannot
+ * interleave within one instance; cross-instance (multi-Replica Vercel +
+ * Turso HTTP) races are out of scope here (see future-work notes).
+ */
+export async function recordAndSave(
+  outcome: 'X' | 'O' | 'draw',
+): Promise<GameStats> {
+  const current = await loadStats();
+  const next = recordOutcome(current, outcome);
+  await saveStats(next);
+  return next;
 }
 
 /** Reset stats to zero. */
