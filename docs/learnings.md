@@ -144,3 +144,70 @@ await page.evaluate((hash) => {
 现有 8 个 QA 脚本系统性用 `page.goto` 绕过客户端导航路径，6 层 Gauntlet 全绿但 3 个生产独占 bug 仍出现。新增 `tests/qa/stats-race-qa.mjs`（14 step）覆盖 reset/预置、A1 SW-off、事件驱动 nav、RSC 动态读取、resetAll-await-refresh、slow-PUT multi-PUT ordering、跨 mount 一致性、手动导航竞争、SW 激活竞争、跨 session 持久化、StatsGrid 不订阅 store、最终 DOM === API combo。
 
 教训：**单元测试 + build + lint + typecheck 全绿 ≠ 用户行为正确**。客户端导航路径 + 真实 production build + DOM vs API 交叉断言是不可替代的回归覆盖。
+
+### 29. HAR 数据 + 反模式吸收（pwa-turso-delete-timeout-and-sw-cache plan）
+
+线上抓包（HAR 文件）发现两个产品体验问题：(P2) 重置战绩按钮卡 30 s 不响应；(P3) 每次页面跳转重复拉 manifest/icon，浪费 56-94 次网络往返。9 个原子 commit 落地修复，证据 13 份落到 `.omo/evidence/pwa-turso-delete-timeout-and-sw-cache/`。设计记录：`.omo/plans/pwa-turso-delete-timeout-and-sw-cache.md`。
+
+#### 双层 P3 决策
+
+外部研究提了 4 个候选方案，逐一拒绝后选了 header + SW cache-first 双层：
+
+- **拒绝 Serwist / next-pwa**：2 个新依赖违反 AGENTS.md「❌ 新增任何 npm 依赖」；5 个 cacheable 路径让 Serwist 的 precache 优势处于 overkill 区。
+- **拒绝 `unstable_cache` / React `cache()` / `experimental.ppr`**：`cache()` 仅同 render 内有效（scope 不匹配）；`unstable_cache` 与 `force-dynamic` 冲突；`experimental.ppr` 需要 `cacheComponents: true`（AGENTS.md 禁止）。
+- **拒绝 `'use server'` Server Action + `revalidateTag`**：违反 AGENTS.md「❌ 引入 `'use server'` directive」；且在 `force-dynamic` 下 `revalidateTag` 冗余（force-dynamic 每次 nav 都重读 DB，无 ISR 缓存要失效）；更糟的是会重新引入 B-3（RSC 陈旧数据）。
+- **拒绝单层（仅 header / 仅 SW）**：header 让浏览器首次重访省 304 roundtrip；SW 让所有重访 0 ms。两者互补不替代。
+
+最终双层组合：layer-1 `next.config.ts headers()` 给 `manifest.webmanifest` / `icon.svg` / `apple-icon*` / `favicon*` 加 `Cache-Control: public, max-age=300`（替换 Next 默认的 `max-age=0, must-revalidate`）；layer-2 SW cache-first 处理 GET，cache name `tic-tac-toe-v1`。
+
+#### P2 AbortController + UI loading 反馈
+
+`apiPutStats` / `apiDeleteStats` 改返回 tagged result `{ ok: true, value } | { ok: false, reason: 'aborted' | 'network-error' }`，让 UI 层有精确信号区分"还在等"与"已失败"：
+
+```ts
+export const NETWORK_TIMEOUT_MS = 8000;
+export async function withTimeout(url: string, init: RequestInit, ms = NETWORK_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException('aborted', 'TimeoutError')), ms);
+  try { return await fetch(url, { ...init, signal: controller.signal }); }
+  finally { clearTimeout(timer); }
+}
+```
+
+`Button` primitive 新增 `loading?: boolean` prop：内部强制 disabled + `aria-busy="true"` + 在 children 之前渲染 `<span class="button-spinner" aria-hidden />`。CSS-only spinner（12×12 圆 + 2 px `currentColor` 边框 + 右边透明）只用设计令牌，动画仅在 `@media (prefers-reduced-motion: no-preference)` 内生效，reduce 媒体查询自动 collapse 到 0 ms（DESIGN.md §6 无动效路径）。
+
+接线：`ResetStatsButton` 与 `ResultActions` 用 `useState<boolean>(false) pending` + `try { await resetAll(); router.refresh(); } finally { setPending(false); }`（commit 5 / 6）。`try/finally` 保证 pending 必然清除，无论 abort 还是 network-error。
+
+第一版不做网络重试（HAR 报告 "medium" 选项，deferred）。返回类型 `{ ok, reason }` 是 drop-in 未来加重试的 seam。
+
+#### AbortController 新反模式
+
+`AbortController` + `setTimeout` 替代 `Promise.race`：race 与 abort 语义不同。race 只是先 resolve 哪个 promise 算赢，不真正取消 fetch；abort 触发后 fetch promise 立刻 reject `DOMException('TimeoutError')`，浏览器真正释放 TCP 连接。把"超时"想成"先 resolve 哪个"是 common misconception。
+
+#### 外部研究的两个误诊纠正
+
+外部 HAR 分析报告提出两个错误诊断，被本会话代码层核查纠正：
+
+1. **"Client 端轮询 `/api/stats`"**：实际全仓 `rg "setInterval.*fetch|setTimeout.*fetch"` = 0；`StatsHydrator.tsx:15` `useEffect(() => setInitialStats(stats), [stats])` 仅在 mount 跑一次；HAR 数据 PWA 12 GET / 8 cycles = 1.5/cycle 与"初始 RSC load + PUT 后 `router.refresh()`"完全吻合。**教训**：下次看到"前端轮询"类诊断，先用 `rg` + `setInterval`/`setTimeout`/useEffect 触发点核对，不要凭直觉接受。
+2. **"Service Worker 没注册成功"**：HAR 不显示 `sw.js` 直接请求 = SW 在抓包之前已注册完成（注册是低频事件，只发生一次）；HAR `0 sw.js` + PUTs 1:1 with wins 是正向证据（B-1 方法门控只在 SW fetch handler 介入后才生效，PUT 不再双发）。**教训**：SW 是否激活看间接证据（B-1 invariant），不是直接看 `sw.js` 请求数。
+
+#### HAR 直读发现的"我之前没看清的事实"
+
+| 资源 | 现状 Cache-Control | 来源 |
+| --- | --- | --- |
+| `_next/static/*` | `public, max-age=31536000, immutable` | HAR 直读 |
+| `manifest.webmanifest` | `public, max-age=0, must-revalidate` | HAR 直读（之前误判"已 CDN 缓存"） |
+| `icon.svg` | `public, max-age=0, must-revalidate` | HAR 直读（同上） |
+| `apple-icon*` / `favicon*` | `max-age=0, must-revalidate` | HAR 直读（同上） |
+
+**教训**：对外部研究或自己之前的判断，**直接读原始 HAR 数据**比凭印象 / 凭 chat 工具诊断可靠。这次"manifest 已 immutable"是误判；直读 HAR 后修正为 P3 双层。
+
+#### 6 层 Gauntlet 全绿 + on-demand 触发
+
+每 commit 必跑 6 层（vitest 91 / tsc 0 / eslint 0 / next build 0 / commit-audit 0 / Browser QA when UI 触及）；commit 3 触发 on-demand coverage + mutation。store.ts branches 从 68%（commit 3 后）升到 92%（commit 7 后），远超 70% 阈值。mutation score 整体 69.40% / store.ts 53.40%，break=null 不阻塞。
+
+#### 验证策略
+
+新增 `tests/qa/pwa-sw-cache-qa.mjs` 4-step harness：(1) production build + 真实 Chromium 验证 SW register + `clients.claim()` 控制页面；(2) 首次 `fetch('/manifest.webmanifest')` 经 SW 写入 `tic-tac-toe-v1` cache；(3) 第二次 fetch 通过 `response.fromServiceWorker() === true` 断言 SW 命中；(4) `ctx.request.fetch` 绕过 SW 直接验证 `Cache-Control: max-age=300` 仍生效（layer-1 与 layer-2 正交）。commit 7 新增 4 个 vitest abort 用例覆盖 `mockFetchWithAbort` helper，store.ts branches 68% → 92%。
+
+Headless Chromium 不主动 fetch manifest link（无 install 提示、无 PWA 上下文），所以 probe 用 `page.evaluate(fetch)` 驱动请求。这与真实安装后的浏览器行为不同——HAR 56-94 次 manifest 请求基线只在 installed PWA 上下文出现。但 SW 行为正交：手动 fetch 与 `<link rel="manifest">` 自动 fetch 走的都是 SW fetch event path。
