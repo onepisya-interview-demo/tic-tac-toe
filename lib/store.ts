@@ -9,7 +9,6 @@ import {
   isBoardFull,
   otherPlayer,
   randomizeFirstPlayer,
-  recordOutcome,
   type Board,
   type GameStats,
   type Player,
@@ -27,11 +26,12 @@ export interface GameState {
   lastOutcome: 'X' | 'O' | 'draw' | null;
   /**
    * Wall-clock timestamp (Date.now()) of the most recent network write
-   * (PUT or DELETE to /api/stats). Set inside the async makeMove / resetAll
-   * after the request settles so subscribers can observe write completion
-   * instead of guessing with timers. Stats hydration via setInitialStats
-   * also stamps lastWriteAt so a freshly mounted <StatsHydrator> triggers
-   * the same downstream effects as an in-game write.
+   * (POST /api/stats/outcome or DELETE /api/stats). Set inside the async
+   * makeMove / resetAll after the request settles so subscribers can
+   * observe write completion instead of guessing with timers. Stats
+   * hydration via setInitialStats also stamps lastWriteAt so a freshly
+   * mounted <StatsHydrator> triggers the same downstream effects as an
+   * in-game write.
    */
   lastWriteAt: number | null;
 }
@@ -40,9 +40,9 @@ export interface GameActions {
   startGame: () => void;
   /**
    * Apply a move for the current player. Async because the underlying
-   * stats PUT is awaited so lastWriteAt is set on completion (PlayController
-   * subscribes to that to navigate). The function resolves even on PUT
-   * failure — local UI state stays correct.
+   * stats outcome POST is awaited so lastWriteAt is set on completion
+   * (PlayController subscribes to that to navigate). The function
+   * resolves even on POST failure — local UI state stays correct.
    */
   makeMove: (index: number) => Promise<void>;
   restart: () => void;
@@ -55,6 +55,14 @@ export interface GameActions {
   resetAll: () => Promise<void>;
   setInitialStats: (stats: GameStats) => void;
   __resetInternalForTests: () => void;
+  /**
+   * Read-only handle for the module-level internalStats cache. Tests
+   * use it to assert the "write-only on network failure" invariant
+   * (the server-authoritative contract demands internalStats stays
+   * untouched when the POST outcome / DELETE fails). Mirrors the
+   * `__resetInternalForTests` seam; production code never calls it.
+   */
+  __getInternalForTests: () => GameStats;
 }
 
 export type GameStore = GameState & GameActions;
@@ -70,21 +78,21 @@ const initial: GameState = {
 };
 
 // Internal stats cache (NOT in GameState type). RSC pages hydrate this via
-// setInitialStats on mount so makeMove's recordOutcome has the current
-// baseline; otherwise the first PUT would overwrite DB with values computed
-// from emptyStats() instead of the real on-disk stats.
+// setInitialStats on mount, and every successful outcome POST / DELETE
+// refreshes it from the server response, so it mirrors the last-known
+// server row. The server — not this cache — is the authoritative
+// accumulator: makeMove only reports who won ('X' | 'O' | 'draw').
 let internalStats: GameStats = emptyStats();
 
 /**
- * Tagged result for store-internal network writes. PUT/DELETE calls go
- * through withTimeout (commit 3), so a successful 2xx surfaces as
- * { ok: true, value }, while abort (timeout) and non-2xx / thrown
- * network errors collapse into { ok: false, reason }. Callers
- * (`makeMove`, `resetAll`) preserve the same invariant as before —
- * local UI state stays correct regardless of outcome — but the
- * `{ ok, reason }` shape gives reset-button UI a precise signal to
- * show a loading spinner and recover gracefully if Turso HTTP hangs
- * past 8 s (HAR §P2 evidence: DELETE observed 30 733 ms once).
+ * Tagged result for store-internal network writes. POST/DELETE calls go
+ * through withTimeout, so a successful 2xx surfaces as { ok: true, value },
+ * while abort (timeout) and non-2xx / thrown network errors collapse into
+ * { ok: false, reason }. Callers (`makeMove`, `resetAll`) preserve the
+ * same invariant as before — local UI state stays correct regardless of
+ * outcome — but the `{ ok, reason }` shape gives reset-button UI a precise
+ * signal to show a loading spinner and recover gracefully if Turso HTTP
+ * hangs past 8 s (HAR §P2 evidence: DELETE observed 30 733 ms once).
  */
 export type StoreFetchResult<T> =
   | { ok: true; value: T }
@@ -118,15 +126,27 @@ export async function withTimeout(
   }
 }
 
-async function apiPutStats(stats: GameStats): Promise<StoreFetchResult<void>> {
+/**
+ * Server-authoritative outcome recording: the client only names who won
+ * ('X' | 'O' | 'draw'); the POST /api/stats/outcome handler reads the
+ * current row, applies the pure `recordOutcome` rule, and returns the
+ * new full row as { stats: GameStats }. A successful 2xx surfaces as
+ * { ok: true, value: { stats } } so the caller can adopt the server's
+ * answer as its internal cache; abort (timeout) and non-2xx / thrown
+ * network / JSON parse errors collapse into { ok: false, reason }.
+ */
+async function apiRecordOutcome(
+  outcome: 'X' | 'O' | 'draw',
+): Promise<StoreFetchResult<{ stats: GameStats }>> {
   try {
-    const r = await withTimeout('/api/stats', {
-      method: 'PUT',
+    const r = await withTimeout('/api/stats/outcome', {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(stats),
+      body: JSON.stringify({ outcome }),
     });
     if (!r.ok) return { ok: false, reason: 'network-error' };
-    return { ok: true, value: undefined };
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
   } catch (err) {
     return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
   }
@@ -158,6 +178,8 @@ export const useGameStore = create<GameStore>((set) => ({
     internalStats = emptyStats();
   },
 
+  __getInternalForTests: () => internalStats,
+
   startGame: () => {
     const firstPlayer = randomizeFirstPlayer();
     set({
@@ -180,8 +202,6 @@ export const useGameStore = create<GameStore>((set) => ({
 
     const win = checkWinner(board);
     if (win) {
-      const newStats = recordOutcome(internalStats, win.player);
-      internalStats = newStats;
       set({
         board,
         phase: 'won',
@@ -198,17 +218,19 @@ export const useGameStore = create<GameStore>((set) => ({
       // playSound('cheer') re-reads getMuted(), so toggling mute mid-
       // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
-      // Network write: result is { ok, reason } now; ok:false (aborted
-      // or network-error) keeps the same invariant as before — local UI
-      // state is already correct, DB write is lost (single-row UPSERT).
-      await apiPutStats(newStats);
+      // Server-authoritative write: the client only names the winner; the
+      // server reads the current row, applies recordOutcome, and returns
+      // the new full row, which becomes our internal cache. ok:false
+      // (aborted or network-error) keeps the same invariant as before —
+      // local UI state is already correct, the write is lost, and
+      // internalStats is left untouched (no client-side accumulation).
+      const r = await apiRecordOutcome(win.player);
+      if (r.ok) internalStats = r.value.stats;
       set({ lastWriteAt: Date.now() });
       return;
     }
 
     if (isBoardFull(board)) {
-      const newStats = recordOutcome(internalStats, 'draw');
-      internalStats = newStats;
       set({
         board,
         phase: 'drawn',
@@ -217,7 +239,10 @@ export const useGameStore = create<GameStore>((set) => ({
         lastOutcome: 'draw',
       });
       playSound('draw');
-      await apiPutStats(newStats);
+      // Same server-authoritative contract as the win branch above: the
+      // server owns the accumulation, the client only reports 'draw'.
+      const r = await apiRecordOutcome('draw');
+      if (r.ok) internalStats = r.value.stats;
       set({ lastWriteAt: Date.now() });
       return;
     }

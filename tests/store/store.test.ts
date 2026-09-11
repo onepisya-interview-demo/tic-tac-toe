@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { useGameStore } from '@/lib/store';
+import { NETWORK_TIMEOUT_MS, useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board, type GameStats } from '@/lib/game';
 import { playSound } from '@/lib/sound';
 
@@ -35,8 +35,8 @@ function mockFetch(responses: Array<{
 /**
  * Mock fetch that simulates what AbortController.abort() looks like to
  * the store: the fetch promise rejects with DOMException('aborted',
- * 'TimeoutError'). The store's apiPutStats / apiDeleteStats catch that
- * and surface { ok: false, reason: 'aborted' }, so callers like
+ * 'TimeoutError'). The store's apiRecordOutcome / apiDeleteStats catch
+ * that and surface { ok: false, reason: 'aborted' }, so callers like
  * makeMove / resetAll keep the same invariant — local UI state stays
  * correct — without an 8 s wait per case.
  *
@@ -93,7 +93,7 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
-  it('setInitialStats seeds the internal cache used by makeMove', () => {
+  it('setInitialStats seeds the cache; the winning move POSTs only the outcome', () => {
     seedInternalStats({
       totalGames: 5,
       xWins: 3,
@@ -101,9 +101,13 @@ describe('lib/store (zustand game store)', () => {
       draws: 1,
       currentStreak: 2,
     });
-    // Internal cache is closure-private; verified indirectly via the PUT body
-    // on the next winning move.
-    const { calls, restore } = mockFetch([{ status: 200, body: {} }]);
+    // Internal cache is closure-private and no longer serialized into the
+    // request (the server owns the accumulation); the winning move POSTs
+    // only the outcome, and the server's { stats } answer would refresh
+    // the cache. Seeded values must NOT leak into the payload.
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 6, xWins: 4, oWins: 1, draws: 1, currentStreak: 3 } } },
+    ]);
     const board: Board = [
       'X', null, null,
       null, 'X', null,
@@ -118,13 +122,9 @@ describe('lib/store (zustand game store)', () => {
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         expect(calls).toHaveLength(1);
-        expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-          totalGames: 6,
-          xWins: 4,
-          oWins: 1,
-          draws: 1,
-          currentStreak: 3,
-        });
+        expect(calls[0].url).toBe('/api/stats/outcome');
+        expect(calls[0].init?.method).toBe('POST');
+        expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
         restore();
         resolve();
       }, 10);
@@ -193,8 +193,10 @@ describe('lib/store (zustand game store)', () => {
     expect(useGameStore.getState().board[0]).toBeNull();
   });
 
-  it('makeMove ending the game sets phase=won and PUTs new stats', async () => {
-    const { calls, restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+  it('makeMove ending the game sets phase=won and POSTs the outcome', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
     // X at 0,4,8 wins diagonal.
     const board: Board = [
       'X', null, null,
@@ -214,20 +216,14 @@ describe('lib/store (zustand game store)', () => {
     expect(s.winLine).toEqual([0, 4, 8]);
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats');
-    expect(calls[0].init?.method).toBe('PUT');
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
     expect(calls[0].init?.headers).toEqual({ 'content-type': 'application/json' });
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-      totalGames: 1,
-      xWins: 1,
-      oWins: 0,
-      draws: 0,
-      currentStreak: 1,
-    });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
   });
 
-  it('keeps a finished local result when stats PUT fails', async () => {
+  it('keeps a finished local result when the outcome POST fails', async () => {
     const { restore } = mockFetch([{ status: 500, body: {} }]);
     const board: Board = [
       'X', null, null,
@@ -249,7 +245,7 @@ describe('lib/store (zustand game store)', () => {
 
   it('plays the two-layer win celebration exactly once', async () => {
     vi.useFakeTimers();
-    const { restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+    const { restore } = mockFetch([{ status: 200, body: { stats: emptyStats() } }]);
     const board: Board = [
       'O', null, null,
       null, 'O', null,
@@ -270,8 +266,10 @@ describe('lib/store (zustand game store)', () => {
     vi.useRealTimers();
   });
 
-  it('makeMove that fills the board sets phase=drawn and bumps draws via PUT', async () => {
-    const { calls, restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+  it('makeMove that fills the board sets phase=drawn and POSTs outcome=draw', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0 } } },
+    ]);
     // Board with 8 filled; X to play 8 to draw. (Every win line has at least one O.)
     const board: Board = [
       'X', 'O', 'X',
@@ -291,13 +289,9 @@ describe('lib/store (zustand game store)', () => {
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('draw');
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toHaveLength(1);
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-      totalGames: 1,
-      xWins: 0,
-      oWins: 0,
-      draws: 1,
-      currentStreak: 0,
-    });
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'draw' });
     restore();
   });
 
@@ -353,7 +347,8 @@ describe('lib/store (zustand game store)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('/api/stats');
     expect(calls[0].init?.method).toBe('DELETE');
-    // Next move uses zero baseline
+    // Next move reports only the outcome (server owns the accumulation;
+    // the post-DELETE baseline lives server-side now).
     useGameStore.setState({
       phase: 'playing',
       currentPlayer: 'X',
@@ -363,17 +358,15 @@ describe('lib/store (zustand game store)', () => {
         null, null, null,
       ] as unknown as Board,
     });
-    const { calls: calls2, restore: restore2 } = mockFetch([{ status: 200, body: {} }]);
+    const { calls: calls2, restore: restore2 } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
     useGameStore.getState().makeMove(8);
     await new Promise((r) => setTimeout(r, 10));
     expect(calls2).toHaveLength(1);
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({
-      totalGames: 1,
-      xWins: 1,
-      oWins: 0,
-      draws: 0,
-      currentStreak: 1,
-    });
+    expect(calls2[0].url).toBe('/api/stats/outcome');
+    expect(calls2[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
     restore2();
   });
@@ -390,7 +383,9 @@ describe('lib/store (zustand game store)', () => {
     useGameStore.getState().resetAll();
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toHaveLength(1);
-    // Next PUT body should be computed from emptyStats() fallback
+    // resetAll falls back to emptyStats() internally; the next move still
+    // only reports the outcome — the fallback is no longer observable in
+    // the payload (server-authoritative).
     useGameStore.setState({
       phase: 'playing',
       currentPlayer: 'X',
@@ -400,17 +395,15 @@ describe('lib/store (zustand game store)', () => {
         null, null, null,
       ] as unknown as Board,
     });
-    const { calls: calls2, restore: restore2 } = mockFetch([{ status: 200, body: {} }]);
+    const { calls: calls2, restore: restore2 } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
     useGameStore.getState().makeMove(8);
     await new Promise((r) => setTimeout(r, 10));
     expect(calls2).toHaveLength(1);
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({
-      totalGames: 1,
-      xWins: 1,
-      oWins: 0,
-      draws: 0,
-      currentStreak: 1,
-    });
+    expect(calls2[0].url).toBe('/api/stats/outcome');
+    expect(calls2[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
     restore2();
   });
@@ -420,7 +413,7 @@ describe('lib/store (zustand game store)', () => {
   // state remains correct, and exactly one outbound PUT/DELETE was
   // attempted (the abort fires AFTER fetch has been invoked).
 
-  it('makeMove win: PUT abort keeps local winner + does not throw', async () => {
+  it('makeMove win: outcome POST abort keeps local winner + does not throw', async () => {
     const { calls, restore } = mockFetchWithAbort();
     const board: Board = [
       'X', null, null,
@@ -448,11 +441,13 @@ describe('lib/store (zustand game store)', () => {
     expect(s.winner).toBe('X');
     expect(s.winLine).toEqual([0, 4, 8]);
     expect(calls).toHaveLength(1);
-    expect(calls[0].init?.method).toBe('PUT');
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
   });
 
-  it('makeMove draw: PUT abort keeps local drawn phase + does not throw', async () => {
+  it('makeMove draw: outcome POST abort keeps local drawn phase + does not throw', async () => {
     const { calls, restore } = mockFetchWithAbort();
     const board: Board = [
       'X', 'O', 'X',
@@ -477,7 +472,9 @@ describe('lib/store (zustand game store)', () => {
     expect(s.phase).toBe('drawn');
     expect(s.lastOutcome).toBe('draw');
     expect(calls).toHaveLength(1);
-    expect(calls[0].init?.method).toBe('PUT');
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'draw' });
     restore();
   });
 
@@ -494,10 +491,9 @@ describe('lib/store (zustand game store)', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toHaveLength(1);
     expect(calls[0].init?.method).toBe('DELETE');
-    // Internal cache should be emptyStats() — verified indirectly by
-    // observing the next PUT body, same pattern as the existing
-    // "resetAll still updates internal cache to empty on network
-    // error" test.
+    // Internal cache should be emptyStats() — same fallback as the
+    // "resetAll still updates internal cache to empty on network error"
+    // test; the next move still only reports the outcome.
     useGameStore.setState({
       phase: 'playing',
       currentPlayer: 'X',
@@ -507,23 +503,23 @@ describe('lib/store (zustand game store)', () => {
         null, null, null,
       ] as unknown as Board,
     });
-    const { calls: calls2, restore: restore2 } = mockFetch([{ status: 200, body: {} }]);
+    const { calls: calls2, restore: restore2 } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
     useGameStore.getState().makeMove(8);
     await new Promise((r) => setTimeout(r, 10));
     expect(calls2).toHaveLength(1);
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({
-      totalGames: 1,
-      xWins: 1,
-      oWins: 0,
-      draws: 0,
-      currentStreak: 1,
-    });
+    expect(calls2[0].url).toBe('/api/stats/outcome');
+    expect(calls2[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
     restore2();
   });
 
-  it('makeMove win: non-abort 200 still PUTs and stamps lastWriteAt (regression baseline)', async () => {
-    const { calls, restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+  it('makeMove win: non-abort 200 still POSTs and stamps lastWriteAt (regression baseline)', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
     const board: Board = [
       'X', null, null,
       null, 'X', null,
@@ -547,7 +543,99 @@ describe('lib/store (zustand game store)', () => {
     expect(s.lastWriteAt).not.toBeNull();
     expect(typeof s.lastWriteAt).toBe('number');
     expect(calls).toHaveLength(1);
-    expect(calls[0].init?.method).toBe('PUT');
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     restore();
+  });
+
+  // ── commit 3: server-authoritative outcome edge cases ──
+  // Each case asserts that a failing outcome POST does NOT throw, the
+  // local UI state stays correct, the internal cache is NOT bumped
+  // (ok:false skips the internalStats write — no public reader exists,
+  // so this is enforced by code path, not by a payload assertion),
+  // and lastWriteAt still ticks after the request settles.
+
+  it('makeMove win: 500 response does not throw, keeps phase=won, stamps lastWriteAt', async () => {
+    const { calls, restore } = mockFetch([{ status: 500, body: {} }]);
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    seedInternalStats({
+      totalGames: 5,
+      xWins: 3,
+      oWins: 1,
+      draws: 1,
+      currentStreak: 2,
+    });
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.winner).toBe('X');
+    expect(s.lastWriteAt).not.toBeNull();
+    expect(typeof s.lastWriteAt).toBe('number');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    restore();
+  });
+
+  it('makeMove win: never-resolving POST aborts via 8s timeout, keeps phase=won, stamps lastWriteAt', async () => {
+    vi.useFakeTimers();
+    const calls: FetchCall[] = [];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      calls.push({ url, init });
+      // Never resolves; rejects only when the store's own 8s
+      // AbortController fires — this exercises the REAL withTimeout
+      // timer path end to end, not just the catch mapping.
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'TimeoutError'));
+        });
+      });
+    });
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    seedInternalStats({
+      totalGames: 5,
+      xWins: 3,
+      oWins: 1,
+      draws: 1,
+      currentStreak: 2,
+    });
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    expect(useGameStore.getState().phase).toBe('won');
+    // Fire the store's real AbortController timer; advanceTimersByTimeAsync
+    // also flushes the microtask chain so makeMove's promise settles.
+    await vi.advanceTimersByTimeAsync(NETWORK_TIMEOUT_MS);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.winner).toBe('X');
+    expect(s.lastWriteAt).not.toBeNull();
+    expect(typeof s.lastWriteAt).toBe('number');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    fetchMock.mockRestore();
+    vi.useRealTimers();
   });
 });
