@@ -71,9 +71,16 @@ let { page } = await launchQA();
 // worker pass-through is the regression vector for B-1; this counts only
 // the requests the SW actually forwards to the network.
 let swPutCount = 0;
+let swPostCount = 0;
 page.on("request", (req) => {
   if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
     swPutCount += 1;
+  }
+  // POST outcome is the server-authoritative write path introduced by
+  // stats-server-authoritative-delta (commit 6 rewrites step 06 to count
+  // these instead of full PUTs).
+  if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
+    swPostCount += 1;
   }
 });
 
@@ -83,10 +90,11 @@ try {
   });
 
   await step("02 SW-only intercepts GET (A1, B-1 regression)", async () => {
-    // B-1: pre-fix the SW fired event.respondWith for PUT too and the
-    // browser observed two outbound PUT requests. Post-fix only GETs pass
-    // through, so a single PUT must equal one request.
-    swPutCount = 0;
+    // B-1: pre-fix the SW fired event.respondWith for non-GET methods too
+    // and the browser observed two outbound requests. Post-fix only GETs
+    // pass through. The win path now goes via POST /api/stats/outcome
+    // (server-authoritative delta, commit 3), so we count POSTs not PUTs.
+    swPostCount = 0;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForTimeout(300); // let StatsHydrator mount
     await page.click('[data-testid="start-game"]');
@@ -95,11 +103,11 @@ try {
     await driveTopRowWin(page);
     await page.waitForURL("**/result", { timeout: 6000 });
     await page.waitForSelector('[data-testid="result-headline"]');
-    await page.waitForTimeout(800); // give the PUT time to land
+    await page.waitForTimeout(800); // give the POST time to land
     assert.equal(
-      swPutCount,
+      swPostCount,
       1,
-      `expected exactly 1 PUT after a win, got ${swPutCount}`,
+      `expected exactly 1 POST outcome after a win, got ${swPostCount}`,
     );
   });
 
@@ -213,30 +221,39 @@ try {
     assert.equal(streak, "—", `expected streak label '—' at zero, got ${streak}`);
   });
 
-  await step("06 multi-PUT ordering under slow DB (D4)", async () => {
-    // D4: with event-driven makeMove awaiting the PUT, two consecutive
-    // wins produce exactly 2 PUTs and totalGames=2 (no skipped writes).
-    // This is the slow-PUT arm: only meaningful when
-    // DATABASE_URL_SLOW_DELAY_MS > 0 was set on the server.
+  await step("06 multi-POST {outcome} ordering under slow DB (D4)", async () => {
+    // D4 (post-fix): 10 sequential POST /api/stats/outcome {outcome:'X'}
+    // requests — the server-authoritative accumulator reads, applies
+    // recordOutcome, writes — must produce exactly 10 POSTs observed by
+    // the SW and totalGames=10, xWins=10 in the response. This proves
+    // server-side write serialization, not client-side ordering
+    // assumptions. The DATABASE_URL_SLOW_DELAY_MS knob reproduces Turso
+    // HTTP latency on local sqlite so the per-op slowness doesn't
+    // collapse into a single batched write.
     const slowDelayMs = Number(process.env.DATABASE_URL_SLOW_DELAY_MS ?? 0);
+    swPostCount = 0;
     await deleteStats(page);
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.click('[data-testid="start-game"]');
-    await page.waitForURL("**/play");
-    await page.waitForSelector('[data-testid="board"]');
-    swPutCount = 0;
-    await driveTopRowWin(page);
-    await page.waitForURL("**/result", { timeout: 6000 + slowDelayMs });
-    await page.waitForTimeout(slowDelayMs + 800);
-    await page.click('[data-testid="play-again"]');
-    await page.waitForURL("**/play");
-    await page.waitForSelector('[data-testid="board"]');
-    await driveTopRowWin(page);
-    await page.waitForURL("**/result", { timeout: 6000 + slowDelayMs });
-    await page.waitForTimeout(slowDelayMs + 800);
+    const statuses = await page.evaluate(async (base) => {
+      const out = [];
+      for (let i = 0; i < 10; i += 1) {
+        const r = await fetch(`${base}/api/stats/outcome`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ outcome: "X" }),
+          cache: "no-store",
+        });
+        out.push(r.status);
+      }
+      return out;
+    }, BASE);
+    for (const s of statuses) {
+      assert.equal(s, 200, `expected POST status=200, got ${s}`);
+    }
+    await page.waitForTimeout(slowDelayMs + 200);
     const api = await getStats(page);
-    assert.equal(api.totalGames, 2, `expected totalGames=2, got ${api.totalGames}`);
-    assert.equal(swPutCount, 2, `expected 2 PUTs, got ${swPutCount}`);
+    assert.equal(api.totalGames, 10, `expected totalGames=10, got ${api.totalGames}`);
+    assert.equal(api.xWins, 10, `expected xWins=10, got ${api.xWins}`);
+    assert.equal(swPostCount, 10, `expected 10 POSTs, got ${swPostCount}`);
   });
 
   await step("07 cross-mount no leaked state (D5)", async () => {
@@ -297,7 +314,7 @@ try {
     // double the write. With the SW guarded by method, the PUT bypasses
     // the SW entirely so activation timing is irrelevant — the count is
     // always 1.
-    swPutCount = 0;
+    swPostCount = 0;
     await deleteStats(page);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.click('[data-testid="start-game"]');
@@ -314,7 +331,7 @@ try {
     await driveTopRowWin(page);
     await page.waitForURL("**/result", { timeout: 6000 });
     await page.waitForTimeout(800);
-    assert.equal(swPutCount, 1, `expected 1 PUT through SW, got ${swPutCount}`);
+    assert.equal(swPostCount, 1, `expected 1 POST through SW, got ${swPostCount}`);
   });
 
   await step("10 reset button on / refreshes (B-3b path 2)", async () => {
@@ -391,11 +408,11 @@ try {
     }
   });
 
-  await step("12 SW skip-api equivalent (PUT count = 1)", async () => {
-    // A3: same intent as step 02 — verify PUT count is exactly 1, the
-    // minimal regression assertion for B-1.
+  await step("12 SW skip-api equivalent (POST count = 1)", async () => {
+    // A3: same intent as step 02 — verify the win-write count is exactly 1,
+    // the minimal regression assertion for B-1. Win path is POST outcome.
     await deleteStats(page);
-    swPutCount = 0;
+    swPostCount = 0;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.click('[data-testid="start-game"]');
     await page.waitForURL("**/play");
@@ -403,7 +420,7 @@ try {
     await driveTopRowWin(page);
     await page.waitForURL("**/result", { timeout: 6000 });
     await page.waitForTimeout(800);
-    assert.equal(swPutCount, 1, `expected 1 PUT, got ${swPutCount}`);
+    assert.equal(swPostCount, 1, `expected 1 POST outcome, got ${swPostCount}`);
   });
 
   await step("13 StatsGrid not subscribed to store (D6)", async () => {
