@@ -1,15 +1,25 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
+/**
+ * Action stack on the /result page. The reset-stats CTA mirrors the home
+ * page's ResetStatsButton (commit 5) — same useState pending pattern,
+ * same loading prop, same try/finally cleanup. Awaiting resetAll() before
+ * restart() + router.refresh() preserves the B-3b invariant: the RSC
+ * force-dynamic re-fetch sees zeros (DELETE has landed) before the user
+ * can navigate back to /play.
+ */
 export function ResultActions() {
   const router = useRouter();
   const startGame = useGameStore((s) => s.startGame);
   const restart = useGameStore((s) => s.restart);
   const resetAll = useGameStore((s) => s.resetAll);
+  const [pending, setPending] = useState(false);
 
   return (
     <div className="flex flex-col gap-3">
@@ -26,16 +36,19 @@ export function ResultActions() {
       <Button
         variant="ghost"
         onClick={async () => {
-          // Await the DELETE so the refresh below observes zeros; restart()
-          // then resets the local board/phase before the user can navigate
-          // back to /play.
-          await resetAll();
-          restart();
-          router.refresh();
+          setPending(true);
+          try {
+            await resetAll();
+            restart();
+            router.refresh();
+          } finally {
+            setPending(false);
+          }
         }}
+        loading={pending}
         data-testid="reset-stats-result"
       >
-        重置战绩
+        {pending ? '重置中…' : '重置战绩'}
       </Button>
     </div>
   );
