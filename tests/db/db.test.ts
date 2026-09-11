@@ -336,4 +336,153 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     expect(Object.is(driver.createClient, webClient.createClient)).toBe(true);
     expect(Object.is(driver.createClient, nativeClient.createClient)).toBe(false);
   });
+
+  // ── commit 5: recordAndSave coverage (plan stats-server-authoritative-delta) ──
+  // The C1 commit introduced recordAndSave(outcome) as the server-side
+  // accumulator primitive; these tests pin the contract: every success path
+  // returns the new full row, draw resets the streak, O wins flip streak
+  // polarity from +1 to -1, mock loadStats/saveStats throws propagate so
+  // the route handler can surface a 500. Coverage scope is lib/db.ts only;
+  // existing fakeClient + tmpDbDir + beforeEach/afterEach pattern is reused.
+
+  it('recordAndSave(\'X\') from empty → xWins:1, totalGames:1, currentStreak:1', async () => {
+    const { recordAndSave, closeDb } = await import('@/lib/db');
+    try {
+      const next = await recordAndSave('X');
+      expect(next).toEqual({
+        totalGames: 1,
+        xWins: 1,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 1,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave 两次 \'X\' → xWins:2, totalGames:2, currentStreak:2', async () => {
+    const { recordAndSave, closeDb } = await import('@/lib/db');
+    try {
+      await recordAndSave('X');
+      const next = await recordAndSave('X');
+      expect(next).toEqual({
+        totalGames: 2,
+        xWins: 2,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 2,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave(\'draw\') resets streak to 0 and increments draws', async () => {
+    const { recordAndSave, saveStats, closeDb } = await import('@/lib/db');
+    try {
+      // Seed a non-zero streak so the reset is observable.
+      await saveStats({
+        totalGames: 3,
+        xWins: 2,
+        oWins: 0,
+        draws: 1,
+        currentStreak: 2,
+      });
+      const next = await recordAndSave('draw');
+      expect(next).toEqual({
+        totalGames: 4,
+        xWins: 2,
+        oWins: 0,
+        draws: 2,
+        currentStreak: 0,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave(\'O\') flips streak polarity from +1 to -1', async () => {
+    const { recordAndSave, saveStats, closeDb } = await import('@/lib/db');
+    try {
+      await saveStats({
+        totalGames: 1,
+        xWins: 1,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 1,
+      });
+      const next = await recordAndSave('O');
+      expect(next.currentStreak).toBe(-1);
+      expect(next.oWins).toBe(1);
+      expect(next.totalGames).toBe(2);
+      expect(next.xWins).toBe(1);
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave 写后读一致: loadStats after recordAndSave returns the same row', async () => {
+    const { recordAndSave, loadStats, closeDb } = await import('@/lib/db');
+    try {
+      const written = await recordAndSave('O');
+      const read = await loadStats();
+      expect(read).toEqual(written);
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave rejects when loadStats throws (no silent swallow)', async () => {
+    const { recordAndSave, __setCreateClientForTests, closeDb } = await import('@/lib/db');
+    __setCreateClientForTests(() => {
+      const failingExecute = vi.fn(async () => {
+        throw new Error('simulated load failure');
+      });
+      return {
+        execute: failingExecute,
+        batch: vi.fn(async () => []),
+        transaction: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
+      } as unknown as Client;
+    });
+    try {
+      await expect(recordAndSave('X')).rejects.toThrow('simulated load failure');
+    } finally {
+      __setCreateClientForTests(null);
+      await closeDb();
+    }
+  });
+
+  it('recordAndSave rejects when saveStats throws after loadStats succeeds', async () => {
+    const { recordAndSave, __setCreateClientForTests, closeDb } = await import('@/lib/db');
+    let calls = 0;
+    __setCreateClientForTests(() => {
+      return {
+        execute: vi.fn(async () => {
+          calls += 1;
+          if (calls >= 4) {
+            throw new Error('simulated save failure');
+          }
+          return {
+            columns: [],
+            columnTypes: [],
+            rows: [],
+            rowsAffected: 0,
+            lastInsertRowid: undefined,
+            toJSON() { return {}; },
+          };
+        }),
+        batch: vi.fn(async () => []),
+        transaction: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
+      } as unknown as Client;
+    });
+    try {
+      await expect(recordAndSave('X')).rejects.toThrow();
+    } finally {
+      __setCreateClientForTests(null);
+      await closeDb();
+    }
+  });
 });
