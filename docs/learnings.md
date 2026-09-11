@@ -110,3 +110,37 @@ await page.evaluate((hash) => {
 - 不要再把整个 page 改回 `'use client'`；新加交互请用叶子 client 组件。
 - SoundToggle **不**上移到 layout（每 page header 留 slot；v0.2 用户决策）。
 - RSC → client 边界不能传 function（render-prop 跨 server→client 边界 build 报错）；用 thin-client-wrapper 模式（client 组件 subscribe store 后渲染 RSC 组件）。
+
+### 28. 数据流 + 资源生命周期双轴视角（pwa-rsc-stats-bug-fix）
+
+修复 3 个生产独占 bug（B-1 SW 重发 PUT、B-2 PlayController setTimeout 与 PUT 落库竞态、B-3 RSC 静态预渲染导致战绩陈旧）后总结出的双轴反思。
+
+设计记录：[`.omo/plans/pwa-rsc-stats-bug-fix.md`](/private/tmp/tic-tac-toe/.omo/plans/pwa-rsc-stats-bug-fix.md)。证据路径：`.omo/evidence/pwa-rsc-stats-bug-fix/`。
+
+#### 轴 1：数据流的"单点真相"
+
+3 个 bug 共享同一种"协调原语缺失"——数据在多端（server / RSC HTML / client store / SW / Service Worker cache / DB）有副本，但没有任何机制保证它们最终一致：
+
+- **B-1**：SW `event.respondWith(fetch(event.request))` 无方法门控，PUT 流经 SW 后浏览器观察到两条 outbound 请求（一条 SW 自身的 respondWith pass-through，一条到 network）。两个端点对同一份 PUT 数据做 UPSERT，看起来像计数翻倍。
+- **B-3a**：RSC 页面 `await loadStats()` 默认被 Next.js 16 静态优化，build-time 把 DB 查询结果烘焙到 HTML。runtime 拿到的是 build 那一刻的快照，直到下次 build。
+- **B-3b**：`resetAll` fire-and-forget DELETE 后同步 `router.refresh()`；RSC 在 force-dynamic 下重新读 DB 时 DELETE 还没落库，于是刷新读到旧值。
+
+教训：**数据流存在多端时，每一跳都要明确"写完成"的信号**——是 SW 转发？是 RSC 重新读取？是 store 的 lastWriteAt？没有这个信号就靠 setTimeout/顺序假设打补丁，最终会在网络/构建时序面前翻车。
+
+#### 轴 2：资源生命周期协调
+
+这批 bug 涉及 7 个资源的协调（network PUT/DELETE、RSC force-dynamic 重新读取、SW fetch event、`useGameStore.setInitialStats`、`PlayController` useEffect、`<StatsHydrator>` 挂载、`router.refresh()`），原来的 setTimeout(700) 是把 7 个资源的协调压缩成一个时间假设——PUT 落库时刻大致在 700ms 内。事件驱动（订阅 `lastWriteAt`）才是 canonical 替代：**让最了解完成时机的资源（store 的 PUT promise）显式发布信号，下游订阅这个信号**。
+
+教训：**多资源协调不能用时间假设**——网络延迟、构建缓存、SW 拦截时序都会把 setTimeout 撞破。事件/信号订阅是唯一稳健的协调原语。
+
+#### 修复策略
+
+- B-1：方法门控（`if (event.request.method !== 'GET') return;`）——简单一行，让 PUT/POST/DELETE 不进 SW。
+- B-3a：`force-dynamic` 一行——demo 优先选简单方案（不引入 ISR 解释成本和 `revalidate` 配置）。
+- B-2 + B-3b：store 改 async + `lastWriteAt` + `PlayController` 订阅 `lastWriteAt`——事件驱动替代 setTimeout；调用方 await 网络写完成后再 `router.refresh()`。
+
+#### 验证策略
+
+现有 8 个 QA 脚本系统性用 `page.goto` 绕过客户端导航路径，6 层 Gauntlet 全绿但 3 个生产独占 bug 仍出现。新增 `tests/qa/stats-race-qa.mjs`（14 step）覆盖 reset/预置、A1 SW-off、事件驱动 nav、RSC 动态读取、resetAll-await-refresh、slow-PUT multi-PUT ordering、跨 mount 一致性、手动导航竞争、SW 激活竞争、跨 session 持久化、StatsGrid 不订阅 store、最终 DOM === API combo。
+
+教训：**单元测试 + build + lint + typecheck 全绿 ≠ 用户行为正确**。客户端导航路径 + 真实 production build + DOM vs API 交叉断言是不可替代的回归覆盖。
