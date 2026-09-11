@@ -221,9 +221,12 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
 
   it('default branch creates the missing data/ dir under CWD', async () => {
     // os.tmpdir() is a symlink on macOS; cwd reports the resolved /private path.
+    // Stryker's vitest runner executes tests in worker threads where
+    // `process.chdir()` throws 'not supported in workers'; mock `process.cwd()`
+    // instead so `lib/db.ts`'s `path.join(process.cwd(), ...)` resolves to the
+    // sandbox without changing the real cwd.
     const freshDir = fs.realpathSync(tmpDbDir());
-    const prevCwd = process.cwd();
-    process.chdir(freshDir);
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(freshDir);
     delete process.env.DATABASE_URL;
     vi.resetModules();
     const seen: Config[] = [];
@@ -240,7 +243,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     } finally {
       __setCreateClientForTests(null);
       await closeDb();
-      process.chdir(prevCwd);
+      cwdSpy.mockRestore();
       fs.rmSync(freshDir, { recursive: true, force: true });
     }
   });
