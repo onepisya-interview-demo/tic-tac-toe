@@ -131,9 +131,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。
 
-### 中文提交
+### 中文提交（默认）
 
-主题形如 feat(audio): 在胜利提示之上叠加合成欢呼。type/scope 保留英文 token，描述可中文，按 Unicode 码点计长度不超过 100。正文可用中文 prose，WHY/HOW 关键词也可直接写成显式 heading。tests/qa/commit-audit.mjs、commitlint.config.cjs 和 commit-msg hook 是同一策略的三个检查点。
+默认 commit message 用中文。type/scope 保留英文 token，描述默认中文（按 Unicode 码点计 ≤100），正文默认中文 prose，WHAT/WHY/HOW 显式 heading 也默认中文。
+
+**保留英文的三种例外**：
+
+1. 引用外部工具/库/API 的 token（`pnpm exec commitlint`、`execFileSync` 等代码标识符）
+2. 引用外部文档/链接的标题
+3. 用户明确要求英文 commit message
+
+清单之外的场景一律走默认中文。tests/qa/commit-audit.mjs、commitlint.config.cjs 和 commit-msg hook 是同一策略的三个检查点。
 
 ## 原子提交
 

@@ -230,3 +230,11 @@ herdr 工作区 3 个 pane（codex/p1、pi/p2、无 agent/p3）的会话转录�
 2. tracked worktree 文件丢失（status 出现 ` D`）→ 先 `git status --porcelain` 快照冻结现场，再 `git ls-files -d -z | xargs -0 git checkout --`
 3. commit-msg hook 丢失 → 按契约重建（委托 `node tests/qa/commit-audit.mjs --message-file "$1"`），坏消息 exit 1 / 好消息 exit 0 双向冒烟
 4. 恢复完成后跑六层 Gauntlet，不凭肉眼验收
+
+### 31. 双语允许条款必须 prescriptive（zh-default-commit 改写）
+
+commit `0f49375`（feat(audit-policy): make commitlint run transitively on audit --message-file）写成英文正文（subject + body 全英文），违反项目期望。该英文 message 后经用户显式授权按本条规则改写为中文，SHA 变更为 `0ffde83`。根因是双重诱导：AGENTS.md 原「中文提交」章节用"可中文"/"可用中文 prose"/"也可"等允许语气，对 agent 是允许集而非默认路径；commit-audit.mjs R3 的英文 token 列表实测远长于 CJK keyphrase 列表（WHY 62 vs 38、HOW 100 vs 52），英文正文命中 R3 几乎零成本。最近一笔 `a74b44e` 虽是中文先例，permissive 条款 + token-count bias 的组合依然压过先例——agent 默认走英文。
+
+教训：项目支持双语时，规范必须 prescriptive 不要 permissive——写明"默认中文 + 封闭例外清单"，agent 才有明确默认路径。检查点（audit R1-R5 + commitlint）只能卡结构不能卡语言倾向；语言默认必须在规范层显式规定，检查器补不上这一层。改写落地：AGENTS.md「### 中文提交（默认）」，三条例外（外部工具/库/API 的 token、外部文档/链接标题、用户显式要求英文），清单之外一律中文。
+
+Plan: .omo/plans/zh-default-commit-message.md
