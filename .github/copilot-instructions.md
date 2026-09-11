@@ -30,11 +30,14 @@ Copilot picks up the same contract as Codex / Claude Code / Cursor.
   (`typescript-language-server`, `bash-language-server`,
   `yaml-language-server`) is installed globally via `vp add -g`, **not** as
   project `devDependencies`. These are local developer tooling that never
-  enters the Next.js runtime bundle; the global install needs
-  `.codex/lsp-client.json`'s `initialization.tsserver.path` to point at
-  vp's `bin/tsserver` because vp smart-shim isolates each package's
-  `node_modules`. See AGENTS.md §本项目反模式 for the matching rationale
-  and `.omo/plans/lsp-revert-to-global.md` for the recovery procedure.
+  enters the Next.js runtime bundle. `.codex/lsp-client.json` is tracked in
+  git and must stay portable: only `id` / `priority` / `disabled` / `env`
+  overrides — **never** machine-local absolute paths or vp install hashes
+  (typescript-language-server resolves TypeScript from the project's own
+  `node_modules/typescript` via the workspace folders sent at initialize).
+  Per-machine overrides go in `~/.codex/lsp-client.json` (untracked). See
+  AGENTS.md §本项目反模式 for the matching rationale and
+  `.omo/plans/lsp-client-portable-config.md` for the evidence.
 - **Never** add `'use client'` to a file unless it actually needs it.
 - **Never** add a UI / state / form / animation / data library — the
   project explicitly excludes them (see AGENTS.md §反模式).

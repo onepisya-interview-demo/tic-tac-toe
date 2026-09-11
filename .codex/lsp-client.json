@@ -1,29 +1,12 @@
 {
   "lsp": {
     "typescript": {
-      "command": [
-        "typescript-language-server",
-        "--stdio"
-      ],
-      "priority": 100,
-      "initialization": {
-        "tsserver": {
-          "path": "/Users/onepisya/.vite-plus/packages/typescript/c030a1df-187c-463b-9f6c-ebd8b6bb2903/bin/tsserver"
-        }
-      }
+      "priority": 100
     },
     "bash": {
-      "command": [
-        "bash-language-server",
-        "start"
-      ],
       "priority": 100
     },
     "yaml-ls": {
-      "command": [
-        "yaml-language-server",
-        "--stdio"
-      ],
       "priority": 100
     }
   }
