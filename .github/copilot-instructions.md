@@ -26,14 +26,15 @@ Copilot picks up the same contract as Codex / Claude Code / Cursor.
 
 - **Never** modify `lib/`, `app/`, `components/`, `db/` unless the user
   asks for that scope. Refactor / style work goes elsewhere.
-- **Never** introduce a new npm dependency — **except** LSP server
-  tooling (`typescript-language-server`, `bash-language-server`,
-  `yaml-language-server`) as `devDependencies`. These are local developer
-  tooling that never enters the Next.js runtime bundle; they exist to give
-  Codex harness's `lsp.*` MCP tools version alignment with the project's
-  TypeScript compiler (the Gauntlet doesn't ship an LSP). The on-disk LSP
-  config is `.codex/lsp-client.json`. See AGENTS.md §本项目反模式 for the
-  matching rationale and §验证门禁 on-demand rule for related verification.
+- **Never** introduce a new npm dependency — LSP server tooling
+  (`typescript-language-server`, `bash-language-server`,
+  `yaml-language-server`) is installed globally via `vp add -g`, **not** as
+  project `devDependencies`. These are local developer tooling that never
+  enters the Next.js runtime bundle; the global install needs
+  `.codex/lsp-client.json`'s `initialization.tsserver.path` to point at
+  vp's `bin/tsserver` because vp smart-shim isolates each package's
+  `node_modules`. See AGENTS.md §本项目反模式 for the matching rationale
+  and `.omo/plans/lsp-revert-to-global.md` for the recovery procedure.
 - **Never** add `'use client'` to a file unless it actually needs it.
 - **Never** add a UI / state / form / animation / data library — the
   project explicitly excludes them (see AGENTS.md §反模式).
