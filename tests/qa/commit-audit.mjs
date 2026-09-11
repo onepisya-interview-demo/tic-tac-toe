@@ -160,6 +160,28 @@ function main() {
     const raw = readFileSync(args.messageFile, "utf8");
     const r = checkMessage(args.messageFile, raw);
     if (r.findings.length === 0) {
+      // Second, independent checkpoint: commitlint mirrors this audit's policy
+      // in commitlint.config.cjs plus the config-conventional standard rules
+      // the R1-R5 regexes do not model (subject-full-stop, type-case,
+      // body-max-line-length, ...). The audit stays canonical (52204f2
+      // Directive): its findings gate the spawn, and a commitlint rejection
+      // still surfaces as an audit failure. Branch mode above does not
+      // re-lint history; this runs on message-file invocations only.
+      try {
+        execFileSync("pnpm", ["exec", "commitlint", "--edit", args.messageFile], {
+          stdio: "inherit",
+          cwd: process.cwd(),
+        });
+      } catch (err) {
+        console.error(`FAIL  ${r.label}  ${r.subject}`);
+        const errno = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+        if (errno === "ENOENT") {
+          console.error("        commitlint: could not be executed (pnpm/commitlint missing from PATH or node_modules); fix the install - failing closed");
+        } else {
+          console.error("        commitlint: rejected the message (rule output above)");
+        }
+        process.exit(1);
+      }
       console.log(`PASS  ${r.label}  ${r.subject}`);
       process.exit(0);
     }
