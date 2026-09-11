@@ -6,6 +6,9 @@ import { ResultBanner } from '@/components/ResultBanner';
 import { ResultActions } from '@/components/ResultActions';
 import { StatsHydrator } from '@/components/StatsHydrator';
 
+export const dynamic = "force-dynamic";
+
+
 export default async function ResultPage() {
   const stats = await loadStats();
 

@@ -6,6 +6,9 @@ import { StartGameButton } from '@/components/StartGameButton';
 import { StatsHydrator } from '@/components/StatsHydrator';
 import { loadStats } from '@/lib/db';
 
+export const dynamic = "force-dynamic";
+
+
 export default async function HomePage() {
   const stats = await loadStats();
 
