@@ -28,7 +28,7 @@ Turso HTTP）。
 
 ## Features
 
-- 🎯 **Pass-and-play**：同设备轮流落子，零网络依赖，纯前端 + Node API。
+- 🎯 **Pass-and-play**：两人同设备轮流下；战绩需网络持久化（见 FAQ）。
 - 💾 **战绩持久化**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
@@ -47,7 +47,10 @@ Turso HTTP）。
 | `/` | 首页：战绩卡片 + 开始游戏 + 重置战绩 |
 | `/play` | 游戏页：3x3 棋盘 + 当前玩家指示 + 重新开局 |
 | `/result` | 结算页：胜负结果 + 再来一局 + 返回首页 + 重置战绩 |
-| `GET/PUT/DELETE /api/stats` | 战绩读写 (Node runtime) |
+| `GET /api/stats` | 读战绩 (Node runtime) |
+| `PUT /api/stats` | 写战绩 seed / admin（@deprecated；客户端走 POST outcome） |
+| `DELETE /api/stats` | 重置战绩 |
+| `POST /api/stats/outcome` | 客户端落局：body `{outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
 
 ## 本地开发
 
@@ -122,6 +125,10 @@ public/               静态资源 (logo / favicon)
 上是临时 fs，不会持久。把 `DATABASE_URL` 改成 `https://<db>.turso.io`（或
 `libsql://<db>.turso.io`），并设置 `DATABASE_AUTH_TOKEN=<turso-issued-token>`。
 `lib/db.ts` 会自动走 http(s) 分支，不再碰文件系统和原生 sqlite。详见下方"部署"。
+
+**离线能玩吗？** 走棋可以（前端规则不依赖网络），但战绩落库需 `POST /api/stats/outcome`；
+离线时玩的一局战绩会丢，下次上线 PUT/DELETE 不补。Vercel Analytics 噪声
+（POST 到 `5376560351325243/view`）无法消除，是 Vercel 平台侧注入的 beacon。
 
 **怎么清战绩？** 首页"重置战绩"按钮调用 `DELETE /api/stats`，单行表 id=1
 会被清零；本地 UI 状态不依赖服务端响应也能保持正确。
