@@ -71,8 +71,25 @@ html, body {
 .draw-shake,
 .player-pulse,
 .stats-value,
-.page-fade-in {
+.page-fade-in,
+.button-spinner {
   will-change: transform, opacity;
+}
+
+/* Button loading spinner (commit 4): 12x12 circle with a 2px border
+   whose right edge is transparent. The static shape is visible under
+   prefers-reduced-motion: reduce (the animation-duration collapses to
+   0ms via the existing global rule, but the user still sees that the
+   button is busy). Decorative only — DESIGN.md §6 requires a no-
+   motion path, which the reduce media query at the bottom provides. */
+.button-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -110,6 +127,10 @@ html, body {
     to { opacity: 1; }
   }
 
+  @keyframes button-spin {
+    to { transform: rotate(360deg); }
+  }
+
   .cell-pop {
     animation: cell-pop 260ms ease-out both;
   }
@@ -132,6 +153,10 @@ html, body {
 
   .page-fade-in {
     animation: page-fade-in 150ms ease-out both;
+  }
+
+  .button-spinner {
+    animation: button-spin 700ms linear infinite;
   }
 
   }
