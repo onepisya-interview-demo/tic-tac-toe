@@ -45,9 +45,23 @@ async function getStats(page) {
   });
 }
 
+// Reset stats via the page's own fetch so the request is same-origin and
+// skips the CORS preflight that Playwright's APIRequestContext triggers on
+// cross-origin HTTPS (Vercel); that preflight hangs past the 30 s default
+// timeout. Page must already be navigated to BASE — every step that calls
+// deleteStats navigates first (or, for step 01, we navigate here).
 async function deleteStats(page) {
-  const r = await page.request.delete(`${BASE}/api/stats`);
-  assert.equal(r.status(), 200);
+  if (!page.url().startsWith(BASE)) {
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  }
+  const status = await page.evaluate(async (base) => {
+    const r = await fetch(`${base}/api/stats`, {
+      method: "DELETE",
+      cache: "no-store",
+    });
+    return r.status;
+  }, BASE);
+  assert.equal(status, 200, `DELETE expected 200, got ${status}`);
 }
 
 const { browser, ctx } = await launchQA();
@@ -158,8 +172,21 @@ try {
     // router.refresh(); the refresh re-read the still-present row. After
     // the fix, the onClick awaits resetAll then refreshes, so a fresh
     // /result reads zeros.
+    //
+    // On Turso the DELETE round-trip is slow; we must wait for the API
+    // to read zeros before navigating — otherwise the /result RSC fetch
+    // (force-dynamic) races the DELETE and renders the pre-reset row.
     await page.waitForSelector('[data-testid="reset-stats-result"]');
     await page.click('[data-testid="reset-stats-result"]');
+    await page.waitForFunction(
+      async () => {
+        const r = await fetch("/api/stats", { cache: "no-store" });
+        const j = await r.json();
+        return j.totalGames === 0;
+      },
+      null,
+      { timeout: 8000 },
+    );
     // After reset + refresh, navigate to /result to observe the new read.
     await page.goto(`${BASE}/result`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="result-headline"]');
@@ -292,17 +319,35 @@ try {
 
   await step("10 reset button on / refreshes (B-3b path 2)", async () => {
     // B-3b path 2: the home page's 重置战绩 button (not the /result one).
+    // Wait for the DOM to flip to 0 instead of a fixed sleep — Turso
+    // round-trips push the home page re-render past a fixed 500 ms budget
+    // on Vercel; the local sqlite run finishes in ~80 ms.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="reset-stats"]');
     await page.click('[data-testid="reset-stats"]');
-    await page.waitForTimeout(500);
     const api = await getStats(page);
     assert.equal(api.totalGames, 0, `expected reset to zero stats, got ${api.totalGames}`);
-    const domTotal = await page
+    await page
       .locator('[data-testid="stat-value"]')
       .first()
-      .getAttribute("data-value");
-    assert.equal(domTotal, "0", `expected DOM total=0 after home reset, got ${domTotal}`);
+      .evaluate(
+        (el, target) =>
+          new Promise((resolve, reject) => {
+            const deadline = Date.now() + 8000;
+            const tick = () => {
+              if (el.getAttribute("data-value") === target) return resolve();
+              if (Date.now() > deadline)
+                return reject(
+                  new Error(
+                    `DOM total did not reach ${target} in 8000ms (got ${el.getAttribute("data-value")})`,
+                  ),
+                );
+              setTimeout(tick, 50);
+            };
+            tick();
+          }),
+        "0",
+      );
   });
 
   await step("11 cross-session persistence (close + reopen)", async () => {
