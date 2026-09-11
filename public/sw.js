@@ -22,5 +22,12 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // Method guard: only intercept GETs. Without this, PUT/POST/DELETE flow
+  // through the SW and Chromium can observe two outbound requests (one to
+  // the SW's own respondWith pass-through, one to the network). In practice
+  // this double-fires the stats PUT and makes the DB write look like two
+  // network entries per action. Non-GET requests bypass the SW entirely
+  // and follow the browser's default network path.
+  if (event.request.method !== "GET") return;
   event.respondWith(fetch(event.request));
 });
