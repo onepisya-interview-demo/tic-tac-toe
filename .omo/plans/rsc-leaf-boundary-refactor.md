@@ -1,7 +1,9 @@
-# Plan: RSC Leaf Boundary Refactor — DRAFT v0.2
+# Plan: RSC Leaf Boundary Refactor — FINAL v1.0
 
-> **Status: DRAFT v0.2 (2026-09-11)**
-> 草稿阶段。等用户最终签字 → 提交本 plan → 创建 per-commit 子计划 + 子代理分支 → 并行执行。
+> **Status: FINAL v1.0 (2026-09-11)**
+> 已用户签字（2026-09-11，本轮 prompt 显式授权 "ulw A、B、C 全部都用做"）。
+> 7 个原子 commit（5 impl + 1 docs + 1 chore(lint)）+ 5 个 merge commit + 2 个 plan commit 已在 main 落地；
+> 5 份 sub-plan 的 worker 分支 + 对应 worktree 已收尾清理。本 v1.0 commit 单独跟踪状态字段升级。
 >
 > **v0.2 相对 v0.1 的关键变更**（详见末尾 Decision Log）：
 > 1. **C1（SoundToggle 上移到 layout）取消** —— 用户确认 SoundToggle 继续留在每个 page header slot，layout 不做 fixed 定位。
@@ -196,7 +198,7 @@
 
 ### 工作流（用户拍板后启动）
 
-1. **Step 1**：用户 review 本 master plan（v0.2）→ 签字。
+1. ~~**Step 1**：用户 review 本 master plan（v0.2）→ 签字。~~ ✅（用户在本轮 prompt 显式授权升级到 v1.0，"ulw A、B、C 全部都用做"）
 2. **Step 2**：executor 在 main 上 commit 本文件 + 5 份 sub-plan（sub-plan 在 executor 自己的会话里写）。
 3. **Step 3**：从 main 创建 4 个分支：`refactor/rsc-c1-home`、`refactor/rsc-c2-play`、`refactor/rsc-c3-result`、`refactor/rsc-c5-docs`。
 4. **Step 4**：派 4 个子代理同时跑（`multi_agent_v1.spawn_agent`，fork_context=false，每个读自己那份 sub-plan）。每个子代理独立 commit + push + 报 evidence 路径。
@@ -211,7 +213,7 @@
 
 > Implementation + Test = ONE todo. 草稿 → final 路径。
 
-- [ ] **T1. 用户 review & 签字 master plan v0.2** → 解除 DRAFT
+- [x] **T1. 用户 review & 签字 master plan v0.2** → 解除 DRAFT（已生效：commit `cf53f71` + `cb49fdc` 已于 04:14 / 04:15 入 main，本 commit 单独跟状态字段）
 - [ ] **T2. Commit master plan + 4 份 sub-plan 到 main**
   - 1 份 master commit（`docs(plans): finalize rsc-leaf-boundary-refactor v1.0`）+ 4 份 sub-plan 落地 commit
   - 0 violations in `node tests/qa/commit-audit.mjs --branch main`
@@ -260,4 +262,11 @@
   - 加入并行执行结构：C1 / C2 / C3 / C5 4 份 sub-plan 并行跑；C4 依赖合入后串行。
   - 加入 docs 同步：docs/learnings.md + docs/verification-gauntlet.md。
   - 备份：[`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak)。
-- **v1.0（待用户签字后）**：去掉 DRAFT 状态、锁定 commit 主题、commit footer `Plan: .omo/plans/rsc-leaf-boundary-refactor.md`。
+- **v1.0（待用户签字后）**：去掉 DRAFT 状态、锁定 commit 主题、commit footer `Plan: .omo/plans/rsc-leaf-boundary-refactor.md`。~~（生效 → 见下一条）~~
+- **FINAL v1.0（2026-09-11，本 commit 落地）**：
+  - 用户授权（"ulw A、B、C 全部都用做"）；
+  - 状态字段升级：标题 `DRAFT v0.2` → `FINAL v1.0`，Status 行同步，去掉「草稿阶段」段；
+  - Step 1 / T1 checkbox 标记完成（实际签字在本轮 prompt 内）；
+  - 全部 commit 已合入 main（HEAD = `c4a2630` + 本 v1.0 commit），5 个 worker 分支 + 5 个 worktree 物理目录（5.9 GB）已收尾清理；
+  - Plan footer `Plan: .omo/plans/rsc-leaf-boundary-refactor.md` 由 5 个 impl commits + 1 docs commit + 1 chore(lint) commit 实际引用（git log --grep "Plan:"）；
+  - 备份保留：`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`。
