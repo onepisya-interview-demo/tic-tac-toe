@@ -75,19 +75,72 @@ const initial: GameState = {
 // from emptyStats() instead of the real on-disk stats.
 let internalStats: GameStats = emptyStats();
 
-async function apiPutStats(stats: GameStats): Promise<void> {
-  const r = await fetch('/api/stats', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(stats),
-  });
-  if (!r.ok) throw new Error(`stats PUT ${r.status}`);
+/**
+ * Tagged result for store-internal network writes. PUT/DELETE calls go
+ * through withTimeout (commit 3), so a successful 2xx surfaces as
+ * { ok: true, value }, while abort (timeout) and non-2xx / thrown
+ * network errors collapse into { ok: false, reason }. Callers
+ * (`makeMove`, `resetAll`) preserve the same invariant as before —
+ * local UI state stays correct regardless of outcome — but the
+ * `{ ok, reason }` shape gives reset-button UI a precise signal to
+ * show a loading spinner and recover gracefully if Turso HTTP hangs
+ * past 8 s (HAR §P2 evidence: DELETE observed 30 733 ms once).
+ */
+export type StoreFetchResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: 'aborted' | 'network-error' };
+
+/**
+ * Wrap a fetch() call so it rejects (well, returns ok:false) after
+ * `ms` milliseconds. Uses AbortController + setTimeout, exactly the
+ * pattern HAR §P2 recommends. 8000 ms is the chosen floor: the
+ * observed Turso DELETE that took 30 s was an outlier, not a
+ * re-occurring latency, but a single stuck PUT that blocks the
+ * reset button for half a minute is what we're guarding against.
+ * If we later need retry, the { ok, reason } shape gives it a clean
+ * seam without changing the public store API.
+ */
+export const NETWORK_TIMEOUT_MS = 8000;
+
+export async function withTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number = NETWORK_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException('aborted', 'TimeoutError'));
+  }, ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-async function apiDeleteStats(): Promise<GameStats> {
-  const r = await fetch('/api/stats', { method: 'DELETE' });
-  if (!r.ok) throw new Error(`stats DELETE ${r.status}`);
-  return (await r.json()) as GameStats;
+async function apiPutStats(stats: GameStats): Promise<StoreFetchResult<void>> {
+  try {
+    const r = await withTimeout('/api/stats', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(stats),
+    });
+    if (!r.ok) return { ok: false, reason: 'network-error' };
+    return { ok: true, value: undefined };
+  } catch (err) {
+    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
+  }
+}
+
+async function apiDeleteStats(): Promise<StoreFetchResult<GameStats>> {
+  try {
+    const r = await withTimeout('/api/stats', { method: 'DELETE' });
+    if (!r.ok) return { ok: false, reason: 'network-error' };
+    const value = (await r.json()) as GameStats;
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
+  }
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -145,15 +198,10 @@ export const useGameStore = create<GameStore>((set) => ({
       // playSound('cheer') re-reads getMuted(), so toggling mute mid-
       // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
-      // Network write: await so callers (PlayController via lastWriteAt)
-      // can observe completion; force-dynamic pages refresh on next nav.
-      // Failure mode is the same as before — local UI state stays correct,
-      // DB write is lost (single-row UPSERT, no replay).
-      try {
-        await apiPutStats(newStats);
-      } catch {
-        /* local UI state is already correct */
-      }
+      // Network write: result is { ok, reason } now; ok:false (aborted
+      // or network-error) keeps the same invariant as before — local UI
+      // state is already correct, DB write is lost (single-row UPSERT).
+      await apiPutStats(newStats);
       set({ lastWriteAt: Date.now() });
       return;
     }
@@ -169,11 +217,7 @@ export const useGameStore = create<GameStore>((set) => ({
         lastOutcome: 'draw',
       });
       playSound('draw');
-      try {
-        await apiPutStats(newStats);
-      } catch {
-        /* local UI state is already correct */
-      }
+      await apiPutStats(newStats);
       set({ lastWriteAt: Date.now() });
       return;
     }
@@ -200,14 +244,10 @@ export const useGameStore = create<GameStore>((set) => ({
     // Network write: await so callers can refresh() AFTER the server-side
     // row is gone; otherwise a force-dynamic refresh races the DELETE and
     // re-reads the still-present stats. Local cache mirrors server state
-    // on both success and failure paths.
-    let zero: GameStats;
-    try {
-      zero = await apiDeleteStats();
-    } catch {
-      zero = emptyStats();
-    }
-    internalStats = zero;
+    // on both success and failure paths (the { ok, reason } contract lets
+    // us fall back to emptyStats() without a try/catch at the call site).
+    const result = await apiDeleteStats();
+    internalStats = result.ok ? result.value : emptyStats();
     set({ lastWriteAt: Date.now() });
   },
 }));
