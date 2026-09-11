@@ -32,6 +32,29 @@ function mockFetch(responses: Array<{
   return { calls, restore: () => fetchMock.mockRestore() };
 }
 
+/**
+ * Mock fetch that simulates what AbortController.abort() looks like to
+ * the store: the fetch promise rejects with DOMException('aborted',
+ * 'TimeoutError'). The store's apiPutStats / apiDeleteStats catch that
+ * and surface { ok: false, reason: 'aborted' }, so callers like
+ * makeMove / resetAll keep the same invariant — local UI state stays
+ * correct — without an 8 s wait per case.
+ *
+ * This is a real-timer test (per commit 7 lore Directive): no fake
+ * timers, no setTimeout gymnastics. We mock the fetch outcome that
+ * abort fires after the timer expires, which is what the store
+ * actually sees.
+ */
+function mockFetchWithAbort(): { calls: FetchCall[]; restore: () => void } {
+  const calls: FetchCall[] = [];
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : (input as URL).toString();
+    calls.push({ url, init });
+    throw new DOMException('aborted', 'TimeoutError');
+  });
+  return { calls, restore: () => fetchMock.mockRestore() };
+}
+
 function resetStore(): void {
   useGameStore.setState({
     phase: 'idle',
@@ -390,5 +413,141 @@ describe('lib/store (zustand game store)', () => {
     });
     restore();
     restore2();
+  });
+
+  // ── commit 7: AbortController.timeout abort cases ──
+  // Each case asserts that the store does NOT throw, the local UI
+  // state remains correct, and exactly one outbound PUT/DELETE was
+  // attempted (the abort fires AFTER fetch has been invoked).
+
+  it('makeMove win: PUT abort keeps local winner + does not throw', async () => {
+    const { calls, restore } = mockFetchWithAbort();
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    seedInternalStats({
+      totalGames: 5,
+      xWins: 3,
+      oWins: 1,
+      draws: 1,
+      currentStreak: 2,
+    });
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    // Let the awaited PUT settle; if the catch path leaked a throw
+    // it would surface as an unhandled rejection.
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.winner).toBe('X');
+    expect(s.winLine).toEqual([0, 4, 8]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init?.method).toBe('PUT');
+    restore();
+  });
+
+  it('makeMove draw: PUT abort keeps local drawn phase + does not throw', async () => {
+    const { calls, restore } = mockFetchWithAbort();
+    const board: Board = [
+      'X', 'O', 'X',
+      'X', 'O', 'O',
+      'O', 'X', null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    seedInternalStats({
+      totalGames: 4,
+      xWins: 2,
+      oWins: 1,
+      draws: 1,
+      currentStreak: -1,
+    });
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('drawn');
+    expect(s.lastOutcome).toBe('draw');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init?.method).toBe('PUT');
+    restore();
+  });
+
+  it('resetAll: DELETE abort falls back to emptyStats()', async () => {
+    const { calls, restore } = mockFetchWithAbort();
+    seedInternalStats({
+      totalGames: 3,
+      xWins: 2,
+      oWins: 1,
+      draws: 0,
+      currentStreak: 1,
+    });
+    expect(() => useGameStore.getState().resetAll()).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init?.method).toBe('DELETE');
+    // Internal cache should be emptyStats() — verified indirectly by
+    // observing the next PUT body, same pattern as the existing
+    // "resetAll still updates internal cache to empty on network
+    // error" test.
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: [
+        'X', null, null,
+        null, 'X', null,
+        null, null, null,
+      ] as unknown as Board,
+    });
+    const { calls: calls2, restore: restore2 } = mockFetch([{ status: 200, body: {} }]);
+    useGameStore.getState().makeMove(8);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls2).toHaveLength(1);
+    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({
+      totalGames: 1,
+      xWins: 1,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 1,
+    });
+    restore();
+    restore2();
+  });
+
+  it('makeMove win: non-abort 200 still PUTs and stamps lastWriteAt (regression baseline)', async () => {
+    const { calls, restore } = mockFetch([{ status: 200, body: emptyStats() }]);
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    seedInternalStats(emptyStats());
+    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    // lastWriteAt is the timestamp set by the makeMove win branch AFTER
+    // the await of apiPutStats resolves — i.e. it confirms the abort-
+    // aware store still completes the post-write stamp on the happy
+    // path. We don't compare to a `before` value because Date.now() can
+    // repeat within the same ms in jsdom, making the comparison brittle.
+    expect(s.lastWriteAt).not.toBeNull();
+    expect(typeof s.lastWriteAt).toBe('number');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init?.method).toBe('PUT');
+    restore();
   });
 });
