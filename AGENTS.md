@@ -76,6 +76,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **store 的网络写 action 必须返回 Promise** —— 让调用方可以 await 后再调 `router.refresh()`。在 `force-dynamic` 下无需 `revalidatePath`（冗余）；在 ISR 下 Route Handler 必须调 `revalidatePath('/')` + `revalidatePath('/result')`。B-2 + B-3b 实证：setTimeout 700ms 与 PUT 落库时刻不固定；resetAll fire-and-forget DELETE 后同步 router.refresh() 会读到旧值。
 - **网络写 action 必须带 AbortController timeout** —— Turso HTTP 在 iad1 偶发 30 s 默认 fetch 超时；client 必须主动 8 s `AbortController.timeout()` abort + Button `loading` state + 强制 disabled，否则重置战绩按钮会卡 30 s 不响应。HAR §P2 实证：线上抓到一个孤立 DELETE 200 time=30733 ms。
 - **静态资源缓存必须双层** —— `_next/static/**` 已被 Vercel 边缘 immutable 缓存；但 `manifest.webmanifest` / `icon.svg` / `apple-icon*` / `favicon*` / `icon-*.png` 默认 `max-age=0, must-revalidate` 会让浏览器每次 nav 都 304 roundtrip（50-200 ms）。必须 `next.config.ts headers()` + SW cache-first 双层。HAR 直读实证：单次 PWA 会话 56-94 次 manifest 请求 + 头 = `max-age=0`。
+- **仓库内任何"清理/迁移/deslop"批量文件操作必须走 git 通道：删 tracked 文件前先 commit，删 untracked/ignored 内容前先备份** —— worktree-only 删除可由 `git ls-files -d -z | xargs -0 git checkout --` 一条命令恢复，但 ignored 内容（如 `.omx/backups` 备份 tar）被删即永久丢失。2026-09-12 00:00:08-23 实证：40 个 tracked 文件（全部属于最后提交日期 2026-09-07 的 cohort）+ `.git/hooks` + `.omx/backups/repo.git.tar` 在 15 秒内被未知进程按清单删除；同波进程还触碰了 /tmp 顶层 35 个不相关目录。
+- **herdr 多 pane 工作区内，同一 worktree 同时只允许一个 agent 写入；午夜定时任务窗口（00:00±15min）不做绕过 git 的批量文件操作** —— 2026-09-12 实证：仓库删除（00:00:08-23）与 `/tmp/hooks-v2` 空骨架创建（00:00:15）交错 6 秒，指向同一迁移脚本中途停止；三个 herdr pane 的会话转录在窗口内均零条目，hermes 生态 4 个 cron 同窗触发但无一认领删除行为——reflog/index 零记录证明它绕过了 git。
+- **commit-msg hook 位于 `.git/` 内，git 永不跟踪；重建只能靠文档契约，重建后必须双向冒烟** —— 契约三源：本文件 §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`、commit `52204f2` 正文与 Directive（audit 脚本是策略真源，hook 委托 audit）。任何 commit（含 `fcbde26f`）都不含 hook 原件；`.git/HEAD` 丢失用 `echo 'ref: refs/heads/main' > .git/HEAD` 恢复；hook 重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B。
 
 ## 项目特有风格
 

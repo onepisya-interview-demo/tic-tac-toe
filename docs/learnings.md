@@ -211,3 +211,22 @@ export async function withTimeout(url: string, init: RequestInit, ms = NETWORK_T
 新增 `tests/qa/pwa-sw-cache-qa.mjs` 4-step harness：(1) production build + 真实 Chromium 验证 SW register + `clients.claim()` 控制页面；(2) 首次 `fetch('/manifest.webmanifest')` 经 SW 写入 `tic-tac-toe-v1` cache；(3) 第二次 fetch 通过 `response.fromServiceWorker() === true` 断言 SW 命中；(4) `ctx.request.fetch` 绕过 SW 直接验证 `Cache-Control: max-age=300` 仍生效（layer-1 与 layer-2 正交）。commit 7 新增 4 个 vitest abort 用例覆盖 `mockFetchWithAbort` helper，store.ts branches 68% → 92%。
 
 Headless Chromium 不主动 fetch manifest link（无 install 提示、无 PWA 上下文），所以 probe 用 `page.evaluate(fetch)` 驱动请求。这与真实安装后的浏览器行为不同——HAR 56-94 次 manifest 请求基线只在 installed PWA 上下文出现。但 SW 行为正交：手动 fetch 与 `<link rel="manifest">` 自动 fetch 走的都是 SW fetch event path。
+
+### 30. 可恢复性与并发协调（recovery-from-unknown-cleanup 事故复盘）
+
+2026-09-12 00:00:08-23，未知进程在 15 秒内删除了 40 个 tracked 工作树文件（全部属于最后提交日期 2026-09-07 的 cohort；同 cohort 52 个文件中 12 个幸存，说明是逐文件清单而非 shell 谓词）、清空 `.git/hooks/`、删除 `.git/HEAD`，并连带删掉 ignored 的 `.omx/backups/repo.git.tar`（含 hook 字节级原件的唯一备份，见 commit `52204f2` 正文）。恢复用时约 25 分钟，40/40 逐字节还原，六层 Gauntlet 全绿（vitest 91/91、audit 126/126、pwa-sw-cache-qa 4/4）。设计记录：`.omo/plans/recovery-from-unknown-cleanup.md`。
+
+#### 轴 1：可恢复性的半径
+
+这次 40/40 全部救回，唯一功臣是"这些文件都已提交 + `.git/objects` 完好 + index 未被改写"——`git ls-files -d -z | xargs -0 git checkout --` 一条命令完成恢复。半径之外的部分永久丢失：备份 tar 没有第二个副本，hook 只能按文档契约重建（AGENTS.md §commit-msg hook + 52204f2 Directive：audit 脚本是策略真源，hook 委托 audit 而非 commitlint）。教训：**tracked 且已提交 = 可恢复；untracked/ignored = 一次误删就归零**。事发时仓库无 remote（`git remote -v` 为空），objects 是单点——恢复后应立即 `git bundle create` 全量快照并考虑加远端。
+
+#### 轴 2：多 agent 并发无互斥
+
+herdr 工作区 3 个 pane（codex/p1、pi/p2、无 agent/p3）的会话转录在破坏窗口内均零条目；hermes 生态 4 个 cron（3 个 session extractor + Auxiliary Health Check）同窗触发，/tmp 顶层约 35 个不相关目录在同一分钟被触碰——肇事者在该生态的午夜进程集合中，但没有留下可归因的转录或输出。`/tmp/hooks-v2` 空骨架创建（00:00:15）与仓库删除（00:00:08-23）交错 6 秒，指向一个中途停止的"hooks 迁移"脚本。教训：**共享 worktree 上没有任何"谁在动这个目录"的互斥原语**；fsmonitor（`.git/fsmonitor--daemon.ipc`）是性能特性不是保护机制。最小防线是 herdr 层面的 pane 协调约定 + 午夜窗口不做绕过 git 的批量文件操作。
+
+#### 恢复剧本（已实练，可直接复用）
+
+1. `.git/HEAD` 丢失 → `echo 'ref: refs/heads/main' > .git/HEAD`
+2. tracked worktree 文件丢失（status 出现 ` D`）→ 先 `git status --porcelain` 快照冻结现场，再 `git ls-files -d -z | xargs -0 git checkout --`
+3. commit-msg hook 丢失 → 按契约重建（委托 `node tests/qa/commit-audit.mjs --message-file "$1"`），坏消息 exit 1 / 好消息 exit 0 双向冒烟
+4. 恢复完成后跑六层 Gauntlet，不凭肉眼验收
