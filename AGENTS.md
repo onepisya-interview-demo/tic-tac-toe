@@ -12,8 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 总是使用中文进行回复。
 # 项目知识库
 
-**生成时间：** 2026-09-08
-**提交：** b279939
+**生成时间：** 2026-09-12
+**提交：** 5c51f4a
 **分支：** main
 
 ## 概览
@@ -45,15 +45,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## 代码地图
 
-中心度来自 import 位置扫描；本次会话没有暴露 LSP/codegraph 工具。
+中心度基于 `grep -rln` import 扫描（项目无 LSP / codegraph 工具暴露给 agent；文件级中心度 = 直接 import 该文件的源文件数，含 co-located `*.test.ts`）。粗扫精确度受 import path 别名与 barrel re-export 影响，需要时跑一遍 `grep -rln "from .*lib/X['"]"` 自验。
 
 | 符号/模块 | 类型 | 位置 | 引用点 | 作用 |
 | --- | --- | --- | --- | --- |
-| game | 纯规则和战绩 | lib/game.ts:1 | 7 | 棋盘、胜负、落子、连胜计算 |
-| useGameStore | Zustand store | lib/store.ts:72 | 5 | 局面阶段、落子和 API 同步 |
-| stats API | Route handlers | app/api/stats/route.ts:6 | store + QA | GET/PUT/DELETE 与形状校验 |
-| Board | 有状态 UI | components/Board.tsx:26 | /play | roving focus 和键盘输入 |
-| launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 7 个脚本 | 统一浏览器、context 和 page 设置 |
+| game | 纯规则 + 战绩 | lib/game.ts:1 | 9（4 prod + 5 test） | 棋盘、胜负、落子、连胜、streakLabel |
+| useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、API 同步、AbortController |
+| stats API | Route handlers | app/api/stats/route.ts:6 | 1 prod + 7 QA + 1 test | GET/PUT/DELETE + 形状校验 |
+| Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/play）；间接经 PlayController/ResultBanner 等消费 | roving focus、键盘输入、落子动画 |
+| launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 9 探针 | 统一 Chromium、context、autoplay policy |
+
+库与 QA 都靠 `lib/game.ts` 与 `lib/store.ts`；store 是浏览器内单例。修改这两文件必跑对应 vitest / Stryker / fast-check（见 §验证门禁）。
 
 ## 约定
 
@@ -187,24 +189,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 [docs/verification-gauntlet.md](docs/verification-gauntlet.md)；本文 §验证门禁 是
 入口，详细契约以 docs/verification-gauntlet.md 为准。
 
-**engines.node 与 Node 运行时的三环境对齐（vite-plus shim 注意）**：本仓库
-`package.json#engines.node` 必须与「Vercel project Node.js Version setting」+「CI
-.github/workflows 设定的 Node 版本」+「本地 vite-plus runtime 解析到的 Node major」三者
-对齐，否则会触发：(a) Vercel「Skipping build cache since Node.js version changed」
-信息行（pin 与 project default 不一致，强制降级/升级丢 cache）+ (b) Vercel「Detected
-"engines": { node: ... } in your package.json that will automatically upgrade when
-a new major Node.js Version is released」警告（major 没 pin 触发）+ (c) 本地 vitest
-fork pool 退化为 undici 8 报错（pin 与 vite-plus 解析到的 Node major 不一致时
-`webidl.util.markAsUncloneable is not a function`）。本仓库当前对齐状态：
-engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `24`（`.nvmrc=24`，
-`setup-node@v4 node-version: 24` 5 处全部统一）↔ vite-plus shim 当前解析到 `24.21.0`
-（shim 在不同 session 可能切换到 `22.23.2` / `24.21.0`，每次启动 `node --version`
-确认）。任何 commit 修改 `engines.node` 时必须：(1) `pnpm vitest run` 实测本地 fork
-pool 不退化；(2) `vercel --prod` 部署后 build log 同时确认 0 条 Detected engines 警告
-+ 0 条 Skipping build cache 信息行；(3) CI workflow Node 版本若与新 engines.node
-冲突，需要同步更新 `.github/workflows/*.yml` 或 `.nvmrc`。历史决策链见 commit
-`cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)，迭代 3 次才稳定；CI Node 24
-升级由 commit（本次）落地。
+**engines.node 必须三环境对齐**：本仓库 `package.json#engines.node` 必须与
+「Vercel project Node.js Version setting」+「CI Node」+「本地 vite-plus runtime 解析到的 Node major」三者对齐，否则分别触发：(a) Vercel build cache 失效 / "Detected engines" 警告，(b) CI 与 engines.node 不一致，(c) 本地 vitest fork pool 退化为 `undici 8` 报错（`webidl.util.markAsUncloneable is not a function`）。
+
+当前对齐：engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `24`（`.nvmrc=24`，`setup-node@v4 node-version: 24` 5 处统一）↔ vite-plus shim 当前解析到 `24.21.0`（shim 在不同 session 可能切到 `22.23.2`，每次启动 `node --version` 确认）。
+
+修改 `engines.node` 时必须：(1) `pnpm vitest run` 实测本地 fork pool 不退化；(2) `vercel --prod` 部署后 build log 0 条 Detected engines 警告 + 0 条 Skipping build cache 信息行；(3) CI workflow Node 与新 engines.node 同步（`.github/workflows/*.yml` 或 `.nvmrc`）。
+
+历史决策链：commit `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
 
 ## commit-msg hook
 
