@@ -107,7 +107,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 本项目在 herdr 里以「一个编排者 + 多个正交委托代理（pi/codex）」执行大 plan。任何拉取本仓库、用 herdr 跑本项目的代理都必须遵守以下 session 协议：
 
 - **起子任务必起新 agent session**：`herdr tab create --workspace <ws> --cwd <repo> --no-focus` 取 pane id，再 `herdr agent start <name> --kind pi --pane <id>`。同一 worktree 同一时刻只允许一个 agent 写入；只读角色（reviewer / auditor / explorer）才可真并行。
-- **退出前先 capture，且不靠读终端**：`herdr agent list` 的 JSON 字段 `agent_session.value` 即权威 session id（codex 是 uuid；pi 是 `~/.pi/agent/sessions/` 下的 jsonl 全路径）。把它连同 pane id、任务标签写入机器本地注册文件（约定 `~/.hermes/memory/sessions/<workspace>.md`）。session id 属机器本地状态，**不写入仓库**。
+- **退出前先 capture，且不靠读终端**：`herdr agent list` 的 JSON 字段 `agent_session.value` 即权威 session id（codex 是 uuid；pi 是 `~/.pi/agent/sessions/` 下的 jsonl 全路径）。把它连同 pane id、任务标签写入仓库内注册文件 **`.omo/sessions.local.md`**（已 gitignore；session id 属机器本地状态，**不写入仓库跟踪**）。缺省位置固定在仓库内是为了让任何人/任何 agent 在任何机器上都能按同一协议找到它；个人另有记忆目录习惯可自行覆盖，但不得改动缺省位置。
 - **关 pane 不销毁会话**：会话落盘在 `~/.pi/agent/sessions/`（pi）与 `~/.codex/sessions/`（codex），pane 只是视图。固定顺序：capture → `/exit`（pi）或 `/quit`（codex）→ `herdr pane close <pane-id>`；读终端 scrollback 只是没有注册文件时的兜底。
 - **session id 会轮换，退出时点现采现记**：实证一次编排内 codex session id 从 `01a09272-…` 轮换到 `01a09294-…`，旧登记不可信。
 - **resume**：pi 用 `pi --resume <jsonl 路径>`；codex 用 `codex resume <uuid>`；恢复会话后接新任务先 `/new`。

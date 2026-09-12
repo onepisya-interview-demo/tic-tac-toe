@@ -5,6 +5,19 @@
 「## herdr 多代理 session 卫生」，让任何拉取本仓库、用 herdr 跑本项目的人
 直接复用。切分原则：**协议入库（复利），session id 留机器本地（不入库）**。
 
+## 修订（同日，用户 review 后）
+注册文件位置从初版的 `~/.hermes/memory/sessions/<ws>.md`（调度者个人记忆
+目录）改为仓库内 **`.omo/sessions.local.md`**（gitignore）。理由：把个人
+家目录路径写进仓库契约，与 tsserver hash 路径同类——机器本地状态泄入契约。
+仓库锚定让任何克隆者在同一位置找到注册表；个人覆盖允许但不改缺省位置。
+不引入 env var 配置机制：无代码消费该文件，配置即约定本身，单一缺省位置
++ 覆盖自由已覆盖全部场景。同步 .gitignore 增加 `/.omo/sessions.local.md`，
+调度者本地注册表已迁至新位置。外部先例交叉验证：`.local` 后缀作「机器本地、
+不入库」标记是生态惯例（Vite `.env.[mode].local` 官方建议 gitignore；Claude
+Code 的 `.claude/settings.local.json` 同构——共享协议入库、本地覆盖不入
+库），且我们把 ignore 规则显式写进仓库 .gitignore，比 Claude 的自动改写
+`~/.config/git/ignore` 更透明。
+
 ## 背景（本次实证的三个事实）
 1. **id 轮换**：一次编排内 codex session id 从 `01a09272-fac4-…` 轮换到
    `01a09294-042f-…`，一次性登记会过期。
@@ -17,8 +30,8 @@
    recordAndSave——追溯必须靠 session 文件，不靠标签。
 
 ## 协议（写入 AGENTS.md 的内容摘要）
-capture（`herdr agent list` 的 `agent_session.value` → 机器本地注册文件
-`~/.hermes/memory/sessions/<workspace>.md`）→ 优雅退出（`/exit`、`/quit`）→
+capture（`herdr agent list` 的 `agent_session.value` → 仓库内注册文件
+`.omo/sessions.local.md`，gitignored）→ 优雅退出（`/exit`、`/quit`）→
 `herdr pane close`。关 pane 不销毁会话（落盘 `~/.pi/agent/sessions/`、
 `~/.codex/sessions/`）；读终端 scrollback 只是无注册文件时的兜底。
 
@@ -29,7 +42,6 @@ capture（`herdr agent list` 的 `agent_session.value` → 机器本地注册文
 - **不关 pane 长期保留**：pane 是稀缺布局资源；会话已落盘，关闭零损失。
 
 ## 关联
-- 机器本地注册表：`~/.hermes/memory/sessions/tic-tac-toe-w1.md`（含 9 个
-  委托 session 全量清单）
+- 机器本地注册表：`.omo/sessions.local.md`（含 9 个委托 session 全量清单）
 - 上游约束：`~/.pi/agent/AGENTS.md` §委派协议（每任务新 session）——本协议
   是它的项目级落地 + 关闭侧补充

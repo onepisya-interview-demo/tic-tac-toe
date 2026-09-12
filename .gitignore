@@ -127,3 +127,8 @@ reports/
 /.omo/drafts/
 /.omo/start-work/
 .env*
+
+# =====================================================
+# herdr session registry (machine-local, never commit)
+# =====================================================
+/.omo/sessions.local.md
