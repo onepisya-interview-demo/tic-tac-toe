@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     "reports/**",
     // Playwright QA scripts (plain JS, not part of app source):
     "tests/qa/**",
+    // Archival run evidence (probe scripts incl. CommonJS; never shipped):
+    ".omo/evidence/**",
   ]),
 ]);
 

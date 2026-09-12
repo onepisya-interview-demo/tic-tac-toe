@@ -102,6 +102,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
     pnpm test:mutation
     node tests/qa/visual-qa.mjs
 
+## herdr 多代理 session 卫生
+
+本项目在 herdr 里以「一个编排者 + 多个正交委托代理（pi/codex）」执行大 plan。任何拉取本仓库、用 herdr 跑本项目的代理都必须遵守以下 session 协议：
+
+- **起子任务必起新 agent session**：`herdr tab create --workspace <ws> --cwd <repo> --no-focus` 取 pane id，再 `herdr agent start <name> --kind pi --pane <id>`。同一 worktree 同一时刻只允许一个 agent 写入；只读角色（reviewer / auditor / explorer）才可真并行。
+- **退出前先 capture，且不靠读终端**：`herdr agent list` 的 JSON 字段 `agent_session.value` 即权威 session id（codex 是 uuid；pi 是 `~/.pi/agent/sessions/` 下的 jsonl 全路径）。把它连同 pane id、任务标签写入机器本地注册文件（约定 `~/.hermes/memory/sessions/<workspace>.md`）。session id 属机器本地状态，**不写入仓库**。
+- **关 pane 不销毁会话**：会话落盘在 `~/.pi/agent/sessions/`（pi）与 `~/.codex/sessions/`（codex），pane 只是视图。固定顺序：capture → `/exit`（pi）或 `/quit`（codex）→ `herdr pane close <pane-id>`；读终端 scrollback 只是没有注册文件时的兜底。
+- **session id 会轮换，退出时点现采现记**：实证一次编排内 codex session id 从 `01a09272-…` 轮换到 `01a09294-…`，旧登记不可信。
+- **resume**：pi 用 `pi --resume <jsonl 路径>`；codex 用 `codex resume <uuid>`；恢复会话后接新任务先 `/new`。
+- **编排者会边跑边关委托 pane**：清场时看到的 pane 数 ≠ 实际用过的 session 数。实证 stats-server-authoritative-delta plan：10 个 commit 产生 9 个委托 session，其中一个 todo（commit 3）先后耗掉 3 个 session（中断、主体、收尾），且 tab 标签与实际任务存在漂移——追溯依赖注册文件与 session 文件，不依赖标签。
+
 ## 备注
 
 - lib/db.ts 通过 @libsql/client + Drizzle 初始化并缓存 libsql 客户端；测试通过 DATABASE_URL/临时目录隔离，并调用 closeDb()。
