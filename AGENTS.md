@@ -13,7 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # 项目知识库
 
 **生成时间：** 2026-09-12
-**提交：** 5c51f4a
+**提交：** d046cc5
 **分支：** main
 
 ## 概览
@@ -36,7 +36,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 | 任务 | 位置 | 说明 |
 | --- | --- | --- |
-| 路由或 API 行为 | app/ | 客户端页面和 Node runtime 的 /api/stats |
+| 路由或 API 行为 | app/ | 客户端页面和 Node runtime 的 /api/stats 与 /api/stats/outcome |
 | 规则、战绩、持久化 | lib/game.ts、lib/store.ts、lib/db.ts、db/schema.ts | 纯规则不依赖 React/DOM |
 | 视觉和无障碍契约 | DESIGN.md、app/globals.css、components/ | 设计令牌与全局 focus 所有权是契约 |
 | 浏览器验证 | tests/qa/ | 先 pnpm build && pnpm start，不要用 dev server |
@@ -51,7 +51,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | --- | --- | --- | --- | --- |
 | game | 纯规则 + 战绩 | lib/game.ts:1 | 9（4 prod + 5 test） | 棋盘、胜负、落子、连胜、streakLabel |
 | useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、API 同步、AbortController |
-| stats API | Route handlers | app/api/stats/route.ts:6 | 1 prod + 7 QA + 1 test | GET/PUT/DELETE + 形状校验 |
+| stats API | Route handlers | app/api/stats/{route,outcome/route}.ts | 1 prod + 8 QA + 1 test | GET/PUT/DELETE 全行 + POST outcome 服务端权威增量 |
 | Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/play）；间接经 PlayController/ResultBanner 等消费 | roving focus、键盘输入、落子动画 |
 | launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 9 探针 | 统一 Chromium、context、autoplay policy |
 
