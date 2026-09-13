@@ -78,6 +78,7 @@ jobs:
           path: .next
           retention-days: 3
           if-no-files-found: error
+          include-hidden-files: true
 
   visual-qa:
     name: Visual QA (Playwright probe)
