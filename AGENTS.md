@@ -12,8 +12,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 总是使用中文进行回复。
 # 项目知识库
 
+> Router 形态：本文件只做最小路由与 digest，细节在各节指向的 docs/ 与 .omo/plans/ 文档，按需读取（2026-09-12 瘦身，Plan: .omo/plans/agents-md-slim.md）。
+
 **生成时间：** 2026-09-12
-**提交：** d046cc5
+**提交：** d9acf4c
 **分支：** main
 
 ## 概览
@@ -81,7 +83,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **静态资源缓存必须双层** —— `_next/static/**` 已被 Vercel 边缘 immutable 缓存；但 `manifest.webmanifest` / `icon.svg` / `apple-icon*` / `favicon*` / `icon-*.png` 默认 `max-age=0, must-revalidate` 会让浏览器每次 nav 都 304 roundtrip（50-200 ms）。必须 `next.config.ts headers()` + SW cache-first 双层。HAR 直读实证：单次 PWA 会话 56-94 次 manifest 请求 + 头 = `max-age=0`。
 - **仓库内任何"清理/迁移/deslop"批量文件操作必须走 git 通道：删 tracked 文件前先 commit，删 untracked/ignored 内容前先备份** —— worktree-only 删除可由 `git ls-files -d -z | xargs -0 git checkout --` 一条命令恢复，但 ignored 内容（如 `.omx/backups` 备份 tar）被删即永久丢失。2026-09-12 00:00:08-23 实证：40 个 tracked 文件（全部属于最后提交日期 2026-09-07 的 cohort）+ `.git/hooks` + `.omx/backups/repo.git.tar` 在 15 秒内被未知进程按清单删除；同波进程还触碰了 /tmp 顶层 35 个不相关目录。
 - **herdr 多 pane 工作区内，同一 worktree 同时只允许一个 agent 写入；午夜定时任务窗口（00:00±15min）不做绕过 git 的批量文件操作** —— 2026-09-12 实证：仓库删除（00:00:08-23）与 `/tmp/hooks-v2` 空骨架创建（00:00:15）交错 6 秒，指向同一迁移脚本中途停止；三个 herdr pane 的会话转录在窗口内均零条目，hermes 生态 4 个 cron 同窗触发但无一认领删除行为——reflog/index 零记录证明它绕过了 git。
-- **commit-msg hook 位于 `.git/` 内，git 永不跟踪；重建只能靠文档契约，重建后必须双向冒烟** —— 契约三源：本文件 §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`、commit `52204f2` 正文与 Directive（audit 脚本是策略真源，hook 委托 audit）。任何 commit（含 `fcbde26f`）都不含 hook 原件；`.git/HEAD` 丢失用 `echo 'ref: refs/heads/main' > .git/HEAD` 恢复；hook 重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B。
+- **commit-msg hook 位于 `.git/` 内，git 永不跟踪；重建只能靠文档契约，重建后必须双向冒烟** —— 契约三源：docs/commit-policy.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`、commit `52204f2` 正文与 Directive（audit 脚本是策略真源，hook 委托 audit）。任何 commit（含 `fcbde26f`）都不含 hook 原件；`.git/HEAD` 丢失用 `echo 'ref: refs/heads/main' > .git/HEAD` 恢复；hook 重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B。
 - **store 不得在客户端预计算战绩后 PUT 全行；recordOutcome 必须在 server 侧执行** —— 客户端各自 `recordOutcome(internalStats, outcome)` 后 PUT 会因 last-write-wins 丢跨端更新。服务端权威累加：本 plan 的 `lib/db.ts:recordAndSave` 是唯一累加点；客户端只 POST `{outcome}` 收 server 回传的 `{stats}`。
 
 ## 项目特有风格
@@ -104,14 +106,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## herdr 多代理 session 卫生
 
-本项目在 herdr 里以「一个编排者 + 多个正交委托代理（pi/codex）」执行大 plan。任何拉取本仓库、用 herdr 跑本项目的代理都必须遵守以下 session 协议：
+- 起子任务必起新 agent session；同一 worktree 同一时刻只允许一个 agent 写入，只读角色（reviewer / auditor / explorer）才可真并行。
+- 退出前 capture session id 到仓库内 `.omo/sessions.local.md`（现采现记，id 会轮换），再 /exit → `herdr pane close`；关 pane 不销毁会话。
+- 完整协议（命令细节、resume、pane ≠ session、实证背景、否决项）见 [docs/herdr-session-hygiene.md](docs/herdr-session-hygiene.md)。
 
-- **起子任务必起新 agent session**：`herdr tab create --workspace <ws> --cwd <repo> --no-focus` 取 pane id，再 `herdr agent start <name> --kind pi --pane <id>`。同一 worktree 同一时刻只允许一个 agent 写入；只读角色（reviewer / auditor / explorer）才可真并行。
-- **退出前先 capture，且不靠读终端**：`herdr agent list` 的 JSON 字段 `agent_session.value` 即权威 session id（codex 是 uuid；pi 是 `~/.pi/agent/sessions/` 下的 jsonl 全路径）。把它连同 pane id、任务标签写入仓库内注册文件 **`.omo/sessions.local.md`**（已 gitignore；session id 属机器本地状态，**不写入仓库跟踪**）。缺省位置固定在仓库内是为了让任何人/任何 agent 在任何机器上都能按同一协议找到它；个人另有记忆目录习惯可自行覆盖，但不得改动缺省位置。
-- **关 pane 不销毁会话**：会话落盘在 `~/.pi/agent/sessions/`（pi）与 `~/.codex/sessions/`（codex），pane 只是视图。固定顺序：capture → `/exit`（pi）或 `/quit`（codex）→ `herdr pane close <pane-id>`；读终端 scrollback 只是没有注册文件时的兜底。
-- **session id 会轮换，退出时点现采现记**：实证一次编排内 codex session id 从 `01a09272-…` 轮换到 `01a09294-…`，旧登记不可信。
-- **resume**：pi 用 `pi --resume <jsonl 路径>`；codex 用 `codex resume <uuid>`；恢复会话后接新任务先 `/new`。
-- **编排者会边跑边关委托 pane**：清场时看到的 pane 数 ≠ 实际用过的 session 数。实证 stats-server-authoritative-delta plan：10 个 commit 产生 9 个委托 session，其中一个 todo（commit 3）先后耗掉 3 个 session（中断、主体、收尾），且 tab 标签与实际任务存在漂移——追溯依赖注册文件与 session 文件，不依赖标签。
+## 调度者（多代理编排）
+
+- 大 plan 以「一个调度者 + 多个正交委托代理」执行：调度者只做拆解、派发、轮询、独立验收、收尾沉淀，几乎不亲自写主线代码。
+- 委派协议：接收方先用自己的话复述任务与验收标准（teach-back）再动手；任何委托产出在独立验证前一律视为未完成。
+- 完整可复用模板（四层职责 / 工具面 / 五段派发结构 / 轮询节奏 / 升级规则 / 反模式）见 .omo/plans/dispatcher-roles-retrospective.md §4。
 
 ## 备注
 
@@ -121,95 +124,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # 贡献指南
 
-本区块由项目维护，不是 next dev 再生成的内容。它是本仓库的权威贡献和验证契约。
+本区块由项目维护，不是 next dev 再生成的内容。它是本仓库的权威贡献和验证契约；自 2026-09-12 起为 Router 形态——本区块只留 digest，细节见指向文档。
 
 ## 提交约定
 
-提交遵循 Conventional Commits，正文使用 WHAT / WHY / HOW。同一分支有两类提交，不能混在一个提交里：
-
-- **Context Prompt 提交**：主题以 prompt(<scope>): 开头，供后续 AI 审查消费；适合文档、设计记录和主要读者是评审者的产物。
-- **常规功能/修复提交**：主题使用 feat、fix、refactor、test、docs、chore、build、ci 或 perf；不进入 prompt 转换流程，但仍遵守正文规范。
-
-### 五步提交流程
-
-1. 先检查 git status -s、git diff 和 git diff --cached，只提交已理解的变化。
-2. 清理死代码、临时日志、调试器、脚手架和占位标识；不修改自己不理解的行为。
-3. 按文件或 hunk 精确暂存。纯格式化、依赖升级、大规模重命名和无关变更单独提交。
-4. 编写符合下方 schema 的提交消息。
-5. 提交后同步相关文档；行为变化要运行对应的 tests/qa 脚本并保留 PASS/FAIL 证据。
-
-### 正文 schema
-
-- **WHAT**：一句话说明动作和对象，祈使语气，不展开实现细节。
-- **WHY**：说明缺陷、需求、动机或架构权衡；有关联 issue/PR 时引用。
-- **HOW**：说明策略、兼容性、验证、风险和用户影响；diff 已列出文件，正文不逐文件复述。
-
-非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。
-
-### 中文提交（默认）
-
-默认 commit message 用中文。type/scope 保留英文 token，描述默认中文（按 Unicode 码点计 ≤100），正文默认中文 prose，WHAT/WHY/HOW 显式 heading 也默认中文。
-
-**保留英文的三种例外**：
-
-1. 引用外部工具/库/API 的 token（`pnpm exec commitlint`、`execFileSync` 等代码标识符）
-2. 引用外部文档/链接的标题
-3. 用户明确要求英文 commit message
-
-清单之外的场景一律走默认中文。tests/qa/commit-audit.mjs、commitlint.config.cjs 和 commit-msg hook 是同一策略的三个检查点。
-
-## 原子提交
-
-一个提交一个主题。每个提交都必须独立构建、测试为绿；不提交 WIP 或 omnibus。next-env.d.ts 和 Next 自动生成区块的变化单独作为 chore 提交，方便未来 bisect。
-
-## 设计记录
-
-非平凡工作先在 .omo/plans/<slug>.md 写设计记录，记录选项取舍、禁止事项和提交约定。实现提交通过 Plan: footer 引用它。
-
-## Pull Request 大小
-
-代码部分尽量少于 500 LOC、少于 10 个代码文件；文档、生成文件和 lockfile 不计入。超过时按层、功能组件或重构/功能拆分。
+- Conventional Commits + 正文 WHAT / WHY / HOW。两类提交不混装：prompt(<scope>): 供 AI 审查消费；feat/fix/refactor/test/docs/chore/build/ci/perf 为常规提交。
+- 默认中文提交：type/scope token 与 lore trailer 键名保留英文，描述与正文用中文。
+- 非平凡提交必须带全套 lore trailer（Constraint / Rejected / Confidence / Scope-risk / Directive / Tested | Not-tested）+ Plan: .omo/plans/<slug>.md 页脚（设计记录先行）。
+- 禁止 `git commit --no-verify` 绕过 commit-msg hook；tests/qa/commit-audit.mjs 是策略真源。
+- 五步流程、正文 schema、中文三例外、原子提交、设计记录、PR 大小（<500 LOC / <10 代码文件）、hook 机制：全部见 [docs/commit-policy.md](docs/commit-policy.md)。
 
 ## 验证门禁
 
-提交完成前必须验证：
+每 commit 必跑六层，全绿才准提交：① `pnpm vitest run`；② `pnpm typecheck`；③ `pnpm lint`；④ `pnpm build`；⑤ `node tests/qa/commit-audit.mjs --branch main` 0 violations；⑥ 触及浏览器界面时跑 tests/qa/*.mjs 探针。
 
-- node tests/qa/commit-audit.mjs 通过，当前分支 0 violations。
-- pnpm vitest run 100% 通过。
-- pnpm typecheck 通过。
-- pnpm lint 通过。
-- pnpm build 通过；纯文档提交不改 Next route 数量。
-- 触及浏览器界面时，运行相关的 tests/qa/*.mjs 探针。
-
-**完整 6 层 Gauntlet 现状 + on-demand 触发规则**见
-[docs/verification-gauntlet.md](docs/verification-gauntlet.md)。下面是 6 层 inline
-摘要 + on-demand 触发条件，把上面 6 条「每 commit 必跑」放回全 6 层视图里对齐：
-
-| 层 | 工具 / scope | 跑吗 | 触发条件 |
-| --- | --- | --- | --- |
-| Tests | vitest 5 + jsdom 30（88 例） | ✅ 每 commit | — |
-| Types | tsc 5 strict | ✅ 每 commit | — |
-| Lint | eslint 9（含 tests/qa/** ignore） | ✅ 每 commit | — |
-| Build | next build | ✅ 每 commit | — |
-| Commit-audit | tests/qa/commit-audit.mjs --branch main | ✅ 每 commit | — |
-| Browser QA | tests/qa/*.mjs 探针 | ✅ 触及 UI 时 | — |
-| Coverage | vitest --coverage（v8, `lib/**`+`db/**`, thresholds 80/80/70/80） | ⚠️ on-demand | commit 修改 `lib/**` 或 `db/**` 下任意文件 |
-| Mutation | Stryker（scope 4 个文件：`lib/game.ts` `lib/db.ts` `lib/store.ts` `db/schema.ts`，break: null） | ⚠️ on-demand | commit 修改 4 个 Stryker scope 文件任一个 |
-| Property-based | fast-check（`lib/**/*.property.test.ts`，当前 0 个文件） | ⚠️ on-demand | commit 新增 `lib/X.ts` 纯函数（必须配套 `lib/X.property.test.ts`） |
-
-触发后 lore trailer `Not-tested:` 改为 `Tested:` + 触发原因。6 层全表 + on-demand
-规则细节（thresholds / scope 数组 / 启用步骤 / Tested trailer 模板 / Gap 清单）见
-[docs/verification-gauntlet.md](docs/verification-gauntlet.md)；本文 §验证门禁 是
-入口，详细契约以 docs/verification-gauntlet.md 为准。
-
-**engines.node 必须三环境对齐**：本仓库 `package.json#engines.node` 必须与
-「Vercel project Node.js Version setting」+「CI Node」+「本地 vite-plus runtime 解析到的 Node major」三者对齐，否则分别触发：(a) Vercel build cache 失效 / "Detected engines" 警告，(b) CI 与 engines.node 不一致，(c) 本地 vitest fork pool 退化为 `undici 8` 报错（`webidl.util.markAsUncloneable is not a function`）。
-
-当前对齐：engines.node = `24.x` ↔ Vercel project default = `24.x` ↔ CI Node = `24`（`.nvmrc=24`，`setup-node@v4 node-version: 24` 5 处统一）↔ vite-plus shim 当前解析到 `24.21.0`（shim 在不同 session 可能切到 `22.23.2`，每次启动 `node --version` 确认）。
-
-修改 `engines.node` 时必须：(1) `pnpm vitest run` 实测本地 fork pool 不退化；(2) `vercel --prod` 部署后 build log 0 条 Detected engines 警告 + 0 条 Skipping build cache 信息行；(3) CI workflow Node 与新 engines.node 同步（`.github/workflows/*.yml` 或 `.nvmrc`）。
-
-历史决策链：commit `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
+on-demand 三层（coverage / mutation / property-based）按改动 scope 触发；触发规则、thresholds、Tested trailer 模板、engines.node 三环境对齐契约，全部以 [docs/verification-gauntlet.md](docs/verification-gauntlet.md) 为 single source of truth，本文不重复。
 
 ## commit-msg hook
 

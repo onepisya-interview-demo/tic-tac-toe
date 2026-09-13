@@ -55,9 +55,9 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 ## 3. Gap 清单（不在本次范围内，作为 follow-up anchor）
 
 1. ~~**AGENTS.md §验证门禁只列了 3 层（test/typecheck/lint）+ build + commit-audit +
-   browser QA**~~ —— 已 follow-up commit 解决：AGENTS.md §验证门禁 末尾追加 9 行 inline
-   6 层摘要（Tests / Types / Lint / Build / Commit-audit / Browser QA 每 commit + 
-   Coverage / Mutation / Property-based on-demand 三层），本文仍是 single source of 
+   browser QA**~~ —— 已 follow-up commit 解决（曾以 9 行 inline 6 层摘要承载）；
+   2026-09-12 AGENTS.md 瘦身为 Router 形态（.omo/plans/agents-md-slim.md）后，
+   AGENTS.md §验证门禁 收敛为一行式六层 digest + 指向本文，本文仍是 single source of 
    truth（thresholds / scope 数组 / 启用步骤 / Tested trailer 模板 / 其余 Gap 仍以本文为准）。
 2. **Coverage / mutation / property 三层 scope 都不覆盖 `app/`、`components/`、
    `tests/qa/`**。本次 favicon-analytics-warnings 计划改动恰好命中这三个目录的
@@ -85,6 +85,14 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    24.21.0）。任何 commit 修改 engines.node 时仍需实测 (1) pnpm vitest run 验证
    本地 fork pool；(2) vercel --prod 验证 build log 同时 0 条 Detected engines
    + 0 条 Skipping build cache；(3) CI workflow Node 版本若冲突需要同步更新。
+
+   **engines.node 三环境对齐契约**（2026-09-12 自 AGENTS.md §验证门禁迁入，本文为唯一
+   细节真源）：`package.json#engines.node` 必须与「Vercel project Node.js Version
+   setting」+「CI Node」+「本地 vite-plus runtime 解析到的 Node major」三者对齐，否则分别
+   触发：(a) Vercel build cache 失效 / "Detected engines" 警告，(b) CI 与
+   engines.node 不一致，(c) 本地 vitest fork pool 退化为 `undici 8` 报错
+   （`webidl.util.markAsUncloneable is not a function`）。历史决策链：commit
+   `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 
