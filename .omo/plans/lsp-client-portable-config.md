@@ -9,7 +9,7 @@ install hash 的机器本地绝对路径）和三个无效的 `command` 字段�
 ## 背景
 `b146e50` 为解决「vp smart-shim 把 typescript 装到独立 hash 目录、TLS 找不到」
 的问题，在 `.codex/lsp-client.json` 写入了
-`initialization.tsserver.path = /Users/onepisya/.vite-plus/packages/typescript/
+`initialization.tsserver.path = <个人家目录>/.vite-plus/packages/typescript/
 c030a1df-…/bin/tsserver`。问题：
 1. 该路径推上 GitHub 后其他克隆者不存在，fresh clone 即坏；
 2. vp 重装 typescript 会换 hash，本机也会静默失效（TLS exit 1 无 stderr）；

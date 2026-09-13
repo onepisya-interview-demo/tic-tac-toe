@@ -98,7 +98,7 @@ node --version; pnpm --version           # 期望与 AGENTS.md engines.node=24.x
 
 **候选 2：hermes/openclaw 生态午夜定时/守护任务误伤**
 - 支持证据：crontab 有 `0 0 * * 0 ~/.openclaw/workspace/scripts/cleanup-cron-sessions.sh`（**但该脚本文件已不存在**，且 `0` = 周日，2026-09-12 是周六，排期不符 → 弱化）；daily-auto-commit 消息提到生态里有 `disk-cleanup` 组件。
-- 判决性证据：`~/.hermes/cron/` 与 `~/.openclaw/workspace/scripts/` 下任何在 00:00–00:01 写过的日志；`/tmp/cron-cleanup.log`（实测不存在）；launchd `ai.hermes.gateway.plist` / `ai.openclaw.gateway.plist` 对应进程 00:00 的统一日志（`log show --start "2026-09-12 00:00:00" --end "2026-09-12 00:01:00"` 按进程过滤，成本高，仅在候选 1 无果时做）。
+- 判决性证据：本机 hermes / openclaw 生态的 cron 目录与 workspace 脚本目录下任何在 00:00–00:01 写过的日志；`/tmp/cron-cleanup.log`（实测不存在）；launchd `ai.hermes.gateway.plist` / `ai.openclaw.gateway.plist` 对应进程 00:00 的统一日志（`log show --start "2026-09-12 00:00:00" --end "2026-09-12 00:01:00"` 按进程过滤，成本高，仅在候选 1 无果时做）。
 
 **候选 3：人/Finder 误操作**
 - 基本排除：Finder 删除会进 `~/.Trash`（实测只有 noice.log）；选择性也无法解释 40 文件按 Sep-7 cohort 分布；`.DS_Store` 00:26 是事后浏览。
@@ -159,7 +159,7 @@ git log -1 --format=%B > /tmp/msg-good.txt
 node tests/qa/commit-audit.mjs --message-file /tmp/msg-good.txt; echo "exit=$?"  # 期望 exit=0
 ```
 
-注：audit 与 commitlint 双检是 commit-policy-enforcement.md 与 AGENTS.md 两份文档的并集；若 executor 复核后认定原 hook 只调 audit，删掉 commitlint 行即可（audit 是 Directive 指定的真源，两检冗余但无害）。若想进一步寻找字节级原件，可 grep home 仓（`grep -rl "commit-audit.mjs --message-file" ~/.openclaw ~/.hermes 2>/dev/null`），但不作为阻塞项。
+注：audit 与 commitlint 双检是 commit-policy-enforcement.md 与 AGENTS.md 两份文档的并集；若 executor 复核后认定原 hook 只调 audit，删掉 commitlint 行即可（audit 是 Directive 指定的真源，两检冗余但无害）。若想进一步寻找字节级原件，可在本机 home 仓的 openclaw / hermes 目录中 grep（`grep -rl "commit-audit.mjs --message-file" <本机 openclaw 与 hermes 目录> 2>/dev/null`），但不作为阻塞项。
 
 ### 3c. 六层验证（Gauntlet，按 AGENTS.md §验证门禁 + docs/verification-gauntlet.md）
 

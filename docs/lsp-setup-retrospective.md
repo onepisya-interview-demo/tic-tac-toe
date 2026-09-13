@@ -103,7 +103,7 @@ fallback 路径：
 | # | Commit | 方案 | 机制 | 采纳 / 否决理由 |
 |---|---|---|---|---|
 | 1 | [`fe892fb`](#) | 项目本地 devDep | `pnpm add -D` 把 TLS / bash-ls / yaml-ls 与 typescript 装到同一 `.pnpm/` 共享依赖树 | **技术上工作**（手动 roundtrip 拿到 `Typescript version (bundled) 5.9.3`）。`b146e50` 否决它是用户偏好，不是技术失败（详见 §3.4）。 |
-| 2 | [`b146e50`](#) | vp 全局 + hash 路径 | `vp add -g` 三 server + `vp add -g typescript@6.0.3` 满足 TLS peer；`.codex/lsp-client.json` typescript entry 加 `initialization.tsserver.path = /Users/onepisya/.vite-plus/packages/typescript/<hash>/bin/tsserver` | 解决 vp smart-shim 隔离 server 与 typescript 的问题。但 hash 入库不可移植 + `vp rm/add` 换 hash 即坏，被 `566745f` 否决。 |
+| 2 | [`b146e50`](#) | vp 全局 + hash 路径 | `vp add -g` 三 server + `vp add -g typescript@6.0.3` 满足 TLS peer；`.codex/lsp-client.json` typescript entry 加 `initialization.tsserver.path = <个人家目录>/.vite-plus/packages/typescript/<hash>/bin/tsserver` | 解决 vp smart-shim 隔离 server 与 typescript 的问题。但 hash 入库不可移植 + `vp rm/add` 换 hash 即坏，被 `566745f` 否决。 |
 | 3 | [`566745f`](#) | 可移植最小形态 | `.codex/lsp-client.json` 三个 entry 缩为 `{"priority": 100}`，删 `command` 与 `initialization.tsserver.path`；依赖 omo initialize 恒带 workspaceFolders → TLS 走 workspace 解析命中项目 `typescript@5.9.3`（`node_modules/typescript -> .pnpm/typescript@5.9.3/node_modules/typescript` [本机 `ls -la` 验证]） | **当前状态**。Plan：`.omo/plans/lsp-client-portable-config.md`。 |
 
 Plan 文件指针：
@@ -253,7 +253,7 @@ TLS 与 typescript 装在同一棵 `.pnpm/` 依赖树下，二进制启动后能
 ### 4.5 hash 路径入库（`tsserver.path` 含 vp install hash）
 
 - **症状**：`.codex/lsp-client.json` 的
-  `initialization.tsserver.path = /Users/onepisya/.vite-plus/packages/
+  `initialization.tsserver.path = <个人家目录>/.vite-plus/packages/
   typescript/c030a1df-…/bin/tsserver` 推上 GitHub；其他克隆者没有该路径
   → fresh clone 的 LSP 即坏。
 - **根因**：`b146e50` 当时唯一可工作的方案是把 vp 装的 tsserver 绝对路径写

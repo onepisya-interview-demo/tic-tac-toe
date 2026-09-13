@@ -23,7 +23,7 @@ commitlint.config.cjs / 上一个 plan）而非依赖 stale 假设；每个 sess
 
 - 仓库 /private/tmp/tic-tac-toe/AGENTS.md **没有** § 8 委派协议（已全文核实）。
 - § 8（含"派发子任务时…"+"完成后能回答…（teach-back）"两条 bullet）在全局
-  /Users/onepisya/.pi/agent/AGENTS.md —— symlink → /Users/onepisya/.codex/AGENTS.md，
+  本机 pi agent 配置目录的 AGENTS.md —— symlink → 本机 .codex 配置目录的同名文件，
   § 8 位于 L47-49。
 - 用户已修正：改全局文件，不动仓库文件。
 
@@ -50,16 +50,16 @@ commitlint.config.cjs / 上一个 plan）而非依赖 stale 假设；每个 sess
 ## 5. Commit 决策（证据驱动，结论：不 commit，in-place 编辑）
 
 用户修正指令：若 .codex 在 git repo 内 → 走该 repo 的 audit 路径（先 inspect
-hooks + 约定）；否则 in-place 编辑。实测 /Users/onepisya（home repo toplevel）：
+hooks + 约定）；否则 in-place 编辑。实测用户 home 目录（home repo toplevel）：
 
 | 检查 | 结果 | 含义 |
 | --- | --- | --- |
-| `rev-parse --is-inside-work-tree` | true（toplevel=/Users/onepisya） | 技术上"在" repo 内 |
+| `rev-parse --is-inside-work-tree` | true（toplevel=用户 home 目录） | 技术上"在" repo 内 |
 | `git log` | fatal: current branch 'main' does not have any commits yet | unborn main，**零历史** |
 | `git branch -a` | 空输出 | 无任何分支引用 |
 | `.git/hooks` | 仅 *.sample | 无 commit-msg / audit 基建 |
 | `git check-ignore -v .codex/AGENTS.md` | `.gitignore:1:/**/**` | **被 .gitignore 第 1 行全量忽略** |
-| repo 自身约定 | /Users/onepisya/AGENTS.md（2560B, 05-21）存在但无 commit 契约 | 无可套用的 audit/lint |
+| repo 自身约定 | home 仓根的 AGENTS.md（2560B, 05-21）存在但无 commit 契约 | 无可套用的 audit/lint |
 
 结论：该 repo 是"全忽略、未启用"的白名单式备份壳。不存在用户所说的"audit
 路径"；`git add -f` 会对抗用户自己的 ignore 配置；为 home repo 制造第一个
@@ -71,8 +71,8 @@ sibling plan 同为 untracked 状态（是否入库由仓库主人决定，本�
 
 1. `grep -n` 目标文件 § 8 段：应见 3 条 bullet，第 3 条同时含
    `herdr tab create` + `agent start` + `/new` 三个 token。
-2. 经 symlink 路径 /Users/onepisya/.pi/agent/AGENTS.md 编辑，读回
-   /Users/onepisya/.codex/AGENTS.md 确认落盘（symlink 生效）。
+2. 经 symlink 路径编辑本机 pi agent 目录的 AGENTS.md，读回本机
+   .codex 目录下的同名文件确认落盘（symlink 生效）。
 3. tic-tac-toe 仓库 `git status`：仅新增 1 个 untracked plan 文件，tracked
    文件零变化 → 6 层门禁不适用（未触碰任何被门禁覆盖的文件）。
 4. 旧 Pi session（commit-policy-closer，w1:p2）零打扰：本任务不向该 pane 发送

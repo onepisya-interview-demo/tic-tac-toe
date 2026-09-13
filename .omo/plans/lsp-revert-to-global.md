@@ -42,11 +42,11 @@
 - `typescript-language-server --stdio` + initOptions `tsserver.path` →
   initialize 返回 capabilities（OK）。
 - 验证脚本：`node /tmp/tls_probe2.mjs`，用
-  `/Users/onepisya/.vite-plus/packages/typescript/c030a1df-.../bin/tsserver`
+  `<个人家目录>/.vite-plus/packages/typescript/c030a1df-.../bin/tsserver`
   作 `tsserver.path`。
 
 ## 风险与约束
-- `tsserver.path` 含 vp install hash（`/Users/onepisya/.vite-plus/packages/
+- `tsserver.path` 含 vp install hash（`<个人家目录>/.vite-plus/packages/
   typescript/<hash>/bin/tsserver`）。vp 重装 typescript 会换 hash，
   需要同步更新 `.codex/lsp-client.json`，否则 TLS 启动失败静默 exit 1。
 - 用户态 `vp exec tsc` 从 `typescript@7.0.2` 降到 `typescript@6.0.3`；
