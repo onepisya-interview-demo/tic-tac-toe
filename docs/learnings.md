@@ -214,11 +214,11 @@ Headless Chromium 不主动 fetch manifest link（无 install 提示、无 PWA �
 
 ### 30. 可恢复性与并发协调（recovery-from-unknown-cleanup 事故复盘）
 
-2026-09-12 00:00:08-23，未知进程在 15 秒内删除了 40 个 tracked 工作树文件（全部属于最后提交日期 2026-09-07 的 cohort；同 cohort 52 个文件中 12 个幸存，说明是逐文件清单而非 shell 谓词）、清空 `.git/hooks/`、删除 `.git/HEAD`，并连带删掉 ignored 的 `.omx/backups/repo.git.tar`（含 hook 字节级原件的唯一备份，见 commit `52204f2` 正文）。恢复用时约 25 分钟，40/40 逐字节还原，六层 Gauntlet 全绿（vitest 91/91、audit 126/126、pwa-sw-cache-qa 4/4）。设计记录：`.omo/plans/recovery-from-unknown-cleanup.md`。
+2026-09-12 00:00:08-23，未知进程在 15 秒内删除了 40 个 tracked 工作树文件（全部属于最后提交日期 2026-09-07 的 cohort；同 cohort 52 个文件中 12 个幸存，说明是逐文件清单而非 shell 谓词）、清空 `.git/hooks/`、删除 `.git/HEAD`，并连带删掉 ignored 的 `.omx/backups/repo.git.tar`（含 hook 字节级原件的唯一备份，hook 原契约见 `.omo/plans/commit-policy-enforcement.md`）。恢复用时约 25 分钟，40/40 逐字节还原，六层 Gauntlet 全绿（vitest 91/91、audit 126/126、pwa-sw-cache-qa 4/4）。设计记录：`.omo/plans/recovery-from-unknown-cleanup.md`。
 
 #### 轴 1：可恢复性的半径
 
-这次 40/40 全部救回，唯一功臣是"这些文件都已提交 + `.git/objects` 完好 + index 未被改写"——`git ls-files -d -z | xargs -0 git checkout --` 一条命令完成恢复。半径之外的部分永久丢失：备份 tar 没有第二个副本，hook 只能按文档契约重建（AGENTS.md §commit-msg hook + 52204f2 Directive：audit 脚本是策略真源，hook 委托 audit 而非 commitlint）。教训：**tracked 且已提交 = 可恢复；untracked/ignored = 一次误删就归零**。事发时仓库无 remote（`git remote -v` 为空），objects 是单点——恢复后应立即 `git bundle create` 全量快照并考虑加远端。
+这次 40/40 全部救回，唯一功臣是"这些文件都已提交 + `.git/objects` 完好 + index 未被改写"——`git ls-files -d -z | xargs -0 git checkout --` 一条命令完成恢复。半径之外的部分永久丢失：备份 tar 没有第二个副本，hook 只能按文档契约重建（AGENTS.md §commit-msg hook + `.omo/plans/commit-policy-enforcement.md` Directive：audit 脚本是策略真源，hook 委托 audit 而非 commitlint）。教训：**tracked 且已提交 = 可恢复；untracked/ignored = 一次误删就归零**。事发时仓库无 remote（`git remote -v` 为空），objects 是单点——恢复后应立即 `git bundle create` 全量快照并考虑加远端。
 
 #### 轴 2：多 agent 并发无互斥
 
