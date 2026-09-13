@@ -42,6 +42,17 @@ export function Board() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && target.tagName === 'INPUT') return;
+      // Enter/Space must stay native on any control that is not a board cell
+      // (back-home link, restart button, ...): hijacking them here would
+      // preventDefault the click and place a piece instead of activating the
+      // control, breaking keyboard exit from the game. Arrows stay global so
+      // they always pull focus back into the board.
+      const onBoardCell = !!target?.dataset?.testid?.startsWith('cell-');
+      const onOtherControl =
+        !onBoardCell &&
+        target instanceof HTMLElement &&
+        target !== document.body &&
+        target.closest('button, a, input, textarea, select, [contenteditable="true"]') !== null;
       const directions: Record<string, [number, number]> = {
         ArrowUp: [-1, 0],
         ArrowDown: [1, 0],
@@ -64,7 +75,7 @@ export function Board() {
         });
         return;
       }
-      if (event.key === 'Enter' || event.key === ' ') {
+      if ((event.key === 'Enter' || event.key === ' ') && !onOtherControl) {
         const cur = focused;
         const cell = board[cur];
         if (cell === null) {
