@@ -79,6 +79,14 @@ const HOW_RE = new RegExp(
 );
 const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Tested|Not-tested|Plan|Refs|Closes|Fixes|Breaking|See-also|Co-authored-by|Signed-off-by|Reviewer|Reviewed-by):\s/;
 
+// Dependabot squash merges are authored by GitHub's bot and can never carry
+// the human lore trailers this policy requires. Branch mode SKIPs R3-R5 for
+// them (R1/R2 subject checks stay enforced); --message-file mode - the human
+// commit entry point - is never exempted. Identity-based, not subject-based,
+// so a human message cannot borrow the exemption.
+const DEPENDABOT_EMAIL = "dependabot[bot]@users.noreply.github.com";
+const DEPENDABOT_NAME = "dependabot[bot]";
+
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -122,7 +130,7 @@ function parseMessage(raw) {
   return { subject, body, footer, raw };
 }
 
-function checkMessage(label, raw) {
+function checkMessage(label, raw, opts = {}) {
   const { subject, body, footer } = parseMessage(raw);
   const findings = [];
 
@@ -132,7 +140,7 @@ function checkMessage(label, raw) {
   }
 
   const isPrompt = PROMPT_RE.test(subject);
-  if (!isPrompt) {
+  if (!isPrompt && !opts.botAuthored) {
     const hasExplicitHeading = /\bWHAT:\s/.test(body) && /\bWHY:\s/.test(body) && /\bHOW:\s/.test(body);
     if (body.length < 60) {
       findings.push({ rule: "R3", msg: `body too short (${body.length} chars) - must explain what + why + how` });
@@ -152,7 +160,7 @@ function checkMessage(label, raw) {
     }
   }
 
-  return { label, subject, body, footer, findings };
+  return { label, subject, body, footer, findings, botAuthored: Boolean(opts.botAuthored) };
 }
 
 function main() {
@@ -193,14 +201,20 @@ function main() {
   }
 
   const branch = args.branch ?? "main";
-  const shas = git("log", "--reverse", "--format=%H", branch).split("\n").filter(Boolean);
-  const results = shas.map((sha) => {
+  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an", branch).split("\n").filter(Boolean);
+  const results = records.map((record) => {
+    const [sha, authorEmail, authorName] = record.split("\x1f");
     const raw = git("log", "-1", "--format=%B", sha);
-    return checkMessage(sha.slice(0, 8), raw);
+    const botAuthored = authorEmail === DEPENDABOT_EMAIL || authorName === DEPENDABOT_NAME;
+    return checkMessage(sha.slice(0, 8), raw, { botAuthored });
   });
   let failures = 0;
+  let skips = 0;
   for (const r of results) {
-    if (r.findings.length === 0) {
+    if (r.findings.length === 0 && r.botAuthored) {
+      skips++;
+      console.log(`SKIP  ${r.label}  ${r.subject} (dependabot)`);
+    } else if (r.findings.length === 0) {
       console.log(`PASS  ${r.label}  ${r.subject}`);
     } else {
       failures++;
@@ -211,7 +225,7 @@ function main() {
     }
   }
   console.log("");
-  console.log(`branch=${branch} total=${results.length} pass=${results.length - failures} fail=${failures}`);
+  console.log(`branch=${branch} total=${results.length} pass=${results.length - failures - skips} skip=${skips} fail=${failures}`);
   process.exit(failures === 0 ? 0 : 1);
 }
 

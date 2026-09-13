@@ -108,3 +108,105 @@ describe('commit-audit --message-file transitively runs commitlint', () => {
     expect(r.stderr).toContain('commitlint: rejected the message');
   });
 });
+
+// Branch-mode integration test for the dependabot exemption. Builds a
+// throwaway git repo whose main branch carries three commits:
+//   1. human-authored, trailers missing          -> FAIL (R3/R4/R5)
+//   2. dependabot-authored, conventional subject -> SKIP (R3-R5 not applied)
+//   3. dependabot-authored, non-conventional     -> FAIL (R1 still enforced)
+// The audit subprocess runs with cwd = fixture repo so its `git log` calls
+// read the fixture history, exactly mirroring `--branch main` usage.
+function gitIn(repo: string, args: string[], env: Record<string, string> = {}): string {
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    cwd: repo,
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', ...env },
+  });
+}
+
+const BRANCH_TMP = mkdtempSync(path.join(tmpdir(), 'commit-audit-branch-'));
+const FIXTURE_REPO = path.join(BRANCH_TMP, 'repo');
+
+function initFixtureRepo(): { botOk: string; botBad: string; human: string } {
+  execFileSync('git', ['init', '-b', 'main', FIXTURE_REPO]);
+  const ident = {
+    'GIT_AUTHOR_NAME': 'Fixture Author',
+    'GIT_AUTHOR_EMAIL': 'author@example.com',
+    'GIT_COMMITTER_NAME': 'Fixture Author',
+    'GIT_COMMITTER_EMAIL': 'author@example.com',
+  };
+  const botIdent = {
+    'GIT_AUTHOR_NAME': 'dependabot[bot]',
+    'GIT_AUTHOR_EMAIL': 'dependabot[bot]@users.noreply.github.com',
+    'GIT_COMMITTER_NAME': 'dependabot[bot]',
+    'GIT_COMMITTER_EMAIL': 'dependabot[bot]@users.noreply.github.com',
+  };
+  const commit = (msg: string, env: Record<string, string>): string => {
+    writeFileSync(path.join(FIXTURE_REPO, 'f.txt'), `${msg}\n`, 'utf8');
+    gitIn(FIXTURE_REPO, ['add', 'f.txt']);
+    gitIn(
+      FIXTURE_REPO,
+      ['commit', '--no-gpg-sign', '-m', msg],
+      env,
+    );
+    return gitIn(FIXTURE_REPO, ['rev-parse', 'HEAD']).slice(0, 8);
+  };
+
+  const human = commit('fix: human commit without required trailers', ident);
+  const botOk = commit('chore(deps): bump some-pkg from 1.0.0 to 1.1.0', botIdent);
+  const botBad = commit('Update dependency to a newer version', botIdent);
+  return { botOk, botBad, human };
+}
+
+interface BranchAuditResult {
+  status: number;
+  stdout: string;
+}
+
+function runBranchAudit(cwd: string): BranchAuditResult {
+  try {
+    const stdout = execFileSync('node', [AUDIT_PATH, '--branch', 'main'], {
+      encoding: 'utf8',
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stdout };
+  } catch (err) {
+    if (typeof err !== 'object' || err === null || !('status' in err)) {
+      throw err;
+    }
+    const status = (err as Record<string, unknown>)['status'];
+    return {
+      status: typeof status === 'number' ? status : 1,
+      stdout: stringProp(err, 'stdout'),
+    };
+  }
+}
+
+describe('commit-audit --branch main dependabot exemption', () => {
+  const fixture = initFixtureRepo();
+  const result = runBranchAudit(FIXTURE_REPO);
+
+  it('SKIPs bot commits without trailers while humans still FAIL (R3-R5)', () => {
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain(`SKIP  ${fixture.botOk}  chore(deps): bump some-pkg from 1.0.0 to 1.1.0 (dependabot)`);
+    expect(result.stdout).toContain(`FAIL  ${fixture.human}  fix: human commit without required trailers`);
+    expect(result.stdout).toMatch(new RegExp(`^\\s+R4: missing trailer: Confidence`, 'm'));
+    expect(result.stdout).toContain('skip=1 fail=2');
+    expect(result.stdout).toContain('total=3');
+  });
+
+  it('FAILs bot commits with non-conventional subjects (R1 still enforced)', () => {
+    expect(result.stdout).toContain(`FAIL  ${fixture.botBad}  Update dependency to a newer version`);
+    expect(result.stdout).toMatch(new RegExp(`^\\s+R1: subject does not match Conventional`, 'm'));
+  });
+
+  it('never exempts via subject: human fail line lists trailer rules only', () => {
+    // The human FAIL block must not be turned into a SKIP merely because the
+    // subject looks conventional; exemption keys on author identity alone.
+    const humanBlock = result.stdout.split('\n');
+    const idx = humanBlock.findIndex((l) => l.startsWith(`FAIL  ${fixture.human}`));
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(humanBlock[idx]).not.toContain('(dependabot)');
+  });
+});

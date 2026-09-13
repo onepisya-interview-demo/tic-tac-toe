@@ -62,4 +62,6 @@
 
 `.git/hooks/commit-msg` 会调用 `node tests/qa/commit-audit.mjs --message-file "$1"`。消息不合规时提交失败；**禁止用 `git commit --no-verify` 绕过**。需要独立校验时使用 `pnpm exec commitlint --edit <message-file>`。
 
+branch 全史审计（`--branch main`）对 Dependabot 自动提交（author 为 `dependabot[bot]`）豁免正文/尾注规则 R3-R5，输出记 `SKIP` 并单列计数：bot 消息由 GitHub 生成，无法携带人类 lore trailer；其 subject 仍受 R1/R2 约束。`--message-file` 模式（人类提交入口）不受此豁免。豁免按 author 身份判定，不按 subject 猜测。
+
 hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
