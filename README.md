@@ -40,7 +40,7 @@ Turso HTTP）。
 - 💾 **战绩持久化**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
-- ⌨️ **键盘优先**：棋盘使用 roving focus，落子、回车、回溯全部键控可触。
+- ⌨️ **键盘优先**：棋盘使用 roving focus——↑↓←→ 移焦邻格，Enter/空格落子，游玩无需鼠标。
 - 🔇 **音效懒加载**：AudioContext 仅在用户首次手势后创建，默认关闭且持久化。
 - ✨ **彩纸无障碍**：`prefers-reduced-motion` 下走无动效路径，data-testid 稳定。
 - 🧪 **Gauntlet 测试栈**：vitest + fast-check（属性）+ Stryker（突变）+ commitlint
