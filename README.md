@@ -1,5 +1,7 @@
 # 井字棋 (tic-tac-toe)
 
+> 中文 ｜ [English](README.en.md)
+
 > 适用：本仓库 main 分支、Node.js 24（与 engines / .nvmrc / CI 一致）、pnpm ≥ 10、Turso CLI ≥ 0.100。
 
 <p align="left">
@@ -17,6 +19,12 @@
 技术栈：Next.js 16 (App Router) + React 19 + TypeScript (strict) + Tailwind v4
 + Zustand + Drizzle ORM + @libsql/client（本地 file: sqlite / Vercel 走
 Turso HTTP）。
+
+## 预览
+
+| 首页 | 对局 | 结算（胜局彩纸） |
+| --- | --- | --- |
+| ![首页](docs/screenshots/home.png) | ![对局](docs/screenshots/board.png) | ![结算](docs/screenshots/result.png) |
 
 ## Quick start
 
