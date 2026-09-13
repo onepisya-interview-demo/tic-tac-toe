@@ -232,11 +232,6 @@ to publish this codebase there. Do not run `npm publish` from this repo
 without renaming + scoping first (e.g. `@<your-handle>/tic-tac-toe`) to
 avoid E409 conflicts on the public registry.
 
-## Funding
-
-如果这个项目对你有用，欢迎在 [GitHub Sponsors](https://github.com/sponsors)
-上支持长期维护；非必需，零功能差异。
-
 ## Related
 
 - [AGENTS.md](AGENTS.md) — AI 代理契约与提交规范
