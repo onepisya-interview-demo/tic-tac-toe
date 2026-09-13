@@ -90,6 +90,10 @@ jobs:
       EVIDENCE_DIR: ${RUNNER_TEMP}/visual-qa
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: next-build
+          path: .next
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
