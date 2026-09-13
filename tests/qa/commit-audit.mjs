@@ -163,8 +163,8 @@ function main() {
       // Second, independent checkpoint: commitlint mirrors this audit's policy
       // in commitlint.config.cjs plus the config-conventional standard rules
       // the R1-R5 regexes do not model (subject-full-stop, type-case,
-      // body-max-line-length, ...). The audit stays canonical (52204f2
-      // Directive): its findings gate the spawn, and a commitlint rejection
+      // body-max-line-length, ...). The audit stays canonical (see
+      // .omo/plans/commit-policy-enforcement.md): its findings gate the spawn, and a commitlint rejection
       // still surfaces as an audit failure. Branch mode above does not
       // re-lint history; this runs on message-file invocations only.
       try {

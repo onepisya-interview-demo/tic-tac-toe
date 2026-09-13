@@ -62,4 +62,4 @@
 
 `.git/hooks/commit-msg` 会调用 `node tests/qa/commit-audit.mjs --message-file "$1"`。消息不合规时提交失败；**禁止用 `git commit --no-verify` 绕过**。需要独立校验时使用 `pnpm exec commitlint --edit <message-file>`。
 
-hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`、commit `52204f2` 正文与 Directive；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
+hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
