@@ -11,7 +11,7 @@
 > 3. **加入并行执行结构**：master plan 之上，每个并行 commit 拆出独立的 `rsc-leaf-boundary-refactor-<task>.md` 子计划，给子代理在独立分支上读取。
 > 4. **加入 docs 同步**：C5 完成后同步 `docs/learnings.md`（新条目）和 `docs/verification-gauntlet.md`（store 解耦后的 mutation target 注释）。
 >
-> 备份：[`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak)
+> 备份：[`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak)
 
 ---
 
@@ -126,7 +126,7 @@
 
 ## Verification strategy
 
-引用项目 6 层 Gauntlet（[docs/verification-gauntlet.md](/private/tmp/tic-tac-toe/docs/verification-gauntlet.md)）：
+引用项目 6 层 Gauntlet（[docs/verification-gauntlet.md](<repo-root>/docs/verification-gauntlet.md)）：
 
 | 层 | 工具 | 触发 | 产物路径 |
 |---|---|---|---|
@@ -261,7 +261,7 @@
   - C5（store.stats 解耦）从可选升为必做。
   - 加入并行执行结构：C1 / C2 / C3 / C5 4 份 sub-plan 并行跑；C4 依赖合入后串行。
   - 加入 docs 同步：docs/learnings.md + docs/verification-gauntlet.md。
-  - 备份：[`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak)。
+  - 备份：[`.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.v0.1.md.bak)。
 - **v1.0（待用户签字后）**：去掉 DRAFT 状态、锁定 commit 主题、commit footer `Plan: .omo/plans/rsc-leaf-boundary-refactor.md`。~~（生效 → 见下一条）~~
 - **FINAL v1.0（2026-09-11，本 commit 落地）**：
   - 用户授权（"ulw A、B、C 全部都用做"）；

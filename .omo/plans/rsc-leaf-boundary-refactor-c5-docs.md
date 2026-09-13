@@ -1,6 +1,6 @@
 # Sub-plan: C5 — docs 同步（learnings + verification gauntlet）
 
-> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)
+> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)
 > 分支: `refactor/rsc-c5-docs`
 > 服务于并行子代理 #4（C1 / C2 / C3 / C5 同时启动；C4 串行）
 > 工作量估算：XS（两个文档小改）
@@ -11,7 +11,7 @@
 
 ## 为什么
 
-- 项目约定：非平凡提交后必须同步相关文档（[AGENTS.md §提交约定](/private/tmp/tic-tac-toe/AGENTS.md)）。
+- 项目约定：非平凡提交后必须同步相关文档（[AGENTS.md §提交约定](<repo-root>/AGENTS.md)）。
 - 未来读 `docs/learnings.md` 的 agent/工程师可以快速看到"RSC 改 client 子树"的决策历史。
 - `docs/verification-gauntlet.md` 是项目 Gauntlet 单一信息源；store.stats 解耦后，`lib/store.ts` 的 mutation 行为变化（少了 stats 相关分支）需要留个注释，下一个跑 Stryker 的人不会困惑。
 
@@ -27,7 +27,7 @@
 
 将 3 个 page（`/`、`/play`、`/result`）从 `'use client'` 改为 async RSC；交互逻辑收敛到叶子 client 组件（`<StartGameButton>` / `<PlayController>` / `<ResultActions>` / `<ResultState>`）；`stats` 数据由 RSC `await loadStats()` 直读 `lib/db.ts`，`useGameStore` 不再持有 stats 字段。
 
-决策记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 4 份 sub-plan。
+决策记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 4 份 sub-plan。
 
 收益：
 - 首屏 HTML 含战绩（之前需 hydration 后 fetch）；

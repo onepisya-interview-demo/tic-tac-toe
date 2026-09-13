@@ -1,6 +1,6 @@
 # Sub-plan: C4 — store.stats 解耦，RSC 拥有 stats 所有权
 
-> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)
+> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)
 > 分支: `refactor/rsc-c4-store`
 > 服务于串行子代理 #5（C1–C3 + C5 全部合入后才启动）
 > 工作量估算：M–L（store 行为变化 + 跨 4 调用方 + Stryker + coverage on-demand）

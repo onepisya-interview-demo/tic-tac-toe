@@ -4,9 +4,9 @@
 
 ## 前置
 
-> 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
+> 适用：本仓库 main 分支、Node.js 24（与 engines / .nvmrc / CI 一致）、pnpm ≥ 10、Turso CLI ≥ 0.100。
 
-- pnpm ≥ 10（包管理）、Node.js ≥ 20、Turso CLI ≥ 0.100、Playwright 浏览器（`pnpm exec playwright install`）
+- pnpm ≥ 10（包管理）、Node.js 24（与 engines / .nvmrc / CI 一致）、Turso CLI ≥ 0.100、Playwright 浏览器（`pnpm exec playwright install`）
 - @libsql/client 的 file: 分支依赖原生 sqlite（由包内 os 分发，自动安装）；切 Node 大版本
   后只需 `pnpm install` 重新拉链。
 
@@ -171,10 +171,10 @@ turso db shell <db-name> \
 - **生产 URL**：`https://3t-tic-tac-toe.vercel.app/`（项目级 verified domain，自动 follow 当前 production deployment）
 - **canonical alias（Vercel 自动）**：`https://tic-tac-toe-onepisyas-projects.vercel.app/`（跟 project name 走，删不掉；公开入口仍是 3t-tic-tac-toe）
 - **runtime**：`nodejs`（Vercel Node.js runtime。Next.js 16 弃用 Edge runtime；Vercel Node 跑在 CDN 边缘节点，`/api/stats` 用 `@libsql/client` native sqlite 需要 node built-ins 故不能回 Edge）
-- **历史 deployment 状态**：所有非当前 production 的旧 deployment 已**主动 DELETE**——`dpl_F3hNTBne76c7mRTYNuHe2stTQtcS` 之前累计 5 个 production deployment（`cv4bm77sb` / `js86rmjay` / `5s4zst0o5` / `ckjo377il` / `i7y25w108`）全部 `state: DELETED`；对应 URL（`tic-tac-cv4bm77sb-onepisyas-projects.vercel.app` 等）一律返回 `404 DEPLOYMENT_NOT_FOUND`
+- **历史 deployment 状态**：所有非当前 production 的旧 deployment 已**主动 DELETE**——`dpl_<deployment-id>` 之前累计 5 个 production deployment（`cv4bm77sb` / `js86rmjay` / `5s4zst0o5` / `ckjo377il` / `i7y25w108`）全部 `state: DELETED`；对应 URL（`tic-tac-cv4bm77sb-onepisyas-projects.vercel.app` 等）一律返回 `404 DEPLOYMENT_NOT_FOUND`
 - **过期策略**：Vercel Hobby plan 默认 30-day retention 自动保留最近 10 个 production deployment + 所有 aliased deployment（https://vercel.com/changelog/hobby-projects-now-default-to-30-day-deployment-retention）；本项目只有 6 个 production history 都在 10 个以内，30-day retention 不会自动 GC，所以手动 DELETE 实现"用户唯一访问到一份"。Password Protection 是 Enterprise 或 Pro + Advanced Deployment Protection add-on 才支持，Hobby plan 不可用——保护通过删除实现而非 password gate
 - **`ulw-demo.vercel.app` 状态**：`404 DEPLOYMENT_NOT_FOUND`（project-level domain 与 deployment-level alias 均已清理）
-- **本地目录**：`/private/tmp/tic-tac-toe`（2026-09-10 从 `ulw-demo` 改名，与项目名一致）
+- **本地目录**：`<repo-root>`（2026-09-10 从 `ulw-demo` 改名，与项目名一致）
 - **Turso db**：`tic-tac-toe-onepisya`（aws-us-east-1，region 建库后不可改）
 - **部署方式**：Vercel CLI（Phase 1）。Phase 2（Vercel for GitHub）待 GitHub 仓库创建后启用。
 - **回滚**：`vercel rollback` 或 Dashboard → Deployments → "Promote to Production"。

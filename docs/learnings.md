@@ -99,7 +99,7 @@ await page.evaluate((hash) => {
 
 将 3 个 page（`/`、`/play`、`/result`）从 `'use client'` 改为 RSC；交互逻辑收敛到叶子 client 组件（`<StartGameButton>` / `<ResetStatsButton>` / `<PlayController>` / `<StatusBarClient>` / `<RestartButton>` / `<ResultBanner>` / `<ResultActions>`）；`stats` 数据由 RSC `await loadStats()` 直读 `lib/db.ts`，`useGameStore` 仍持有 stats 直到 C4 删除。
 
-设计记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 5 份 sub-plan。
+设计记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 5 份 sub-plan。
 
 收益：
 - 首屏 HTML 含战绩（之前需 hydration 后 fetch）；
@@ -115,7 +115,7 @@ await page.evaluate((hash) => {
 
 修复 3 个生产独占 bug（B-1 SW 重发 PUT、B-2 PlayController setTimeout 与 PUT 落库竞态、B-3 RSC 静态预渲染导致战绩陈旧）后总结出的双轴反思。
 
-设计记录：[`.omo/plans/pwa-rsc-stats-bug-fix.md`](/private/tmp/tic-tac-toe/.omo/plans/pwa-rsc-stats-bug-fix.md)。证据路径：`.omo/evidence/pwa-rsc-stats-bug-fix/`。
+设计记录：[`.omo/plans/pwa-rsc-stats-bug-fix.md`](<repo-root>/.omo/plans/pwa-rsc-stats-bug-fix.md)。证据路径：`.omo/evidence/pwa-rsc-stats-bug-fix/`。
 
 #### 轴 1：数据流的"单点真相"
 

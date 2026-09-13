@@ -41,7 +41,7 @@
 - `https://3t-tic-tac-toe.vercel.app` HTTP 200 + 内容正确
 
 ## Risks
-- 部署产生新 deployment（旧的 dpl_CRNesjWfWhfzrXgjt2FBUQpzz7Lr 留在历史）；可逆
+- 部署产生新 deployment（旧的 dpl_<deployment-id> 留在历史）；可逆
 - alias reattachment 失败会导致 short URL 暂时死掉；可重试
 - 还原代码后，selectDriver 文件分支 identity 测试要严格匹配 nativeClient.createClient（已验证可过）
 
@@ -57,7 +57,7 @@
 ## Context (this addendum)
 - 2026-09-10 user: "以后默认 alias 项目级应该是 3t-tic-tac-toe.vercel.app"
 - 意思：每次 `vercel --prod` 之后，3t-tic-tac-toe.vercel.app 应该自动指向新 deployment，不要手动 `vercel alias set`
-- 当前状态：3t-tic-tac-toe.vercel.app 是 deployment-level alias（绑死在 dpl_5F6CpuPqu8v7VFPc2KmmpGfzncTa），下次部署会留在旧 deployment 上死掉
+- 当前状态：3t-tic-tac-toe.vercel.app 是 deployment-level alias（绑死在 dpl_<deployment-id>），下次部署会留在旧 deployment 上死掉
 
 ## Approaches tried
 - `PATCH /v1/projects/{id}` with `productionAlias` / `productionAliases` / `alias` / `aliases` / `productionDeploymentAlias` / `canonicalAlias` → 全部 `bad_request: should NOT have additional property`

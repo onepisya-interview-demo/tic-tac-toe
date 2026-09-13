@@ -433,7 +433,7 @@ plan 原案是 4 份原子 commit（cd47efb / 955b24d / e7100e6 / b8d042f），�
 
 | 部署 | 触发 commit | Production URL | build log 关键观察 |
 | --- | --- | --- | --- |
-| #1 | `b8d042f` | `dpl_Eu2GqUd4g5HrNmW1gUvJDhprANqD` → alias `tic-tac-iq4kzug11-...vercel.app` | Vercel project default 24.x → engines.node 22.x 强制降级，build cache 丢失 |
+| #1 | `b8d042f` | `dpl_<deployment-id>` → alias `tic-tac-iq4kzug11-...vercel.app` | Vercel project default 24.x → engines.node 22.x 强制降级，build cache 丢失 |
 | #2 | `42ad36f` | `tic-tac-asopu6a9i-...vercel.app` | 仍 22.x，0 Detected engines 警告 |
 | #3 | `cf9435b` | `tic-tac-ey28l10gn-...vercel.app` | 24.x 跟随 project default，但 `">=22"` 引 Detected engines 警告 × 2 |
 | #4 | `35c97b0` | `tic-tac-nyekyn5s4-...vercel.app` | 24.x pin + 0 警告 + build cache 复用（"Restored build cache from previous deployment"） |

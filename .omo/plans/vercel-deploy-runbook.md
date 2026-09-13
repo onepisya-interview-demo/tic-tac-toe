@@ -386,7 +386,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
 | --- | --- |
 | Project name | `tic-tac-toe` |
 | Project ID | `prj_MOOcP0A5uSKcqkARJdR1XXGarMaA` |
-| 唯一 production deployment | `dpl_F3hNTBne76c7mRTYNuHe2stTQtcS` (URL `tic-tac-arkhtecz7-onepisyas-projects.vercel.app`, Ready) |
+| 唯一 production deployment | `dpl_<deployment-id>` (URL `tic-tac-arkhtecz7-onepisyas-projects.vercel.app`, Ready) |
 | 用户公开入口 | `https://3t-tic-tac-toe.vercel.app/` (项目级 verified domain) |
 | Vercel 自动 canonical alias | `https://tic-tac-toe-onepisyas-projects.vercel.app/` (跟 project name, 删不掉, 但用户唯一公开 URL 是 3t-tic-tac-toe) |
 | Project domains | 仅 `3t-tic-tac-toe.vercel.app` (verified) |

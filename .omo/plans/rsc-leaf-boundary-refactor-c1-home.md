@@ -1,6 +1,6 @@
 # Sub-plan: C1 — home page → RSC + extract `<StartGameButton>`
 
-> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)
+> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)
 > 分支: `refactor/rsc-c1-home`
 > 服务于并行子代理 #1（C1 / C2 / C3 / C5 同时启动；C4 串行）
 > 工作量估算：S（单文件改写 + 2 个新组件文件）

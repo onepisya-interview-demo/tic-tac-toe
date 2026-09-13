@@ -4,7 +4,7 @@
 
 → Vercel 部署详见 [README §部署](README.md#部署)。
 
-> 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
+> 适用：本仓库 main 分支、Node.js 24（与 engines / .nvmrc / CI 一致）、pnpm ≥ 10、Turso CLI ≥ 0.100。
 
 ## 前置
 

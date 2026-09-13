@@ -58,7 +58,7 @@
 1. `vp rm -g typescript typescript-language-server`
 2. `pnpm add -D typescript@6.0.3 typescript-language-server@6.0.0`
 3. `.codex/lsp-client.json` 删 `initialization.tsserver.path`，`command`
-   改回绝对路径 `["/private/tmp/tic-tac-toe/node_modules/.bin/<name>", ...]`
+   改回绝对路径 `["<repo-root>/node_modules/.bin/<name>", ...]`
 4. AGENTS.md 把本条 bullet 改回 devDep 版本（参考 `.omo/plans/lsp-project-local-setup.md`）
 
 ## 与既有规则的关系

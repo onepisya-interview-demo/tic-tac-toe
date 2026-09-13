@@ -42,7 +42,7 @@ initializationOptions）：
 
 | 用例 | 结果 |
 | --- | --- |
-| 本项目根 `/private/tmp/tic-tac-toe`，无 tsserver.path | PASS：initialize 返回 capabilities（hover/definition/documentSymbol 均 true） |
+| 本项目根 `<repo-root>`，无 tsserver.path | PASS：initialize 返回 capabilities（hover/definition/documentSymbol 均 true） |
 | `/tmp/no-ts-workspace`（无 node_modules/typescript），负对照 | FAIL：`Could not find a valid TypeScript installation`（exit 1，与 plan 里记录的故障一致） |
 | 本项目 + `textDocument/documentSymbol` on `lib/game.ts` 端到端 | PASS：返回 16 个符号（applyMove / Board / checkWinner / …） |
 

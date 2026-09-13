@@ -12,7 +12,7 @@
   4. 测试间状态需手动复位
 - 用户最新指令："回归直接 import（更简单）"——指测试接缝那一坨
 - **硬约束**：本地 file: 启动不变；线上 Turso HTTP 启动不变。改动必须**功能不变**，由显式验证保证
-- Vercel 项目状态：旧 alias `ulw-demo.vercel.app` 还在 project domains list；最新 production `dpl_AToyuvD1HY7PakBw6KGKDNRMJ2v5` 还挂着 `tic-tac-toe-onepisyas-projects.vercel.app` canonical alias
+- Vercel 项目状态：旧 alias `ulw-demo.vercel.app` 还在 project domains list；最新 production `dpl_<deployment-id>` 还挂着 `tic-tac-toe-onepisyas-projects.vercel.app` canonical alias
 - `3t-tic-tac-toe.vercel.app` 已是 verified project-level domain，自动 follow production deployment
 
 ## Goal
@@ -131,8 +131,8 @@ E. **功能不变（hard guarantee）**：本地 `pnpm build && pnpm start` 启�
 11. **C3 跑远程 4 步 curl**（即 B2 的实施步骤）
 12. **C4 删除旧 project domain**：`ulw-demo.vercel.app` → `DELETE https://api.vercel.com/v10/projects/{id}/domains/ulw-demo.vercel.app`
 13. **C5 给所有旧 deployment 加 protection + expiration 30 day**：
-    - 旧 production deployment：`dpl_AToyuvD1HY7PakBw6KGKDNRMJ2v5`
-    - 早期 production deployment：`dpl_5F6CpuPqu8v7VFPc2KmmpGfzncTa`
+    - 旧 production deployment：`dpl_<deployment-id>`
+    - 早期 production deployment：`dpl_<deployment-id>`
     - 用 `vercel deployment protect <deployment-url>` 或 PATCH `/v13/deployments/{id}` API
 14. **C6 抓 evidence**：新 deployment ID、production URL、4 步 curl 输出、domain list、protection 状态
 15. **C7 commit 2**：`chore(route): runtime=nodejs 注释扩写（Next 16 Edge 弃用说明）`（route.ts 已存在 unstaged diff）
@@ -142,7 +142,7 @@ E. **功能不变（hard guarantee）**：本地 `pnpm build && pnpm start` 启�
 16. **D1 docs/operations.md §当前部署示例** 表更新：
     - 生产 URL：`https://3t-tic-tac-toe.vercel.app/`（canonical alias，verified project-level domain）
     - runtime：nodejs
-    - 旧 deployment（dpl_AToyuvD1HY7PakBw6KGKDNRMJ2v5、dpl_5F6CpuPqu8v7VFPc2KmmpGfzncTa）：已加 Vercel project protection，30 天后自动过期
+    - 旧 deployment（dpl_<deployment-id>、dpl_<deployment-id>）：已加 Vercel project protection，30 天后自动过期
     - 加"用户访问入口"段：仅 `https://3t-tic-tac-toe.vercel.app/`；旧 `ulw-demo-*` / `tic-tac-toe-onepisyas-projects.*` 30 天后自动失效；过期前 protected
 17. **D2 .omo/plans/vercel-deploy-runbook.md** 末尾追加 "## Final state" 段，引用本 plan
 18. **D3 commit 3**：`chore(docs): 更新当前部署示例与 runtime 状态（3t 单入口 + 旧 deployment 30d protect）`
@@ -224,7 +224,7 @@ E. **功能不变（hard guarantee）**：本地 `pnpm build && pnpm start` 启�
 
 **Vercel 单入口：**
 5. ✅ Vercel project domains 仅 `3t-tic-tac-toe.vercel.app`；`ulw-demo.vercel.app` 已删
-6. ✅ 旧 deployment（`dpl_AToyuvD1HY7PakBw6KGKDNRMJ2v5`、`dpl_5F6CpuPqu8v7VFPc2KmmpGfzncTa`）已加 protect + 30d expiration
+6. ✅ 旧 deployment（`dpl_<deployment-id>`、`dpl_<deployment-id>`）已加 protect + 30d expiration
 7. ✅ 用户唯一可访问 URL：`https://3t-tic-tac-toe.vercel.app/`
 
 **文档与验证：**

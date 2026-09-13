@@ -1,6 +1,6 @@
 # Plan — ulw-demo / 行消融实验（stage 3 落地）
 
-> 工作分支：`cleanup/ulw-ablation`（worktree @ /private/tmp/.zcf/ulw-demo/cleanup）。
+> 工作分支：`cleanup/ulw-ablation`（worktree @ <worktree-root>）。
 > 基线 SHA = fcbde26（main HEAD）。
 > 上游计划：/tmp/ulw-demo-cleanup/plan.md（用户已批准）。
 > 实验记录：/tmp/ulw-demo-cleanup/ablations/R{1..6}-*.md（16 份）。

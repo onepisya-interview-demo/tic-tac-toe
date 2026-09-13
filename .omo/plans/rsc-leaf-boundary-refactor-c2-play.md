@@ -1,6 +1,6 @@
 # Sub-plan: C2 — play page → RSC + extract `<PlayController>`
 
-> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)
+> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)
 > 分支: `refactor/rsc-c2-play`
 > 服务于并行子代理 #2（C1 / C2 / C3 / C5 同时启动；C4 串行）
 > 工作量估算：M（page 改写 + 新组件 + useEffect 顺序论证）

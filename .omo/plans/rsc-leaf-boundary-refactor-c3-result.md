@@ -1,6 +1,6 @@
 # Sub-plan: C3 — result page → RSC + extract `<ResultActions>`
 
-> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](/private/tmp/tic-tac-toe/.omo/plans/rsc-leaf-boundary-refactor.md)
+> Master plan: [`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)
 > 分支: `refactor/rsc-c3-result`
 > 服务于并行子代理 #3（C1 / C2 / C3 / C5 同时启动；C4 串行）
 > 工作量估算：S–M（page 改写 + 1 个新组件 + 与 C1 模式相似）

@@ -1,6 +1,6 @@
 # Plan: Agent Session 隔离硬约束（AGENTS.md § 8 委派协议第 3 条 bullet）
 
-日期：2026-09-12　|　执行：Pi fresh session（herdr 拉起，cwd /private/tmp/tic-tac-toe）
+日期：2026-09-12　|　执行：Pi fresh session（herdr 拉起，cwd <repo-root>）
 
 ## 1. 动机
 
@@ -21,7 +21,7 @@ commitlint.config.cjs / 上一个 plan）而非依赖 stale 假设；每个 sess
 
 ## 2. 目标文件消歧（原 prompt 歧义修正）
 
-- 仓库 /private/tmp/tic-tac-toe/AGENTS.md **没有** § 8 委派协议（已全文核实）。
+- 仓库 <repo-root>/AGENTS.md **没有** § 8 委派协议（已全文核实）。
 - § 8（含"派发子任务时…"+"完成后能回答…（teach-back）"两条 bullet）在全局
   本机 pi agent 配置目录的 AGENTS.md —— symlink → 本机 .codex 配置目录的同名文件，
   § 8 位于 L47-49。

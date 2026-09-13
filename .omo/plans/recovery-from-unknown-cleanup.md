@@ -121,7 +121,7 @@ Phase 2 只读。**在肇因未隔离前，不要让其他 herdr pane 对本仓�
 前置：Phase 1 判停条件未触发；`/tmp/pre-recovery-status-*.txt` 已留底。
 
 ```bash
-cd /private/tmp/tic-tac-toe
+cd <repo-root>
 # 只恢复"index 有、worktree 缺"的文件，不碰 untracked/ignored：
 git ls-files -d -z | xargs -0 git checkout HEAD --
 # 验证：

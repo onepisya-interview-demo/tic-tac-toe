@@ -1,6 +1,6 @@
 # 井字棋 (tic-tac-toe)
 
-> 适用：本仓库 main 分支、Node.js ≥ 20、pnpm ≥ 10、Turso CLI ≥ 0.100。
+> 适用：本仓库 main 分支、Node.js 24（与 engines / .nvmrc / CI 一致）、pnpm ≥ 10、Turso CLI ≥ 0.100。
 
 <p align="left">
   <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
@@ -128,7 +128,7 @@ public/               静态资源 (logo / favicon)
 
 **离线能玩吗？** 走棋可以（前端规则不依赖网络），但战绩落库需 `POST /api/stats/outcome`；
 离线时玩的一局战绩会丢，下次上线 PUT/DELETE 不补。Vercel Analytics 噪声
-（POST 到 `5376560351325243/view`）无法消除，是 Vercel 平台侧注入的 beacon。
+（POST 到 `<vercel-analytics-sandbox-id>/view`）无法消除，是 Vercel 平台侧注入的 beacon。
 
 **怎么清战绩？** 首页"重置战绩"按钮调用 `DELETE /api/stats`，单行表 id=1
 会被清零；本地 UI 状态不依赖服务端响应也能保持正确。

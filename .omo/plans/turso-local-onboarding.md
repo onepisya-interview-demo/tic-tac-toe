@@ -103,63 +103,63 @@ User-actionable phase between Wave 1 and Wave 2 (PHASE B):
 - [ ] 1. Fill in plan file: ## Scope + ## Verification + ## Execution + ## Todos APPEND + ## Final verification wave + ## Commit + ## Success + ## TL;DR
   What to do / Must NOT do: Preserve script-emitted headers verbatim; fill all body placeholders; append 10 task rows to ## Todos; append F1-F4 to ## Final verification wave; fill ## Commit strategy + ## Success criteria; fill ## TL;DR last.
   Parallelization: Wave 1 | Blocked by: nothing | Blocks: nothing
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/.omo/plans/turso-local-onboarding.md (this file, current scaffolded template)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/.omo/plans/turso-local-onboarding.md (this file, current scaffolded template)
   Acceptance criteria (agent-executable): file has zero `<fill ...>` placeholders remaining; `## Todos` contains 10 numbered task rows in column-zero `- [ ] N. <title>` format; `## Final verification wave` contains 4 F-rows in column-zero `- [ ] F<number>. <title>` format; `## TL;DR (For humans)` body is filled with non-placeholder content; `## Scope`, `## Verification strategy`, `## Execution strategy`, `## Commit strategy`, `## Success criteria` all have non-empty bodies.
-  QA scenarios (name the exact tool + invocation): happy: `grep -c '<fill' /private/tmp/ulw-demo/.omo/plans/turso-local-onboarding.md` returns 0. happy: `grep -cE '^- \[ \] [0-9]+\.' /private/tmp/ulw-demo/.omo/plans/turso-local-onboarding.md` returns 10. happy: `grep -cE '^- \[ \] F[0-9]+\.' /private/tmp/ulw-demo/.omo/plans/turso-local-onboarding.md` returns 4. Evidence: .omx/evidence/local-turso-smoke/task-1-plan-filled.txt (capture grep output)
+  QA scenarios (name the exact tool + invocation): happy: `grep -c '<fill' <本地演示目录>/.omo/plans/turso-local-onboarding.md` returns 0. happy: `grep -cE '^- \[ \] [0-9]+\.' <本地演示目录>/.omo/plans/turso-local-onboarding.md` returns 10. happy: `grep -cE '^- \[ \] F[0-9]+\.' <本地演示目录>/.omo/plans/turso-local-onboarding.md` returns 4. Evidence: .omx/evidence/local-turso-smoke/task-1-plan-filled.txt (capture grep output)
   Commit: N | (no commit; this is a meta task)
 
 - [ ] 2. Create .env.local with placeholder values
   What to do / Must NOT do: Write exactly two lines, `DATABASE_URL=libsql://<your-db-name>.turso.io` and `DATABASE_AUTH_TOKEN=<paste-your-turso-jwt-here>`. Do NOT put real secrets; placeholders only. Do NOT modify .env.example. Do NOT add a trailing newline-only file (must end with a newline).
   Parallelization: Wave 1 | Blocked by: nothing | Blocks: 3, 4, 5, 6, 7
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/.env.example (template structure to mirror); /private/tmp/ulw-demo/.gitignore:45-50 (must be ignored)
-  Acceptance criteria (agent-executable): `cat /private/tmp/ulw-demo/.env.local` shows two non-comment lines, each with `<...>` placeholder syntax. `wc -l /private/tmp/ulw-demo/.env.local` >= 2.
-  QA scenarios (name the exact tool + invocation): happy: `grep -c '^DATABASE_URL=libsql://<your-db-name>.turso.io$' /private/tmp/ulw-demo/.env.local` returns 1. happy: `grep -c '^DATABASE_AUTH_TOKEN=<paste-your-turso-jwt-here>$' /private/tmp/ulw-demo/.env.local` returns 1. Evidence: .omx/evidence/local-turso-smoke/task-2-env-local.txt (capture `cat` output)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/.env.example (template structure to mirror); <本地演示目录>/.gitignore:45-50 (must be ignored)
+  Acceptance criteria (agent-executable): `cat <本地演示目录>/.env.local` shows two non-comment lines, each with `<...>` placeholder syntax. `wc -l <本地演示目录>/.env.local` >= 2.
+  QA scenarios (name the exact tool + invocation): happy: `grep -c '^DATABASE_URL=libsql://<your-db-name>.turso.io$' <本地演示目录>/.env.local` returns 1. happy: `grep -c '^DATABASE_AUTH_TOKEN=<paste-your-turso-jwt-here>$' <本地演示目录>/.env.local` returns 1. Evidence: .omx/evidence/local-turso-smoke/task-2-env-local.txt (capture `cat` output)
   Commit: N | (rolled into final commit at task 9)
 
 - [ ] 3. Verify .env.local is gitignored
   What to do / Must NOT do: Run `git check-ignore -v .env.local` from the repo root. Expect exit 0 and a printed line referencing `.gitignore`. Do NOT modify .gitignore (it already covers .env.local at :45-50). Do NOT add .env.local to the index.
   Parallelization: Wave 1 | Blocked by: 2 | Blocks: 9
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/.gitignore:45-50 (the matching rule family)
-  Acceptance criteria (agent-executable): `git check-ignore -v /private/tmp/ulw-demo/.env.local` exits 0 and prints a line like `.gitignore:46:.env.local\t.env.local`.
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/.gitignore:45-50 (the matching rule family)
+  Acceptance criteria (agent-executable): `git check-ignore -v <本地演示目录>/.env.local` exits 0 and prints a line like `.gitignore:46:.env.local\t.env.local`.
   QA scenarios (name the exact tool + invocation): happy: `git check-ignore -v .env.local; echo "exit=$?"` shows exit=0 and the .gitignore rule. Evidence: .omx/evidence/local-turso-smoke/task-3-gitignore.txt
   Commit: N | (verification only)
 
 - [ ] 4. Verify lib/db.ts reads env vars correctly
   What to do / Must NOT do: Confirm `lib/db.ts:41-42` reads `process.env.DATABASE_URL` and `process.env.DATABASE_AUTH_TOKEN`. Do NOT modify lib/db.ts — the wiring is already correct from the prior `turso-libsql-http.md` migration. Do NOT add fail-fast validation in scope.
   Parallelization: Wave 1 | Blocked by: nothing | Blocks: 9
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/lib/db.ts:41-42 (env-var reads); /private/tmp/ulw-demo/lib/db.ts:47-65 (three-branch URL resolution); /private/tmp/ulw-demo/tests/db/db.test.ts:131,159,200 (assertions for all branches)
-  Acceptance criteria (agent-executable): `grep -n 'process.env.DATABASE_URL\|process.env.DATABASE_AUTH_TOKEN' /private/tmp/ulw-demo/lib/db.ts` returns lines 41 and 42. `grep -n 'turso' /private/tmp/ulw-demo/lib/db.ts` shows no syntax error.
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/lib/db.ts:41-42 (env-var reads); <本地演示目录>/lib/db.ts:47-65 (three-branch URL resolution); <本地演示目录>/tests/db/db.test.ts:131,159,200 (assertions for all branches)
+  Acceptance criteria (agent-executable): `grep -n 'process.env.DATABASE_URL\|process.env.DATABASE_AUTH_TOKEN' <本地演示目录>/lib/db.ts` returns lines 41 and 42. `grep -n 'turso' <本地演示目录>/lib/db.ts` shows no syntax error.
   QA scenarios (name the exact tool + invocation): happy: grep returns two matches at lines 41 and 42. Evidence: .omx/evidence/local-turso-smoke/task-4-lib-db.txt
   Commit: N | (verification only)
 
 - [ ] 5. Create docs/local-turso-setup.md
   What to do / Must NOT do: New file. Sections required: prereqs (turso CLI install, `turso auth login`), create db (exact command, region), get URL (`turso db show --url`), get token (`turso db tokens create`), write `.env.local` (paste URL + JWT), runtime smoke (`pnpm start` + three curl commands), teardown (`turso db destroy`), troubleshooting (token expired, region mismatch, file: URL leakage, auth 401/403). Match existing docs/operations.md prose style. Do NOT duplicate Vercel deployment content (that lives in README §部署). Do NOT include real Turso credentials in the doc.
   Parallelization: Wave 1 | Blocked by: nothing | Blocks: 6, 7
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/docs/operations.md (prose style, section structure); /private/tmp/ulw-demo/README.md:124-144 (existing Turso Vercel-deploy doc to NOT duplicate); /private/tmp/ulw-demo/lib/db.ts:41-65 (URL resolution behavior to reference)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/docs/operations.md (prose style, section structure); <本地演示目录>/README.md:124-144 (existing Turso Vercel-deploy doc to NOT duplicate); <本地演示目录>/lib/db.ts:41-65 (URL resolution behavior to reference)
   Acceptance criteria (agent-executable): file exists; `wc -l >= 80`; contains at least these exact section headers: "## 前置", "## 建库", "## 取 URL", "## 取 token", "## 写入 .env.local", "## 冒烟", "## 拆除", "## 排错"; contains the placeholder DB name `tic-tac-toe-onepisya` and region `aws-us-east-1`; contains `turso db create tic-tac-toe-onepisya --location aws-us-east-1` as a code block.
-  QA scenarios (name the exact tool + invocation): happy: `grep -cE '^## (前置|建库|取 URL|取 token|写入 .env.local|冒烟|拆除|排错)$' /private/tmp/ulw-demo/docs/local-turso-setup.md` returns 8. happy: `grep -c 'tic-tac-toe-onepisya' /private/tmp/ulw-demo/docs/local-turso-setup.md` >= 3. Evidence: .omx/evidence/local-turso-smoke/task-5-doc.txt (capture `wc -l` + `grep -c` outputs)
+  QA scenarios (name the exact tool + invocation): happy: `grep -cE '^## (前置|建库|取 URL|取 token|写入 .env.local|冒烟|拆除|排错)$' <本地演示目录>/docs/local-turso-setup.md` returns 8. happy: `grep -c 'tic-tac-toe-onepisya' <本地演示目录>/docs/local-turso-setup.md` >= 3. Evidence: .omx/evidence/local-turso-smoke/task-5-doc.txt (capture `wc -l` + `grep -c` outputs)
   Commit: N | (rolled into final commit at task 9)
 
 - [ ] 6. Add "本地联调 Turso" cross-link in README.md §本地开发
   What to do / Must NOT do: Insert a single line linking to `docs/local-turso-setup.md` inside the existing `## 本地开发` section (currently README.md:42-51). Do NOT rewrite the section, do NOT touch §部署 (Vercel, README.md:124-144). Match existing Chinese prose tone.
   Parallelization: Wave 1 | Blocked by: 5 | Blocks: 9
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/README.md:42-51 (target section); /private/tmp/ulw-demo/docs/local-turso-setup.md (link target)
-  Acceptance criteria (agent-executable): `grep -n 'local-turso-setup' /private/tmp/ulw-demo/README.md` returns >= 1 match inside the 本地开发 section.
-  QA scenarios (name the exact tool + invocation): happy: `awk '/^## 本地开发/,/^## /' /private/tmp/ulw-demo/README.md | grep -c 'local-turso-setup'` returns >= 1. Evidence: .omx/evidence/local-turso-smoke/task-6-readme.txt
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/README.md:42-51 (target section); <本地演示目录>/docs/local-turso-setup.md (link target)
+  Acceptance criteria (agent-executable): `grep -n 'local-turso-setup' <本地演示目录>/README.md` returns >= 1 match inside the 本地开发 section.
+  QA scenarios (name the exact tool + invocation): happy: `awk '/^## 本地开发/,/^## /' <本地演示目录>/README.md | grep -c 'local-turso-setup'` returns >= 1. Evidence: .omx/evidence/local-turso-smoke/task-6-readme.txt
   Commit: N | (rolled into final commit at task 9)
 
 - [ ] 7. Add "本地联调 Turso" cross-link in docs/operations.md §环境变量
   What to do / Must NOT do: Insert a single line linking to `docs/local-turso-setup.md` inside the existing `## 环境变量` section (currently docs/operations.md:7-17). Do NOT rewrite the section, do NOT duplicate the env-var contract text.
   Parallelization: Wave 1 | Blocked by: 5 | Blocks: 9
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/docs/operations.md:7-17 (target section); /private/tmp/ulw-demo/docs/local-turso-setup.md (link target)
-  Acceptance criteria (agent-executable): `grep -n 'local-turso-setup' /private/tmp/ulw-demo/docs/operations.md` returns >= 1 match inside the 环境变量 section.
-  QA scenarios (name the exact tool + invocation): happy: `awk '/^## 环境变量/,/^## /' /private/tmp/ulw-demo/docs/operations.md | grep -c 'local-turso-setup'` returns >= 1. Evidence: .omx/evidence/local-turso-smoke/task-7-operations.txt
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/docs/operations.md:7-17 (target section); <本地演示目录>/docs/local-turso-setup.md (link target)
+  Acceptance criteria (agent-executable): `grep -n 'local-turso-setup' <本地演示目录>/docs/operations.md` returns >= 1 match inside the 环境变量 section.
+  QA scenarios (name the exact tool + invocation): happy: `awk '/^## 环境变量/,/^## /' <本地演示目录>/docs/operations.md | grep -c 'local-turso-setup'` returns >= 1. Evidence: .omx/evidence/local-turso-smoke/task-7-operations.txt
   Commit: N | (rolled into final commit at task 9)
 
 - [ ] 8. Run static verification: pnpm typecheck && pnpm lint && pnpm vitest run
-  What to do / Must NOT do: Run all three commands sequentially from /private/tmp/ulw-demo. All must exit 0. Do NOT use `--no-verify` or any flag that bypasses checks. Do NOT modify tests, package.json, or build config to make things pass.
+  What to do / Must NOT do: Run all three commands sequentially from <本地演示目录>. All must exit 0. Do NOT use `--no-verify` or any flag that bypasses checks. Do NOT modify tests, package.json, or build config to make things pass.
   Parallelization: Wave 2 | Blocked by: 1-7 + user B5 | Blocks: 9 (smoke)
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/package.json (scripts: typecheck, lint, test); /private/tmp/ulw-demo/vitest.config.ts (thresholds); /private/tmp/ulw-demo/eslint.config.mjs (lint rules)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/package.json (scripts: typecheck, lint, test); <本地演示目录>/vitest.config.ts (thresholds); <本地演示目录>/eslint.config.mjs (lint rules)
   Acceptance criteria (agent-executable): `pnpm typecheck` exits 0; `pnpm lint` exits 0; `pnpm vitest run` exits 0 with "100% pass" or equivalent; combined exit code is 0.
   QA scenarios (name the exact tool + invocation): happy: `pnpm typecheck && pnpm lint && pnpm vitest run; echo "combined=$?"` shows combined=0. failure: any non-zero exit fails this task. Evidence: .omx/evidence/local-turso-smoke/task-8-static.txt
   Commit: N | (rolled into final commit at task 9)
@@ -167,7 +167,7 @@ User-actionable phase between Wave 1 and Wave 2 (PHASE B):
 - [x] 9. Runtime smoke: pnpm start + curl /api/stats GET/PUT/GET + turso db shell SELECT  (DONE 2026-09-08)
   What to do / Must NOT do: Start `pnpm start` in background, capture pid. Wait until localhost:3000 responds (poll up to 60s; build already done). Run `curl -s http://localhost:3000/api/stats` (expect zero stats). Run `curl -X PUT -H 'content-type: application/json' -d '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1}' http://localhost:3000/api/stats` (expect 200 + echoed body). Re-run GET (expect {totalGames:1, xWins:1, ...}). Then `turso db shell tic-tac-toe-onepisya "SELECT * FROM game_stats;"` (expect one row with the inserted values). Kill pnpm start pid, verify `kill -0 <pid>` fails. Do NOT skip the kill. Do NOT use `nohup` or detached processes. Do NOT leave a bound port on :3000.
   Parallelization: Wave 2 | Blocked by: 8 | Blocks: 10
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/app/api/stats/route.ts:23-44 (handler shapes); /private/tmp/ulw-demo/lib/db.ts (load/save/reset semantics); /private/tmp/ulw-demo/.env.local (must already be filled with real values from PHASE B)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/app/api/stats/route.ts:23-44 (handler shapes); <本地演示目录>/lib/db.ts (load/save/reset semantics); <本地演示目录>/.env.local (must already be filled with real values from PHASE B)
   Acceptance criteria (agent-executable): all four curl/shell commands succeed; first GET shows zeros, PUT returns 200, second GET shows the inserted stats, turso db shell returns one row. `kill -0 <pnpm-start-pid>` returns non-zero after the kill. `lsof -i :3000` is empty.
   QA scenarios (name the exact tool + invocation): happy: full round-trip captured; failure: any 4xx/5xx from /api/stats or empty turso shell output fails this task. Evidence: .omx/evidence/local-turso-smoke/task-9-smoke.txt + .omx/evidence/local-turso-smoke/task-9-turso-shell.txt
   Commit: N | (rolled into final commit at task 10)
@@ -175,7 +175,7 @@ User-actionable phase between Wave 1 and Wave 2 (PHASE B):
 - [ ] 10. Commit as single lore-protocol chore with Plan footer  (IN PROGRESS)
   What to do / Must NOT do: `git add` ONLY these 4 paths: `README.md`, `docs/operations.md`, `docs/local-turso-setup.md`, `.omo/plans/turso-local-onboarding.md`. Do NOT add `.env.local` (it is gitignored by .gitignore:45-50 and must STAY local — committing a `.env.local` template is a footgun: once the user pastes real values, the local file becomes `modified` relative to HEAD, and a careless `git add -A` leaks the Turso token). Verify with `git status -s` before commit — only the 4 paths above should appear. Subject: `chore(docs): wire local Turso onboarding doc + cross-links`. Body: WHAT / WHY / HOW three sections. Footer: `Plan: .omo/plans/turso-local-onboarding.md` plus the project's lore trailers (Confidence: high, Scope-risk: narrow, Directive:, Tested:, Not-tested:). Do NOT use `git commit --no-verify`. Do NOT use `git add -A` or `git add .` (broad add risk). Do NOT commit secrets (sanity check: `grep -E 'eyJ[A-Za-z0-9_-]{20,}' .env.local` returns 0).
   Parallelization: Wave 3 | Blocked by: 9 | Blocks: 11
-  References (executor has NO interview context - be exhaustive): /private/tmp/ulw-demo/.git/hooks/commit-msg (must pass commit-audit); /private/tmp/ulw-demo/tests/qa/commit-audit.mjs (the audit script invoked by the hook); /private/tmp/ulw-demo/commitlint.config.cjs (subject rules); /private/tmp/ulw-demo/.omo/plans/turso-local-onboarding.md (the Plan: footer target)
+  References (executor has NO interview context - be exhaustive): <本地演示目录>/.git/hooks/commit-msg (must pass commit-audit); <本地演示目录>/tests/qa/commit-audit.mjs (the audit script invoked by the hook); <本地演示目录>/commitlint.config.cjs (subject rules); <本地演示目录>/.omo/plans/turso-local-onboarding.md (the Plan: footer target)
   Acceptance criteria (agent-executable): `git log -1 --format='%s'` starts with `chore(env):`. Body contains WHAT / WHY / HOW. Footer contains `Plan: .omo/plans/turso-local-onboarding.md`. `git show --stat HEAD` shows the expected files. `git log -1 --format='%B' | grep -c 'Confidence: high'` returns 1.
   QA scenarios (name the exact tool + invocation): happy: `git log -1 --format='%s%n---%n%b' | head -50` shows the expected subject + body + footer. failure: commit-msg hook rejection (run `node tests/qa/commit-audit.mjs --message-file <draft>` first). Evidence: .omx/evidence/local-turso-smoke/task-10-commit.txt (capture `git log -1` output)
   Commit: Y | chore(docs): wire local Turso onboarding doc + cross-links
@@ -218,7 +218,7 @@ Commit must pass `node tests/qa/commit-audit.mjs --message-file <draft>` before 
 
 The run is done when ALL of the following hold:
 
-1. `.env.local` exists at `/private/tmp/ulw-demo/.env.local` populated with REAL values (libsql://tic-tac-toe-onepisya-onepisya.aws-us-east-1.turso.io + a 348-char JWT) written by the agent from `turso db show --url` + `turso db tokens create`. File is chmod 600, local-only, NOT in the commit diff (verified via `git show --stat HEAD` not listing `.env.local`). The committed template is `.env.example`; users bootstrap via `cp .env.example .env.local` per docs/local-turso-setup.md.
+1. `.env.local` exists at `<本地演示目录>/.env.local` populated with REAL values (libsql://tic-tac-toe-onepisya-onepisya.aws-us-east-1.turso.io + a 348-char JWT) written by the agent from `turso db show --url` + `turso db tokens create`. File is chmod 600, local-only, NOT in the commit diff (verified via `git show --stat HEAD` not listing `.env.local`). The committed template is `.env.example`; users bootstrap via `cp .env.example .env.local` per docs/local-turso-setup.md.
 2. `git check-ignore -v .env.local` exits 0 and prints the `.gitignore:46` rule.
 3. `lib/db.ts:41-42` reads both env vars (no code change required; just verified).
 4. `docs/local-turso-setup.md` exists with all 8 required section headers and the placeholder DB name / region.
