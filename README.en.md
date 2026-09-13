@@ -45,8 +45,9 @@ Turso HTTP on Vercel).
   Vercel (@libsql/client).
 - 🌒 **Dark-first**: built on Tailwind v4 design tokens; desktop-first,
   mobile works but is not the target.
-- ⌨️ **Keyboard-first**: the board uses roving focus — arrow keys move
-  focus between cells, Enter/Space places a mark; gameplay needs no mouse.
+- ⌨️ **Keyboard-first**: the board uses roving focus — Tab enters the
+  board, arrow keys move focus between cells, Enter/Space places a mark;
+  gameplay needs no mouse.
 - 🔇 **Lazy audio**: AudioContext is created only after the first user
   gesture; off by default and persisted.
 - ✨ **Accessible confetti**: a no-motion path under

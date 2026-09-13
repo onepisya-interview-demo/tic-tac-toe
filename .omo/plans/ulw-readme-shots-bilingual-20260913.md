@@ -38,3 +38,9 @@
 「回溯」无撤销实现（grep undo/history 零命中），导航钮仅原生 Tab 可达。
 两档措辞已收敛为实测之键：中「游玩无需鼠标」/英「gameplay needs no
 mouse」，不越表格之实。
+
+## 更正附录二（2026-09-13 主公追问 Tab）
+
+首更正漏「Tab 入盘」一步。码证：Board.tsx:97 九格唯焦点格 tabIndex=0
+（phase='playing' 时），且无 mount 自动聚焦（focus() 仅在箭头处理内），
+Tab 乃入盘唯一之门。两档补「Tab 入盘 / Tab enters the board」。
