@@ -118,6 +118,7 @@ public/               静态资源 (logo / favicon)
 | [docs/testing.md](docs/testing.md) | 测试思路：分层策略、阈值、RED-first、QA 探针设计 |
 | [docs/operations.md](docs/operations.md) | 操作手册：日常命令、DB、QA、提交规范速查、排错 |
 | [docs/learnings.md](docs/learnings.md) | 学习笔记：踩坑记录与版本相关事项 |
+| [docs/branching.md](docs/branching.md) | 分支策略：trunk-based、双 Ruleset、协作演进 |
 
 ## FAQ
 
