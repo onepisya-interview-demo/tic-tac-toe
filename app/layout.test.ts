@@ -22,19 +22,25 @@ const LAYOUT_SRC = readFileSync(
 );
 
 describe("app/layout metadata — share preview contract", () => {
-  it("declares openGraph with a 1280x640 social-card image", () => {
+  it("declares openGraph with a 1280x640 social-card image and canonical URL", () => {
     expect(LAYOUT_SRC).toMatch(/openGraph\s*:/);
     expect(LAYOUT_SRC).toMatch(/siteName\s*:\s*"井字棋"/);
+    // Canonical absolute URL — explicit so crawlers see the public
+    // onepis.net domain instead of the Vercel deployment host.
+    expect(LAYOUT_SRC).toMatch(/url\s*:\s*"https:\/\/3t\.onepis\.net\/"/);
     // Image source must be the public/ copy served at /social-card.png
     expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card\.png"/);
     expect(LAYOUT_SRC).toMatch(/width\s*:\s*1280/);
     expect(LAYOUT_SRC).toMatch(/height\s*:\s*640/);
   });
 
-  it("declares twitter card=summary_large_image with the social-card image", () => {
+  it("declares twitter card=summary_large_image with creator+site attribution", () => {
     expect(LAYOUT_SRC).toMatch(/twitter\s*:/);
     expect(LAYOUT_SRC).toMatch(/card\s*:\s*"summary_large_image"/);
     expect(LAYOUT_SRC).toMatch(/images\s*:\s*\[\s*"\/social-card\.png"\s*\]/);
+    // Attribution handles — main公 X: https://x.com/onepisya
+    expect(LAYOUT_SRC).toMatch(/creator\s*:\s*"@onepisya"/);
+    expect(LAYOUT_SRC).toMatch(/site\s*:\s*"@onepisya"/);
   });
 
   it("keeps metadataBase pointing at the Vercel canonical host", () => {

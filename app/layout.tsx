@@ -38,6 +38,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "井字棋",
+    // Canonical: explicit absolute so crawlers see the public onepis.net
+    // domain (metadataBase stays at the vercel.app host so Vercel edge
+    // follows the cname automatically). All three routes share this
+    // canonical — the share-card is intentionally a single product URL.
+    url: "https://3t.onepis.net/",
     title: "井字棋 · 同设备 pass-and-play",
     description: "两人同设备轮流下的井字棋，自动记录战绩。",
     images: [
@@ -54,6 +59,8 @@ export const metadata: Metadata = {
     title: "井字棋 · 同设备 pass-and-play",
     description: "两人同设备轮流下的井字棋，自动记录战绩。",
     images: ["/social-card.png"],
+    creator: "@onepisya",
+    site: "@onepisya",
   },
 };
 
