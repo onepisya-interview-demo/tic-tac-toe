@@ -56,7 +56,27 @@ agent：git checkout main && git pull --ff-only
 - **基础设施 / 配置类 commit**（subject 含 `ci(` / `chore(deps):` 等）：主公示下亦可走 direct push。
 - **代码类 commit**（subject 含 `feat` / `fix` / `refactor` / `perf` / `test` / `build` / `style`）：必须走 PR。
 
-Vercel 部署同样：docs commit 由 `vercel.json` `ignoredBuildStep` 自动跳过；其他 commit 正常 deploy。
+Vercel 部署同样：docs commit 由 `vercel.json` `ignoreCommand` 跳过；其他 commit 正常 deploy。
+
+## 核心目录约定（Vercel build 决策）
+
+`scripts/vercel-ignore-build.sh` 是 Vercel build 决策的 **single source of truth**。`CORE_PATH_RE` 变量列出改后需 build 的路径：
+
+```
+^(app|src/app|pages|src/pages|public|src/public|components|src/components|
+ lib|src/lib|db|src/db|styles|src/styles)/|
+^(middleware\.ts|middleware\.js)$|
+^package\.json$|^next\.config(\.[a-z]+)?$|^tsconfig\.json$
+```
+
+支持 root-level 与 `src/`-prefixed Next.js 双 layout。
+
+**新增核心目录时**（如 `src/styles/`、新 middleware、配置文件等）：
+- 必在引入该目录的同一 commit 同步更新 `CORE_PATH_RE`
+- 必同步 `scripts/vercel-ignore-build.test.sh` 加该 commit 的预期 exit code
+- 必跑 `bash scripts/vercel-ignore-build.test.sh` 全绿再 commit
+
+测试套会 replay 仓历史 commit 验脚本行为不变——新增目录后跑测试是回归保障。
 
 ## PR description 模板
 
