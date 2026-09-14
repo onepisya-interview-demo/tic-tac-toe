@@ -31,6 +31,30 @@ export const metadata: Metadata = {
   // `appleWebApp`. Plan: .omo/plans/pwa-install-experience.md.
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "井字棋", statusBarStyle: "black" },
+  // Open Graph + Twitter card — share previews for X / IM / Slack.
+  // Source asset: public/social-card.png (mirror of docs/social-card.png;
+  // GitHub Social Preview uses the docs/ copy via repository-images host).
+  // Plan: .omo/plans/ulw-seo-meta-20260914.md.
+  openGraph: {
+    type: "website",
+    siteName: "井字棋",
+    title: "井字棋 · 同设备 pass-and-play",
+    description: "两人同设备轮流下的井字棋，自动记录战绩。",
+    images: [
+      {
+        url: "/social-card.png",
+        width: 1280,
+        height: 640,
+        alt: "井字棋 · tic-tac-toe 分享卡（暗底三帧拼版）",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "井字棋 · 同设备 pass-and-play",
+    description: "两人同设备轮流下的井字棋，自动记录战绩。",
+    images: ["/social-card.png"],
+  },
 };
 
 export const viewport: Viewport = {
