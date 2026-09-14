@@ -13,8 +13,8 @@
   <a href="https://vitest.dev"><img alt="Vitest" src="https://img.shields.io/badge/tested%20with-Vitest-6E9F18.svg"></a>
 </p>
 
-两人同设备 pass-and-play 的井字棋小游戏，自动记录战绩。Web app，桌面优先，
-暗色克制工程师感 (Linear + Vercel 风)。
+两人同设备 pass-and-play 对战 + 单机练习双模式的井字棋小游戏，自动记录战绩。
+Web app，桌面优先，暗色克制工程师感 (Linear + Vercel 风)。
 
 技术栈：Next.js 16 (App Router) + React 19 + TypeScript (strict) + Tailwind v4
 + Zustand + Drizzle ORM + @libsql/client（本地 file: sqlite / Vercel 走
@@ -22,9 +22,9 @@ Turso HTTP）。
 
 ## 预览
 
-| 首页 | 对局 | 结算（胜局彩纸） |
-| --- | --- | --- |
-| ![首页](docs/screenshots/home.png) | ![对局](docs/screenshots/board.png) | ![结算](docs/screenshots/result.png) |
+| 首页 | 对局 | 结算（胜局彩纸） | 单机练习 |
+| --- | --- | --- | --- |
+| ![首页](docs/screenshots/home.png) | ![对局](docs/screenshots/board.png) | ![结算](docs/screenshots/result.png) | ![单机练习](docs/screenshots/solo.png) |
 
 ## Quick start
 
@@ -36,13 +36,16 @@ Turso HTTP）。
 
 ## Features
 
-- 🎯 **Pass-and-play**：两人同设备轮流下；战绩需网络持久化（见 FAQ）。
-- 💾 **战绩持久化**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
+- 🎯 **双模式**：**ranked 对战**——两人同设备 pass-and-play 轮流下，战绩经服务端持久化；
+  **solo 单机练习**——战绩存浏览器 localStorage，零服务端写，离线也能完整计分。
+- 💾 **战绩持久化（ranked）**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
 - ⌨️ **键盘优先**：棋盘使用 roving focus——Tab 入盘，↑↓←→ 移焦邻格，Enter/空格落子，游玩无需鼠标。
 - 🔇 **音效懒加载**：AudioContext 仅在用户首次手势后创建，默认关闭且持久化。
 - ✨ **彩纸无障碍**：`prefers-reduced-motion` 下走无动效路径，data-testid 稳定。
+- 🎞️ **页面过渡**：四页路由切换由 React 19 `<ViewTransition>` 驱动双向
+  crossfade，旧浏览器自动降级为无过渡。
 - 🧪 **Gauntlet 测试栈**：vitest + fast-check（属性）+ Stryker（突变）+ commitlint
   + commit-audit，强制单测 80% 行 / 70% 分支。
 - 🚀 **Vercel-ready**：`@libsql/client` 的 http(s) 分支在 Vercel serverless 上
@@ -54,6 +57,7 @@ Turso HTTP）。
 | --- | --- |
 | `/` | 首页：战绩卡片 + 开始游戏 + 重置战绩 |
 | `/play` | 游戏页：3x3 棋盘 + 当前玩家指示 + 重新开局 |
+| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板 + 清空本地战绩（零网络写） |
 | `/result` | 结算页：胜负结果 + 再来一局 + 返回首页 + 重置战绩 |
 | `GET /api/stats` | 读战绩 (Node runtime) |
 | `PUT /api/stats` | 写战绩 seed / admin（@deprecated；客户端走 POST outcome） |
@@ -97,6 +101,7 @@ app/                  App Router 路由 + API route handler
   layout.tsx          字体 (Geist / Geist Mono) + 暗色基底
   page.tsx            首页 (Client)
   play/page.tsx       游戏页 (Client)
+  solo/page.tsx       单机练习页 (Server Component)
   result/page.tsx     结算页 (Client)
   api/stats/route.ts  /api/stats (GET/PUT/DELETE, await lib/db)
   globals.css         @theme tokens, 暗色基底

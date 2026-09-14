@@ -1,6 +1,11 @@
 // Visual + functional QA via Playwright.
 // Runs against the production server on http://localhost:3000.
 // Captures one screenshot per route + a play-through ending in a win.
+// The /solo stage (added for ulw-solo-mode-split-view-transitions C6)
+// navigates to the new solo-practice route so every route documented in
+// the README preview has a screenshot; the solo gameplay contract itself
+// (zero network writes, localStorage persistence) stays covered by
+// tests/qa/solo-mode-qa.mjs — this probe only needs the visual.
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
@@ -129,6 +134,15 @@ async function main() {
   const replayShot = await shoot(page, '05-play-again.png');
   const replaySnap = await snapshot(page);
   log.push({ stage: 'play-again', shot: replayShot, snapshot: replaySnap });
+
+  // ---- 7. /solo route screenshot (solo practice; no writes by contract) ----
+  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForSelector('[data-testid="solo-stats"]');
+  await page.waitForTimeout(200);
+  const soloShot = await shoot(page, '06-solo.png');
+  const soloSnap = await snapshot(page);
+  log.push({ stage: 'solo', shot: soloShot, snapshot: soloSnap });
 
   await ctx.close();
   await browser.close();

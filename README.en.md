@@ -14,9 +14,10 @@
   <a href="https://vitest.dev"><img alt="Vitest" src="https://img.shields.io/badge/tested%20with-Vitest-6E9F18.svg"></a>
 </p>
 
-A two-player, same-device pass-and-play tic-tac-toe game with automatic
-score tracking. Web app, desktop-first, with a restrained dark engineer
-aesthetic (Linear + Vercel style).
+A tic-tac-toe game with two modes — two-player, same-device pass-and-play
+versus and solo practice — with automatic score tracking. Web app,
+desktop-first, with a restrained dark engineer aesthetic (Linear + Vercel
+style).
 
 Stack: Next.js 16 (App Router) + React 19 + TypeScript (strict) +
 Tailwind v4 + Zustand + Drizzle ORM + @libsql/client (local file: sqlite /
@@ -24,9 +25,9 @@ Turso HTTP on Vercel).
 
 ## Preview
 
-| Home | Play | Result (win confetti) |
-| --- | --- | --- |
-| ![Home](docs/screenshots/home.png) | ![Play](docs/screenshots/board.png) | ![Result](docs/screenshots/result.png) |
+| Home | Play | Result (win confetti) | Solo practice |
+| --- | --- | --- | --- |
+| ![Home](docs/screenshots/home.png) | ![Play](docs/screenshots/board.png) | ![Result](docs/screenshots/result.png) | ![Solo practice](docs/screenshots/solo.png) |
 
 ## Quick start
 
@@ -38,10 +39,12 @@ Turso HTTP on Vercel).
 
 ## Features
 
-- 🎯 **Pass-and-play**: two players take turns on one device; scores
-  persist over the network (see FAQ).
-- 💾 **Score persistence**: wins / losses / draws / streaks land in a
-  single-row `game_stats` table — file: sqlite locally, Turso HTTP on
+- 🎯 **Two modes**: **ranked** — two players take turns on one device
+  (pass-and-play), scores persist server-side; **solo** — single-player
+  practice, scores live in browser `localStorage` with zero server writes,
+  so scoring works fully offline.
+- 💾 **Score persistence (ranked)**: wins / losses / draws / streaks land in
+  a single-row `game_stats` table — file: sqlite locally, Turso HTTP on
   Vercel (@libsql/client).
 - 🌒 **Dark-first**: built on Tailwind v4 design tokens; desktop-first,
   mobile works but is not the target.
@@ -52,6 +55,9 @@ Turso HTTP on Vercel).
   gesture; off by default and persisted.
 - ✨ **Accessible confetti**: a no-motion path under
   `prefers-reduced-motion`, stable `data-testid` hooks.
+- 🎞️ **Page transitions**: navigation across the four routes runs on React 19
+  `<ViewTransition>` as a bidirectional crossfade; older browsers fall back
+  to no transition automatically.
 - 🧪 **Gauntlet test stack**: vitest + fast-check (property) + Stryker
   (mutation) + commitlint + commit-audit, enforcing 80% line / 70%
   branch coverage.
@@ -65,6 +71,7 @@ Turso HTTP on Vercel).
 | --- | --- |
 | `/` | Home: stats card + start game + reset stats |
 | `/play` | Game: 3x3 board + current player indicator + restart |
+| `/solo` | Solo practice: 3x3 board + local stats panel + clear local stats (zero network writes) |
 | `/result` | Result: outcome + play again + back home + reset stats |
 | `GET /api/stats` | Read stats (Node runtime) |
 | `PUT /api/stats` | Write stats seed / admin (@deprecated; clients use POST outcome) |
@@ -111,6 +118,7 @@ app/                  App Router routes + API route handlers
   layout.tsx          fonts (Geist / Geist Mono) + dark base
   page.tsx            home (Client)
   play/page.tsx       game page (Client)
+  solo/page.tsx       solo practice page (Server Component)
   result/page.tsx     result page (Client)
   api/stats/route.ts  /api/stats (GET/PUT/DELETE, awaits lib/db)
   globals.css         @theme tokens, dark base
