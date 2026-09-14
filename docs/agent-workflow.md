@@ -71,6 +71,10 @@ Vercel 部署同样：docs commit 由 `vercel.json` `ignoreCommand` 跳过；其
 
 支持 root-level 与 `src/`-prefixed Next.js 双 layout。
 
+**当前布局**：root-level（`app/` `public/` `lib/` `components/` `db/` 在仓根）。**本仓小**——文件< 30、模块单一、产品单—一，root-level 简洁合用；`src/` layout **暂不迁移**。`CORE_PATH_RE` 含 `src/` 前缀仅为前瞻兼容，未来若迁移无需改脚本。
+
+**何时考虑迁移 `src/` layout**：仓文件> 50 / monorepo（pnpm workspace）/ 源码与配置文件混根易混。任一情形时同 commit 同步：①迁文件位置；②更新 import path（`@/*` alias 不变）；③跑全量测试；④主公 review。
+
 **新增核心目录时**（如 `src/styles/`、新 middleware、配置文件等）：
 - 必在引入该目录的同一 commit 同步更新 `CORE_PATH_RE`
 - 必同步 `scripts/vercel-ignore-build.test.sh` 加该 commit 的预期 exit code
