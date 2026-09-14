@@ -23,7 +23,7 @@ export function ResultActions() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Link href="/play" className="w-full" onClick={startGame}>
+      <Link href="/play" className="w-full" onClick={() => startGame()}>
         <Button variant="primary" className="w-full" data-testid="play-again">
           再来一局
         </Button>

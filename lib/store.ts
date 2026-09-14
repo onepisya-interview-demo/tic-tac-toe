@@ -9,16 +9,28 @@ import {
   isBoardFull,
   otherPlayer,
   randomizeFirstPlayer,
+  recordOutcome,
   type Board,
   type GameStats,
   type Player,
 } from './game';
+import { clearSoloStats, loadSoloStats, persistSoloStats } from './solo-stats';
 import { playSound } from './sound';
 
 export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
 
+/**
+ * 'ranked' (default) keeps the server-authoritative contract: outcomes
+ * POST to /api/stats/outcome and the server owns the accumulation.
+ * 'solo' never issues a network write — outcomes accumulate locally and
+ * persist to localStorage (lib/solo-stats.ts).
+ */
+export type GameMode = 'ranked' | 'solo';
+
 export interface GameState {
   phase: GamePhase;
+  /** Game mode of the current session; solo games skip all network writes. */
+  mode: GameMode;
   board: Board;
   currentPlayer: Player | null;
   winner: Player | null;
@@ -37,7 +49,12 @@ export interface GameState {
 }
 
 export interface GameActions {
-  startGame: () => void;
+  /**
+   * Start a new game. Defaults to 'ranked'. Starting in 'solo' seeds the
+   * internal stats cache from the localStorage baseline (reload
+   * semantics) so solo accumulation continues across sessions.
+   */
+  startGame: (mode?: GameMode) => void;
   /**
    * Apply a move for the current player. Async because the underlying
    * stats outcome POST is awaited so lastWriteAt is set on completion
@@ -54,6 +71,14 @@ export interface GameActions {
    */
   resetAll: () => Promise<void>;
   setInitialStats: (stats: GameStats) => void;
+  /**
+   * Clear the solo-mode stats: remove the localStorage key and reset the
+   * internal cache to emptyStats(). Deliberately does NOT stamp
+   * lastWriteAt — that timestamp means "a network write settled", and
+   * solo reset is a purely local operation; stamping it would falsely
+   * trigger lastWriteAt subscribers (e.g. ranked navigation).
+   */
+  resetSoloStats: () => void;
   __resetInternalForTests: () => void;
   /**
    * Read-only handle for the module-level internalStats cache. Tests
@@ -69,6 +94,7 @@ export type GameStore = GameState & GameActions;
 
 const initial: GameState = {
   phase: 'idle',
+  mode: 'ranked',
   board: createEmptyBoard(),
   currentPlayer: null,
   winner: null,
@@ -180,7 +206,13 @@ export const useGameStore = create<GameStore>((set) => ({
 
   __getInternalForTests: () => internalStats,
 
-  startGame: () => {
+  startGame: (mode?: GameMode) => {
+    const resolvedMode: GameMode = mode ?? 'ranked';
+    if (resolvedMode === 'solo') {
+      // Reload semantics: a solo session resumes from the browser-
+      // persisted baseline so accumulation survives page reloads.
+      internalStats = loadSoloStats();
+    }
     const firstPlayer = randomizeFirstPlayer();
     set({
       phase: 'playing',
@@ -189,6 +221,7 @@ export const useGameStore = create<GameStore>((set) => ({
       winner: null,
       winLine: null,
       lastOutcome: null,
+      mode: resolvedMode,
     });
   },
 
@@ -218,6 +251,16 @@ export const useGameStore = create<GameStore>((set) => ({
       // playSound('cheer') re-reads getMuted(), so toggling mute mid-
       // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
+      if (s.mode === 'solo') {
+        // Solo: zero network writes. Accumulate locally from the internal
+        // cache (seeded from localStorage by startGame('solo')) and persist
+        // for the next session. No lastWriteAt stamp — that timestamp
+        // means "a network write settled", and solo never writes; this
+        // also keeps lastWriteAt subscribers (ranked navigation) silent.
+        internalStats = recordOutcome(internalStats, win.player);
+        persistSoloStats(internalStats);
+        return;
+      }
       // Server-authoritative write: the client only names the winner; the
       // server reads the current row, applies recordOutcome, and returns
       // the new full row, which becomes our internal cache. ok:false
@@ -239,6 +282,13 @@ export const useGameStore = create<GameStore>((set) => ({
         lastOutcome: 'draw',
       });
       playSound('draw');
+      if (s.mode === 'solo') {
+        // Same solo contract as the win branch: local accumulation,
+        // localStorage persistence, zero network, zero lastWriteAt.
+        internalStats = recordOutcome(internalStats, 'draw');
+        persistSoloStats(internalStats);
+        return;
+      }
       // Same server-authoritative contract as the win branch above: the
       // server owns the accumulation, the client only reports 'draw'.
       const r = await apiRecordOutcome('draw');
@@ -263,6 +313,14 @@ export const useGameStore = create<GameStore>((set) => ({
       winLine: null,
       lastOutcome: null,
     });
+  },
+
+  resetSoloStats: () => {
+    clearSoloStats();
+    internalStats = emptyStats();
+    // Deliberately no lastWriteAt stamp: solo reset is local-only with no
+    // network write; stamping would falsely signal a server write to
+    // subscribers (PlayController navigation).
   },
 
   resetAll: async (): Promise<void> => {

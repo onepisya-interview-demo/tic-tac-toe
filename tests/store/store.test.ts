@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { NETWORK_TIMEOUT_MS, useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board, type GameStats } from '@/lib/game';
+import { SOLO_STATS_KEY, loadSoloStats } from '@/lib/solo-stats';
 import { playSound } from '@/lib/sound';
 
 vi.mock('@/lib/sound', () => ({
@@ -58,11 +59,13 @@ function mockFetchWithAbort(): { calls: FetchCall[]; restore: () => void } {
 function resetStore(): void {
   useGameStore.setState({
     phase: 'idle',
+    mode: 'ranked',
     board: createEmptyBoard(),
     currentPlayer: null,
     winner: null,
     winLine: null,
     lastOutcome: null,
+    lastWriteAt: null,
   });
   useGameStore.getState().__resetInternalForTests();
 }
@@ -637,5 +640,170 @@ describe('lib/store (zustand game store)', () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     fetchMock.mockRestore();
     vi.useRealTimers();
+  });
+});
+
+// ── solo mode: local accumulation + localStorage persistence ──
+// Solo is the mirror image of the ranked contract: ZERO network writes,
+// outcomes accumulate locally via the pure recordOutcome rule, and the
+// row persists to localStorage (lib/solo-stats.ts) so accumulation
+// survives reloads. lastWriteAt stays null — it means "a network write
+// settled", and solo never writes (this also keeps ranked navigation
+// subscribers silent on solo games).
+
+describe('lib/store solo mode (local accumulation + localStorage)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(playSound).mockClear();
+    window.localStorage.clear();
+    resetStore();
+  });
+
+  function soloWinBoard(): Board {
+    return [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ] as unknown as Board;
+  }
+
+  async function soloWin(): Promise<void> {
+    useGameStore.setState({
+      phase: 'playing',
+      mode: 'solo',
+      currentPlayer: 'X',
+      board: soloWinBoard(),
+    });
+    await useGameStore.getState().makeMove(8);
+  }
+
+  it('mode starts as ranked; startGame() defaults to ranked; startGame("solo") switches', () => {
+    expect(useGameStore.getState().mode).toBe('ranked');
+    useGameStore.getState().startGame();
+    expect(useGameStore.getState().mode).toBe('ranked');
+    useGameStore.getState().startGame('solo');
+    expect(useGameStore.getState().mode).toBe('solo');
+    expect(useGameStore.getState().phase).toBe('playing');
+  });
+
+  it('startGame("solo") seeds the internal cache from the localStorage baseline (reload semantics)', () => {
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 }),
+    );
+    useGameStore.getState().startGame('solo');
+    expect(useGameStore.getState().__getInternalForTests()).toEqual({
+      totalGames: 7,
+      xWins: 5,
+      oWins: 1,
+      draws: 1,
+      currentStreak: 3,
+    });
+  });
+
+  it('solo win: ZERO network writes, no lastWriteAt stamp, local accumulation + persistence', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('solo');
+    await soloWin();
+    expect(calls).toHaveLength(0);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.winner).toBe('X');
+    expect(s.lastWriteAt).toBeNull();
+    const expected = { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 };
+    expect(s.__getInternalForTests()).toEqual(expected);
+    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(expected);
+    restore();
+  });
+
+  it('solo two-win streak accumulates xWins=2 streak=2 across a restart (localStorage round-trip)', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('solo');
+    await soloWin();
+    // Second session: startGame re-seeds from the persisted baseline,
+    // then the win accumulates on top of it.
+    useGameStore.getState().startGame('solo');
+    await soloWin();
+    expect(calls).toHaveLength(0);
+    const expected = { totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 };
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(expected);
+    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(expected);
+    restore();
+  });
+
+  it('solo draw: accumulates draws + resets streak locally, zero network', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('solo');
+    useGameStore.setState({
+      phase: 'playing',
+      mode: 'solo',
+      currentPlayer: 'X',
+      board: [
+        'X', 'O', 'X',
+        'X', 'O', 'O',
+        'O', 'X', null,
+      ] as unknown as Board,
+    });
+    await useGameStore.getState().makeMove(8);
+    expect(calls).toHaveLength(0);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('drawn');
+    expect(s.lastWriteAt).toBeNull();
+    expect(s.__getInternalForTests()).toEqual({
+      totalGames: 1,
+      xWins: 0,
+      oWins: 0,
+      draws: 1,
+      currentStreak: 0,
+    });
+    restore();
+  });
+
+  it('loadSoloStats degrades to emptyStats on invalid JSON, wrong shape, or missing key', () => {
+    window.localStorage.setItem(SOLO_STATS_KEY, 'not json');
+    expect(loadSoloStats()).toEqual(emptyStats());
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 'x', xWins: 0, oWins: 0, draws: 0, currentStreak: 0 }),
+    );
+    expect(loadSoloStats()).toEqual(emptyStats());
+    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify({ totalGames: 1, xWins: 1 }));
+    expect(loadSoloStats()).toEqual(emptyStats());
+    window.localStorage.removeItem(SOLO_STATS_KEY);
+    expect(loadSoloStats()).toEqual(emptyStats());
+  });
+
+  it('resetSoloStats clears the key + internal cache and does NOT stamp lastWriteAt', () => {
+    useGameStore.setState({ lastWriteAt: 12345 });
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }),
+    );
+    useGameStore.getState().startGame('solo');
+    expect(useGameStore.getState().__getInternalForTests().totalGames).toBe(3);
+    useGameStore.getState().resetSoloStats();
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
+    // No stamp: solo reset is local-only; the prior write timestamp stays.
+    expect(useGameStore.getState().lastWriteAt).toBe(12345);
+  });
+
+  it('ranked path unchanged: wins still POST the outcome and never touch localStorage', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
+    useGameStore.getState().startGame();
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: soloWinBoard(),
+    });
+    await useGameStore.getState().makeMove(8);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    restore();
   });
 });
