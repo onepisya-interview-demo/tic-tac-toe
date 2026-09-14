@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 棋盘、胜负、落子、战绩计算 | game.ts | 纯函数；不用 React、DOM、网络或数据库 |
 | 局面生命周期和 API 同步 | store.ts | 客户端单例；本地 UI 状态优先，stats PUT 尽力而为 |
+| solo 模式浏览器持久化 | solo-stats.ts | load/persist/clear；window 守卫 + shape 校验（非法即 emptyStats） |
 | 读取、写入、重置战绩 | db.ts | 仅服务器；@libsql/client + Drizzle（file:/http(s): 自适应） |
 | 行形状 | ../db/schema.ts | game_stats 有意保持单行 id=1 |
 | 音效程序和静音状态 | sound.ts | 浏览器 Web Audio；懒创建 context；默认静音 |

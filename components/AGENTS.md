@@ -26,7 +26,7 @@
 ## 反模式
 
 - 不用内联 hex、原生色板替代、组件级 focus class、emoji 图标或 div 动作。
-- 不在组件里做 I/O 或持久化；调用 store action 并呈现返回状态。
+- 不在组件里做 I/O 或持久化；调用 store action 并呈现返回状态。唯一例外：SoloStatsPanel pull-only 读 loadSoloStats（localStorage 只读水合），写路径仍在 store——展示层只取数不落数，持久化触发点保持单源。
 - 不在首帧读取持久化偏好；SoundToggle 必须先渲染静音，挂载后再同步。
 - 不复制动效触发逻辑；keyed span 和 CSS class 已负责落子/胜利效果。
 - 不假设 canvas-confetti 渲染在 React 树内。
