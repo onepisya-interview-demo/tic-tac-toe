@@ -168,3 +168,62 @@ html, body {
   }
 
   }
+
+/* ------------------------------------------------------------------------
+   View Transitions base (task C5a, plan: ulw-solo-mode-split-view-transitions;
+   C5b will wire React's <ViewTransition>). Reference: the Next.js guide at
+   node_modules/next/dist/docs/01-app/02-guides/view-transitions.md —
+   "Customizing the morph animation" (pseudo-element class syntax),
+   "Keeping the page interactive" (pointer-events) and "Respecting reduced
+   motion" (zeroed durations/delays). Contract: DESIGN.md §5 Motion — page
+   transition is opacity-only, 150ms ease-out; no slide-in, no scale, no
+   animation library; reduced motion collapses everything to 0.
+   Naming contract: `.page` is the view-transition-class that the upcoming
+   C5b wiring assigns via React's <ViewTransition> class prop, so the
+   pseudo-element rules below fire only for that participant and leave all
+   other content untouched. */
+
+@supports (view-transition-name: root) {
+  /* VT-capable browsers animate the route swap through the snapshot
+     pseudos below, so retire the DOM-level fade to keep <main> from
+     double-animating. Browsers without VT support never enter this block
+     and keep the original .page-fade-in fallback declared above. */
+  .page-fade-in {
+    animation: none;
+  }
+
+  /* Bidirectional crossfade: the old snapshot plays the same opacity
+     keyframes in reverse (fades out) while the new one fades in.
+     opacity-only per DESIGN.md §5 — no translate, no scale. Reuses the
+     existing page-fade-in keyframes (pure opacity 0→1) declared inside
+     the no-preference media query above. */
+  ::view-transition-old(.page) {
+    animation: 150ms ease-out both page-fade-in reverse;
+  }
+
+  ::view-transition-new(.page) {
+    animation: 150ms ease-out both page-fade-in;
+  }
+
+  /* The VT snapshot overlay captures pointer events while a transition
+     runs; let them pass through to the live page (guide: "Keeping the
+     page interactive"). */
+  ::view-transition {
+    pointer-events: none;
+  }
+}
+
+/* The global reduced-motion rule above (`*, *::before, *::after`) does NOT
+   reach the ::view-transition-* pseudo-element tree, so follow the guide's
+   explicit recipe: durations and delays collapse to zero and the crossfade
+   degrades to the browser's instant swap. Belt-and-suspenders: under reduce
+   the page-fade-in keyframes are also undefined (they live inside the
+   no-preference block), so no animation can start regardless. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
