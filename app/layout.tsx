@@ -22,13 +22,16 @@ const geistMono = Geist_Mono({
 // and `app/globals.css`.
 const THEME_COLOR = "#0A0A0A" as const;
 
-// Three social-card variants under /public/ are inlined into the
+// Four social-card variants under /public/ are inlined into the
 // openGraph.images array below (and mirrored at the canonical
 // https://3t.onepis.net/ domain). X / Slack pick the first one as the
 // large-image preview and let users cycle the rest in the in-app
-// carousel. The literals are inlined (not generated via map) so the
-// contract is auditable in the source text and the layout.test.ts
-// regex contract holds. Sources: docs/social-card-{home,play,result}.png.
+// carousel. The fourth is a 1:1 brand mark used as a fallback for
+// small-icon / IM-avatar / favicon-needs contexts that don't render
+// the 1280×640 large-image card. The literals are inlined (not
+// generated via map) so the contract is auditable in the source text
+// and the layout.test.ts regex contract holds.
+// Sources: docs/social-card-{home,play,result,brandmark}.png.
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://3t-tic-tac-toe.vercel.app/"),
@@ -83,6 +86,20 @@ export const metadata: Metadata = {
         type: "image/png",
         alt: "井字棋 · 胜局彩纸",
       },
+      // 1:1 brand mark — fallback for small-icon / IM-avatar / favicon
+      // contexts that don't render the 1280×640 large-image preview.
+      // X still uses card="summary_large_image" with the first 1280×640
+      // entry; the brand mark is the carousel's last pick and the only
+      // share artifact that renders cleanly as an avatar.
+      // Plan: .omo/plans/ulw-meta-brand-mark-20260914.md
+      {
+        url: "/social-card-brandmark.png",
+        secureUrl: "https://3t.onepis.net/social-card-brandmark.png",
+        width: 512,
+        height: 512,
+        type: "image/png",
+        alt: "井字棋 · brand mark",
+      },
     ],
   },
   twitter: {
@@ -93,6 +110,7 @@ export const metadata: Metadata = {
       "/social-card-home.png",
       "/social-card-play.png",
       "/social-card-result.png",
+      "/social-card-brandmark.png",
     ],
     creator: "@onepisya",
     site: "@onepisya",

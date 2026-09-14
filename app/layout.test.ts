@@ -63,20 +63,43 @@ describe("app/layout metadata — share preview contract", () => {
     expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card-result\.png"/);
     // Each of the three entries carries the image/png MIME so crawlers
     // don't have to sniff (cURLs hit /social-card-*.png via metadataBase).
-    expect(LAYOUT_SRC.match(/type\s*:\s*"image\/png"/g)?.length).toBe(3);
+    expect(LAYOUT_SRC.match(/type\s*:\s*"image\/png"/g)?.length).toBe(4);
     // Each entry carries an HTTPS secure_url mirror on the public domain —
     // OG spec still recognises this field for crawlers that prefer https.
     expect(
       LAYOUT_SRC.match(
         /secureUrl\s*:\s*"https:\/\/3t\.onepis\.net\/social-card-/g,
       )?.length,
-    ).toBe(3);
+    ).toBe(4);
   });
 
   // Plan: §C — twitter.images array mirrors the openGraph variants
   it("declares twitter images with the three PNG variants in declaration order", () => {
     expect(LAYOUT_SRC).toMatch(
-      /images\s*:\s*\[\s*"\/social-card-home\.png"\s*,\s*"\/social-card-play\.png"\s*,\s*"\/social-card-result\.png"\s*,?\s*\]/,
+      /images\s*:\s*\[\s*"\/social-card-home\.png"\s*,\s*"\/social-card-play\.png"\s*,\s*"\/social-card-result\.png"\s*,\s*"\/social-card-brandmark\.png"\s*,?\s*\]/,
+    );
+  });
+
+  // Plan: .omo/plans/ulw-meta-brand-mark-20260914.md — 1:1 brand mark as
+  // a fallback entry for small-icon / IM-avatar / favicon-needs contexts
+  // that don't render the 1280×640 large-image card.
+  it("declares openGraph brand mark fallback entry with 512x512 dims", () => {
+    expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card-brandmark\.png"/);
+    expect(LAYOUT_SRC).toMatch(
+      /secureUrl\s*:\s*"https:\/\/3t\.onepis\.net\/social-card-brandmark\.png"/,
+    );
+    expect(LAYOUT_SRC).toMatch(/width\s*:\s*512/);
+    expect(LAYOUT_SRC).toMatch(/height\s*:\s*512/);
+    expect(LAYOUT_SRC).toMatch(/alt\s*:\s*"井字棋 · brand mark"/);
+  });
+
+  it("declares twitter images with brand mark fallback in declaration order", () => {
+    // Brand mark is the 4th entry after the three 1280×640 variants so
+    // the X / Slack carousel keeps the large-image preview as primary.
+    // Anchor to the twitter.images block (not the file at large) so the
+    // assertion holds even when openGraph.images also references brandmark.
+    expect(LAYOUT_SRC).toMatch(
+      /twitter[\s\S]*?images\s*:\s*\[[\s\S]*?\/social-card-brandmark\.png[\s\S]*?\]/,
     );
   });
 
