@@ -339,9 +339,22 @@ try {
     // Wait for the DOM to flip to 0 instead of a fixed sleep — Turso
     // round-trips push the home page re-render past a fixed 500 ms budget
     // on Vercel; the local sqlite run finishes in ~80 ms.
+    //
+    // 2026-09-15 hardening: the click→assert below used to read /api/stats
+    // from a probe-issued GET that RACED the button's own DELETE. The React
+    // 19 <ViewTransition> page boundary (f45ddbf) shifted the scheduler
+    // margin and the probe GET started deterministically winning on a
+    // local-sqlite box (2× repro on main; 51f164c / 2b79d14 both PASS), so
+    // the step was asserting scheduler luck, not the B-3b contract. The
+    // contract is "resetAll (DELETE) awaited before refresh reads zeros" —
+    // await the DELETE response explicitly, then read.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="reset-stats"]');
+    const deleteSettled = page.waitForResponse(
+      (r) => r.request().method() === "DELETE" && r.url().includes("/api/stats"),
+    );
     await page.click('[data-testid="reset-stats"]');
+    await deleteSettled;
     const api = await getStats(page);
     assert.equal(api.totalGames, 0, `expected reset to zero stats, got ${api.totalGames}`);
     await page
@@ -405,6 +418,14 @@ try {
   page.on("request", (req) => {
     if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
       swPutCount += 1;
+    }
+    // The win path is POST /api/stats/outcome (server-authoritative
+    // delta). The bridge listener only mirrored the PUT half of the main
+    // counter, so every POST-count assertion after step 11 read 0 —
+    // pre-existing since the PUT→POST migration (2026-09-15 hardening,
+    // repro on 51f164c and main alike).
+    if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
+      swPostCount += 1;
     }
   });
 
