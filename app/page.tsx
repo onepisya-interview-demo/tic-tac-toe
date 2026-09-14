@@ -1,3 +1,4 @@
+import { ViewTransition } from 'react';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
@@ -15,6 +16,7 @@ export default async function HomePage() {
   const isEmpty = stats.totalGames === 0;
 
   return (
+    <ViewTransition enter="page" exit="page" default="none">
     <main className="page-shell page-fade-in">
       <StatsHydrator stats={stats} />
       <header className="flex flex-col gap-2">
@@ -48,5 +50,6 @@ export default async function HomePage() {
         <ResetStatsButton />
       </div>
     </main>
+    </ViewTransition>
   );
 }

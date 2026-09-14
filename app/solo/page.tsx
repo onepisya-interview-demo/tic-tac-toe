@@ -1,3 +1,4 @@
+import { ViewTransition } from 'react';
 import Link from 'next/link';
 import { Board } from '@/components/Board';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +18,7 @@ import { SoloStatsPanel } from '@/components/SoloStatsPanel';
  */
 export default function SoloPage() {
   return (
+    <ViewTransition enter="page" exit="page" default="none">
     <GameShell
       title="单机练习"
       actions={
@@ -38,5 +40,6 @@ export default function SoloPage() {
         <SoloStatsPanel />
       </div>
     </GameShell>
+    </ViewTransition>
   );
 }

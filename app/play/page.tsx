@@ -1,3 +1,4 @@
+import { ViewTransition } from 'react';
 import Link from 'next/link';
 import { Board } from '@/components/Board';
 import { Button } from '@/components/ui/Button';
@@ -7,6 +8,7 @@ import { RestartButton } from '@/components/RestartButton';
 
 export default function PlayPage() {
   return (
+    <ViewTransition enter="page" exit="page" default="none">
     <GameShell
       title="游戏中"
       actions={
@@ -24,5 +26,6 @@ export default function PlayPage() {
         <Board />
       </PlayController>
     </GameShell>
+    </ViewTransition>
   );
 }

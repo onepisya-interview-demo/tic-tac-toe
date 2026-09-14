@@ -87,7 +87,9 @@
 | Stats update | `opacity`, `transform: scale(0.92→1)` | 220ms | ease-out |
 | Result confetti | `opacity`, `transform: translate3d()` | 1.1s once | ease-in |
 | Page transition | `opacity` | 150ms | ease-out |
+| View Transitions (route) | opacity crossfade 双向 | 150ms | ease-out |
 
+- **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
 - **No bounce / no slide-in / no parallax**; transitions communicate a move, outcome, or route change only
 - GPU-only (`transform`, `opacity`, `background-color`)
 - `prefers-reduced-motion`: collapse all to `0ms`

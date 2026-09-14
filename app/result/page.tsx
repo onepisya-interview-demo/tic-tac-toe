@@ -1,3 +1,4 @@
+import { ViewTransition } from 'react';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
@@ -13,6 +14,7 @@ export default async function ResultPage() {
   const stats = await loadStats();
 
   return (
+    <ViewTransition enter="page" exit="page" default="none">
     <main className="page-shell page-fade-in">
       <StatsHydrator stats={stats} />
       <header className="flex flex-col gap-2 relative">
@@ -32,5 +34,6 @@ export default async function ResultPage() {
 
       <ResultActions />
     </main>
+    </ViewTransition>
   );
 }
