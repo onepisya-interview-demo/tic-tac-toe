@@ -43,7 +43,8 @@ export default async function HomePage() {
       </Card>
 
       <div className="flex flex-row gap-3">
-        <StartGameButton />
+        <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />
+        <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />
         <ResetStatsButton />
       </div>
     </main>

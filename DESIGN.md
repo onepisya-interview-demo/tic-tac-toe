@@ -108,15 +108,32 @@
 
 | Route | Purpose | Key elements |
 | --- | --- | --- |
-| `/` | Home | Title, 战绩卡片（StatsCard×N）, 开始游戏, 重置战绩 |
-| `/play` | Game in progress | StatusBar, Board (3×3 Cell grid), 认输 / 重开 |
-| `/result` | Game over | Winner / draw message, 庆祝动画, 再来一局, 返回首页, 重置战绩 |
+| `/` | Home | Title, 战绩卡片（StatsCard×N）, 开始对战, 单机练习, 重置战绩 |
+| `/play` | Ranked game (two players, pass-and-play) | StatusBar, Board (3×3 Cell grid), 返回首页 / 重开 |
+| `/solo` | Solo practice (local stats only) | StatusBar, Board, inline ResultBanner, SoloStatsPanel, 返回首页 / 重开 |
+| `/result` | Game over (ranked only) | Winner / draw message, 庆祝动画, 再来一局, 返回首页, 重置战绩 |
 
 **Transitions**:
-- `/` → click 开始游戏 → `/play` (first player randomized in store)
+- `/` → click 开始对战 → `/play` (first player randomized in store)
+- `/` → click 单机练习 → `/solo` (first player randomized in store)
 - `/play` → 胜/平 → `/result`
+- `/solo` → 胜/平 → inline ResultBanner (no navigation)
 - `/result` → click 再来一局 → `/play` (new randomized first player, stats updated)
-- `/result` → click 返回首页 → `/`
+- `/result` / `/solo` → click 返回首页 → `/`
+
+### Modes: ranked (default) vs solo
+
+One store, one `mode` field; the two modes are mirror contracts:
+
+| | ranked (`/play`) | solo (`/solo`) |
+| --- | --- | --- |
+| Outcome write | `POST /api/stats/outcome` — server-authoritative accumulation | Zero network writes — local `recordOutcome` accumulation |
+| Stats persistence | Server single row (`/api/stats`) | `localStorage['ttt.solo.stats.v1']` (5-number JSON; shape mismatch → `emptyStats`)
+| Game over | Event-driven nav to `/result` (subscribes `lastWriteAt`) | Inline `ResultBanner` (Confetti included); no navigation by design |
+| Stats display | Server snapshot via force-dynamic RSC | `SoloStatsPanel`: SSR renders `emptyStats`, hydrates in effect, re-reads on settle |
+| Reset | `DELETE /api/stats` + `router.refresh()` (`reset-stats`) | `resetSoloStats()` — local only, instant (`reset-solo-stats`)
+
+The two ledgers never mix: the home card reads the server row only; the solo panel reads localStorage only. All visual, motion, and accessibility contracts (§1–§6) apply identically to both modes.
 
 ## 8. Accepted Debt
 
