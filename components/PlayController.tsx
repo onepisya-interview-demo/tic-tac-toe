@@ -2,22 +2,31 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { useGameStore } from '@/lib/store';
+import { useGameStore, type GameMode } from '@/lib/store';
 
 type Props = {
   children: ReactNode;
+  /**
+   * Game mode this controller drives. Defaults to 'ranked' — exactly the
+   * pre-mode /play behavior (auto-start calls startGame(), which resolves
+   * undefined → 'ranked'). 'solo' auto-starts a solo game and hard-disables
+   * the /result navigation (see the nav effect below).
+   */
+  mode?: GameMode;
 };
 
-export function PlayController({ children }: Props) {
+export function PlayController({ children, mode = 'ranked' }: Props) {
   const router = useRouter();
   const phase = useGameStore((s) => s.phase);
   const lastWriteAt = useGameStore((s) => s.lastWriteAt);
   const startGame = useGameStore((s) => s.startGame);
 
-  // 副作用 1: auto-start on idle
+  // 副作用 1: auto-start on idle。mode 显式入 deps：/solo 挂载时以
+  // startGame('solo') 开局（store 会从 localStorage 基线灌入战绩缓存），
+  // /play 的缺省 'ranked' 行为与 startGame() 完全一致。
   useEffect(() => {
-    if (phase === 'idle') startGame();
-  }, [phase, startGame]);
+    if (phase === 'idle') startGame(mode);
+  }, [phase, startGame, mode]);
 
   // 副作用 2: 写事件落库后跳 /result（事件驱动而非 setTimeout 时间假设）。
   // lastWriteAt 在 makeMove / resetAll 的 try/catch 后设置（commit 4 落地），
@@ -39,6 +48,11 @@ export function PlayController({ children }: Props) {
     if (lastWriteAt === null) return;
     if (lastWriteAt === navigatedFor.current) return;
     const s = useGameStore.getState();
+    // 显式 solo 防御（纵深防御第二层）：solo 对局从不 stamp lastWriteAt
+    //（store 契约），但软导航不卸载文档——上一局 ranked 写下的 lastWriteAt
+    // 或 StatsHydrator 挂载时的水合 stamp 都可能在 solo 会话存活期间残留。
+    // solo 没有 /result 契约，mode==='solo' 时绝不导航。
+    if (s.mode === 'solo') return;
     if (s.phase !== 'won' && s.phase !== 'drawn') return;
     navigatedFor.current = lastWriteAt;
     router.replace('/result');
