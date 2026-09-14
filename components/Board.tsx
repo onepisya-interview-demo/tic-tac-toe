@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '@/lib/store';
-import { Cell } from './ui/Cell';
+import { BoardGrid } from './ui/BoardGrid';
 
 const ROW_OFFSETS = [
   [0, 0],
@@ -88,26 +88,17 @@ export function Board() {
     return () => window.removeEventListener('keydown', onKey);
   }, [autoFocused, board, boardKey, focused, makeMove, phase]);
 
-  const winningSet = useMemo(() => new Set(winLine ?? []), [winLine]);
-
+  // Rendering is delegated to the pure BoardGrid; this component keeps
+  // only the store wiring, roving focus and keyboard logic (the adapter
+  // half of the StatusBar/StatusBarClient split).
   return (
-    <div
-      className={'grid grid-cols-3 gap-2 w-fit mx-auto relative' + (phase === 'drawn' ? ' draw-shake' : '')}
-      role="grid"
-      aria-label="井字棋棋盘"
-      data-testid="board"
-    >
-      {board.map((value, i) => (
-        <Cell
-          key={i}
-          index={i}
-          value={value}
-          onClick={() => makeMove(i)}
-          disabled={phase !== 'playing'}
-          isWinning={winningSet.has(i)}
-          tabIndex={i === focused && phase === 'playing' ? 0 : -1}
-        />
-      ))}
-    </div>
+    <BoardGrid
+      board={board}
+      winLine={winLine}
+      disabled={phase !== 'playing'}
+      focusedIndex={focused}
+      onCellPlay={makeMove}
+      className={phase === 'drawn' ? 'draw-shake' : ''}
+    />
   );
 }
