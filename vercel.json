@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoredBuildStep": {
+    "command": "node -e \"const m=require('child_process').execSync('git log -1 --pretty=%s').toString().trim();process.exit(/^docs(\\(|:)/.test(m)?0:1)\""
+  }
+}

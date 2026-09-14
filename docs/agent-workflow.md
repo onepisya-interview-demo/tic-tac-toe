@@ -52,7 +52,11 @@ agent：git checkout main && git pull --ff-only
 
 ## 例外（仍 direct push）
 
-主公明示「速推 / hot fix / docs 一次性」之时可走 direct push——**agent 不擅自**，需主公明示。
+- **文档类 commit**（subject 以 `docs(` / `docs:` 开头）：仅改 docs/ / .md / .omo/plans/ 等，无代码变动——可走 direct push，不走 PR。**agent 不擅自**，需主公示下。
+- **基础设施 / 配置类 commit**（subject 含 `ci(` / `chore(deps):` 等）：主公示下亦可走 direct push。
+- **代码类 commit**（subject 含 `feat` / `fix` / `refactor` / `perf` / `test` / `build` / `style`）：必须走 PR。
+
+Vercel 部署同样：docs commit 由 `vercel.json` `ignoredBuildStep` 自动跳过；其他 commit 正常 deploy。
 
 ## PR description 模板
 
