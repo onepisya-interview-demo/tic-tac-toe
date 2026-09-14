@@ -22,6 +22,14 @@ const geistMono = Geist_Mono({
 // and `app/globals.css`.
 const THEME_COLOR = "#0A0A0A" as const;
 
+// Three social-card variants under /public/ are inlined into the
+// openGraph.images array below (and mirrored at the canonical
+// https://3t.onepis.net/ domain). X / Slack pick the first one as the
+// large-image preview and let users cycle the rest in the in-app
+// carousel. The literals are inlined (not generated via map) so the
+// contract is auditable in the source text and the layout.test.ts
+// regex contract holds. Sources: docs/social-card-{home,play,result}.png.
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://3t-tic-tac-toe.vercel.app/"),
   title: "井字棋 · 同设备 pass-and-play",
@@ -32,9 +40,11 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "井字棋", statusBarStyle: "black" },
   // Open Graph + Twitter card — share previews for X / IM / Slack.
-  // Source asset: public/social-card.png (mirror of docs/social-card.png;
-  // GitHub Social Preview uses the docs/ copy via repository-images host).
-  // Plan: .omo/plans/ulw-seo-meta-20260914.md.
+  // Source assets: public/social-card-{home,play,result}.png (mirror of
+  // docs/social-card-{home,play,result}.png; the single docs/social-card.png
+  // stays in place as the GitHub Social Preview upload target).
+  // Plans: .omo/plans/ulw-seo-meta-20260914.md (base) +
+  //         .omo/plans/ulw-meta-extras-20260914.md (A locale + B raw meta + C variants).
   openGraph: {
     type: "website",
     siteName: "井字棋",
@@ -45,12 +55,33 @@ export const metadata: Metadata = {
     url: "https://3t.onepis.net/",
     title: "井字棋 · 同设备 pass-and-play",
     description: "两人同设备轮流下的井字棋，自动记录战绩。",
+    // Locale tag — content language is Chinese so og:locale=zh_CN tags
+    // the share card correctly for crawler-side filtering.
+    locale: "zh_CN",
     images: [
       {
-        url: "/social-card.png",
+        url: "/social-card-home.png",
+        secureUrl: "https://3t.onepis.net/social-card-home.png",
         width: 1280,
         height: 640,
-        alt: "井字棋 · tic-tac-toe 分享卡（暗底三帧拼版）",
+        type: "image/png",
+        alt: "井字棋 · 战绩仪表板",
+      },
+      {
+        url: "/social-card-play.png",
+        secureUrl: "https://3t.onepis.net/social-card-play.png",
+        width: 1280,
+        height: 640,
+        type: "image/png",
+        alt: "井字棋 · 棋局对战中",
+      },
+      {
+        url: "/social-card-result.png",
+        secureUrl: "https://3t.onepis.net/social-card-result.png",
+        width: 1280,
+        height: 640,
+        type: "image/png",
+        alt: "井字棋 · 胜局彩纸",
       },
     ],
   },
@@ -58,7 +89,11 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "井字棋 · 同设备 pass-and-play",
     description: "两人同设备轮流下的井字棋，自动记录战绩。",
-    images: ["/social-card.png"],
+    images: [
+      "/social-card-home.png",
+      "/social-card-play.png",
+      "/social-card-result.png",
+    ],
     creator: "@onepisya",
     site: "@onepisya",
   },
@@ -79,6 +114,17 @@ export default function RootLayout({
       lang="zh-CN"
       className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Plan: .omo/plans/ulw-meta-extras-20260914.md §B — raw
+            twitter:label1/data1/label2/data2 metadata, injected via JSX
+            because the Next.js 16 metadata API has no field for it.
+            React 19 hoists <meta> elements into the document <head> at
+            request time so X renders the dual-line strip below the card. */}
+        <meta name="twitter:label1" content="Built with" />
+        <meta name="twitter:data1" content="Next.js 16 · React 19" />
+        <meta name="twitter:label2" content="Type" />
+        <meta name="twitter:data2" content="Open source · MIT" />
+      </head>
       <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
         {children}
         <Analytics />
