@@ -16,6 +16,31 @@ import assert from "node:assert/strict";
 import { launchQA, BASE_URL } from "./lib/browser.mjs";
 import { driveTopRowWin } from "./lib/win-drive.mjs";
 
+// Process-level safety: ensure an unhandled rejection or uncaught
+// exception in a Playwright helper doesn't leave code 0 behind. The
+// per-step try/catch only covers synchronous throws inside step(name, fn);
+// async helpers outside (e.g. internal Playwright listeners firing after a
+// navigation close, or a stray throw inside one of the page.on() callbacks
+// below) can surface as unhandled rejections on this process. Without
+// these handlers, node 22 exits 1 silently on unhandled rejection — but
+// the exit happens mid-step before the QA SUMMARY line, so the harness
+// looks like a flaky crash with no stack trace. Convert to a clear print
+// + exit 1 so the failure mode is observable.
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "\nUNHANDLED REJECTION:",
+    reason && reason.stack ? reason.stack : reason,
+  );
+  process.exit(1);
+});
+process.on("uncaughtException", (err) => {
+  console.error(
+    "\nUNCAUGHT EXCEPTION:",
+    err && err.stack ? err.stack : err,
+  );
+  process.exit(1);
+});
+
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/stats-race-qa";
 const findings = [];
@@ -121,15 +146,24 @@ let { page } = launch;
 // the requests the SW actually forwards to the network.
 let swPutCount = 0;
 let swPostCount = 0;
+// Defensive: Playwright re-enters this listener for every request even
+// after a navigation close or page error; a throw here surfaces as an
+// unhandled rejection on this process and (pre-fix) silently killed the
+// probe mid-step. Counter increments can't fail in practice, but the
+// try/catch is cheap and makes the listener provably non-throwing.
 page.on("request", (req) => {
-  if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
-    swPutCount += 1;
-  }
-  // POST outcome is the server-authoritative write path introduced by
-  // stats-server-authoritative-delta (commit 6 rewrites step 06 to count
-  // these instead of full PUTs).
-  if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
-    swPostCount += 1;
+  try {
+    if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
+      swPutCount += 1;
+    }
+    // POST outcome is the server-authoritative write path introduced by
+    // stats-server-authoritative-delta (commit 6 rewrites step 06 to
+    // count these instead of full PUTs).
+    if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
+      swPostCount += 1;
+    }
+  } catch (e) {
+    console.error("request listener error:", e && e.message);
   }
 });
 
@@ -230,20 +264,36 @@ try {
     // the fix, the onClick awaits resetAll then refreshes, so a fresh
     // /result reads zeros.
     //
-    // On Turso the DELETE round-trip is slow; we must wait for the API
-    // to read zeros before navigating — otherwise the /result RSC fetch
-    // (force-dynamic) races the DELETE and renders the pre-reset row.
+    // 2026-09-15 hardening: step 05 used to poll /api/stats from the
+    // page context and wait for totalGames === 0 with an 8000 ms budget
+    // — same race step 10 already fixed (the click→assert-below used to
+    // read /api/stats from a probe-issued GET that RACED the button's own
+    // DELETE). On idle hardware with React 19 <ViewTransition> page
+    // boundary (f45ddbf) the probe GET can win the scheduler window
+    // repeatedly: the DELETE handler returns { ok: false, reason:
+    // 'aborted' } once the store's 8000 ms AbortController fires
+    // (NETWORK_TIMEOUT_MS in lib/store.ts:135), after which
+    // router.refresh() re-reads the unchanged row and the probe poll
+    // keeps seeing totalGames > 0 until the 8000 ms budget elapses.
+    // Baseline 10-run probe (tmp/race-baseline{,-2}/run-*.log):
+    // 9/10 PASS, 1/10 FAIL at this step with the exact
+    // "page.waitForFunction: Timeout 8000ms exceeded" signature.
+    //
+    // Fix mirrors step 10's proven pattern: explicitly await the DELETE
+    // response (waitForResponse), so the probe-issued poll cannot win
+    // against the button's own DELETE. 10000 ms timeout matches step
+    // 10 (DB round-trip <5 s × 2 budget = 10000 ms; 10000 ms is the
+    // chosen floor per V2 F2 — the Turso outlier at 30733 ms never
+    // recurs but the budget keeps the probe non-flaky without hiding
+    // regressions). The probe then navigates to /result, which is
+    // force-dynamic, so the RSC re-read observes the post-reset row.
     await page.waitForSelector('[data-testid="reset-stats-result"]');
-    await page.click('[data-testid="reset-stats-result"]');
-    await page.waitForFunction(
-      async () => {
-        const r = await fetch("/api/stats", { cache: "no-store" });
-        const j = await r.json();
-        return j.totalGames === 0;
-      },
-      null,
-      { timeout: 8000 },
+    const deleteSettled = page.waitForResponse(
+      (r) => r.request().method() === "DELETE" && r.url().includes("/api/stats"),
+      { timeout: 10000 },
     );
+    await page.click('[data-testid="reset-stats-result"]');
+    await deleteSettled;
     // After reset + refresh, navigate to /result to observe the new read.
     await page.goto(`${BASE}/result`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="result-headline"]');
@@ -472,17 +522,23 @@ try {
     viewport: { width: 1280, height: 900 },
   });
   page = await ctx2.newPage();
+  // Defensive try/catch — see the initial page.on("request") block above
+  // for rationale (mid-step unhandled rejection ⇒ silent exit 0).
   page.on("request", (req) => {
-    if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
-      swPutCount += 1;
-    }
-    // The win path is POST /api/stats/outcome (server-authoritative
-    // delta). The bridge listener only mirrored the PUT half of the main
-    // counter, so every POST-count assertion after step 11 read 0 —
-    // pre-existing since the PUT→POST migration (2026-09-15 hardening,
-    // repro on 51f164c and main alike).
-    if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
-      swPostCount += 1;
+    try {
+      if (req.method() === "PUT" && req.url().endsWith("/api/stats")) {
+        swPutCount += 1;
+      }
+      // The win path is POST /api/stats/outcome (server-authoritative
+      // delta). The bridge listener only mirrored the PUT half of the
+      // main counter, so every POST-count assertion after step 11 read
+      // 0 — pre-existing since the PUT→POST migration (2026-09-15
+      // hardening, repro on 51f164c and main alike).
+      if (req.method() === "POST" && req.url().endsWith("/api/stats/outcome")) {
+        swPostCount += 1;
+      }
+    } catch (e) {
+      console.error("request listener error:", e && e.message);
     }
   });
 
@@ -557,13 +613,25 @@ try {
   }
   process.exitCode = 1;
 } finally {
-  await ctx.close();
+  // ctx was explicitly closed inside step 11; closing again throws
+  // "Target page, context, or browser has been closed" — pre-fix that
+  // bubbled up and aborted the finally block before browser.close() ran,
+  // leaking Chromium. Wrap both close() calls defensively.
+  try {
+    await ctx.close();
+  } catch {
+    /* may already be closed */
+  }
   try {
     await ctx2.close();
   } catch {
     /* may already be closed */
   }
-  await browser.close();
+  try {
+    await browser.close();
+  } catch {
+    /* may already be closed */
+  }
 }
 
 const pass = findings.filter((f) => f.status === "PASS").length;
