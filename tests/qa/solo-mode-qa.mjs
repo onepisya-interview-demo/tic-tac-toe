@@ -139,11 +139,22 @@ try {
     await openSoloAsXFirst(page);
     await driveTopRowWin(page);
 
-    // Inline banner mounts under the board; the URL must NOT change.
-    await page.waitForSelector('[data-testid="result-headline"]', { timeout: 4000 });
-    const headline = await page.textContent('[data-testid="result-headline"]');
-    assert.match(headline, /X 获胜/, `expected X 获胜 banner, got "${headline}"`);
+    // Outcome is announced by the header status-bar (no inline result
+    // banner any more — T2 dedup removes the duplicate). The URL must
+    // NOT change.
+    await page.waitForFunction(
+      () => /X 获胜/.test(
+        document.querySelector('[data-testid="status-text"]')?.textContent ?? '',
+      ),
+      null,
+      { timeout: 4000 },
+    );
+    const statusText = await page.textContent('[data-testid="status-text"]');
+    assert.match(statusText ?? '', /X 获胜/, `expected X 获胜 in status, got "${statusText}"`);
     assert.ok(page.url().endsWith("/solo"), `solo must not navigate, got ${page.url()}`);
+    // Confetti celebration still fires on win — SoloConfetti component
+    // mounts the testid="confetti" span (no ResultBanner text).
+    await page.waitForSelector('[data-testid="confetti"]', { timeout: 2000 });
     await page.waitForTimeout(500); // settle window for any rogue write
 
     assert.equal(
@@ -161,8 +172,12 @@ try {
 
   await step("04 reload: SoloStatsPanel hydrates the persisted row", async () => {
     await page.reload({ waitUntil: "networkidle" });
+    // SoloStatsPanel lives behind the /solo view-toggle (board↔stats).
+    // Default mount is board view; switch to stats to read the persisted row.
+    await page.waitForSelector('[data-testid="view-toggle"]');
+    await page.click('[data-testid="view-toggle"]');
     await page.waitForSelector('[data-testid="solo-stats"]');
-    await page.waitForSelector('[data-testid="board"]');
+    await page.waitForTimeout(220); // settle ViewTransition + post-mount hydration
     // Panel re-reads in a post-mount effect; poll until hydrated.
     await page.waitForFunction(
       () => {

@@ -127,6 +127,16 @@ html, body {
     to { opacity: 1; }
   }
 
+  /* View swap keyframes — opacity-only crossfade + small upward slide
+     on the incoming content. The `translate` property is the modern
+     composited equivalent of `transform: translateY()`; we use it to
+     stay GPU-only and not fight with the existing .page-fade-in
+     keyframes that this file already uses for route transitions. */
+  @keyframes view-swap-in {
+    from { opacity: 0; translate: 0 6px; }
+    to   { opacity: 1; translate: 0 0; }
+  }
+
   @keyframes button-spin {
     to { transform: rotate(360deg); }
   }
@@ -203,6 +213,24 @@ html, body {
 
   ::view-transition-new(.page) {
     animation: 150ms ease-out both page-fade-in;
+  }
+
+  /* In-page view swap (task T3, plan: ulw-ux-mobile-sync) — React 19
+     <ViewTransition update="view-swap"> fired by /solo's view toggle.
+     Bidirectional crossfade (opacity) plus a 6px translateY for the
+     incoming content. 180ms ease-out per DESIGN.md §5 motion contract
+     — same easing curve as the page transition, GPU-only (transform +
+     opacity), never animates layout properties. The browser takes the
+     snapshot at the moment of the in-page state change so the OLD
+     content fades + holds position while the NEW content fades in
+     from translateY(6px). Reverse (`reverse` keyword) re-uses the same
+     keyframes in mirror for symmetry. The global reduced-motion rule
+     below zeroes animation-duration so the swap collapses to instant. */
+  ::view-transition-old(.view-swap) {
+    animation: 180ms ease-out both view-swap-in reverse;
+  }
+  ::view-transition-new(.view-swap) {
+    animation: 180ms ease-out both view-swap-in;
   }
 
   /* The VT snapshot overlay captures pointer events while a transition

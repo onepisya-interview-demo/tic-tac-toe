@@ -105,8 +105,10 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | Result confetti | `opacity`, `transform: translate3d()` | 1.1s once | ease-in |
 | Page transition | `opacity` | 150ms | ease-out |
 | View Transitions (route) | opacity crossfade 双向 | 150ms | ease-out |
+| In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
 
 - **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
+- **In-page view switch**: 同上平台 API 的 `update` 路径（React 19 `<ViewTransition update="view-swap">` + `useTransition` 驱动），仅 `/solo` 顶栏切换棋盘↔战绩时启用；CSS 关键帧 `translate` + `opacity`，GPU-only，不动布局属性；`prefers-reduced-motion` 归零；不动 `prefers-reduced-motion` 既有全局 `*` 兜底
 - **No bounce / no slide-in / no parallax**; transitions communicate a move, outcome, or route change only
 - GPU-only (`transform`, `opacity`, `background-color`)
 - `prefers-reduced-motion`: collapse all to `0ms`
