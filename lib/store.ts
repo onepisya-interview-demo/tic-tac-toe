@@ -15,6 +15,11 @@ import {
   type Player,
 } from './game';
 import { clearSoloStats, loadSoloStats, persistSoloStats } from './solo-stats';
+import {
+  clearPlayerName as clearPlayerNameLocal,
+  getPlayerName,
+  setPlayerName as setPlayerNameLocal,
+} from './player-name';
 import { playSound } from './sound';
 
 export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
@@ -45,6 +50,31 @@ export interface GameState {
    * in-game write.
    */
   lastWriteAt: number | null;
+  /**
+   * Player name (mirror of `localStorage['ttt.player.name.v1']`).
+   * Hydrated on mount by `setPlayerName` (the source of truth) and
+   * updated by PlayerNameForm on save / clear. Solo games with a
+   * non-null playerName auto-POST outcomes to /api/solo-stats; with
+   * null, the original wave-1 "zero network writes" contract holds.
+   */
+  playerName: string | null;
+  /**
+   * Solo network-sync state for the most recent solo game:
+   * - `pending`: the outcome of the last solo game that has not yet
+   *   been confirmed by a successful POST. Lets the panel surface a
+   *   manual 「同步」button as a retry affordance without re-POSTing
+   *   successful outcomes.
+   * - `inflight`: true while the store is mid-POST; the panel's sync
+   *   button uses this for its loading/disabled state.
+   * - `error`: human-readable reason when the last POST attempt failed
+   *   ('aborted' | 'network-error' | 'http-error'); cleared on next
+   *   successful POST or on name change.
+   */
+  soloSync: {
+    pending: 'X' | 'O' | 'draw' | null;
+    inflight: boolean;
+    error: 'aborted' | 'network-error' | 'http-error' | null;
+  };
 }
 
 export interface GameActions {
@@ -87,6 +117,21 @@ export interface GameActions {
    * `__resetInternalForTests` seam; production code never calls it.
    */
   __getInternalForTests: () => GameStats;
+  /**
+   * Set / clear the player's name. Persists to localStorage and mirrors
+   * the value into state so the store's solo branch can branch on it
+   * without re-reading localStorage at every move (which would couple
+   * the store to a browser API). Called by PlayerNameForm on save and
+   * by SoloStatsPanel on mount / name-change event.
+   */
+  setPlayerName: (name: string | null) => void;
+  /**
+   * Retry the most recent failed solo POST. No-op when no outcome is
+   * pending or no name is set. Sets soloSync.inflight around the call;
+   * clears `pending` on success and updates `error` on failure. The
+   * panel's 「同步」button calls this with no arguments.
+   */
+  retrySoloSync: () => Promise<void>;
 }
 
 export type GameStore = GameState & GameActions;
@@ -99,6 +144,8 @@ const initial: GameState = {
   winner: null,
   winLine: null,
   lastWriteAt: null,
+  playerName: null,
+  soloSync: { pending: null, inflight: false, error: null },
 };
 
 // Internal stats cache (NOT in GameState type). RSC pages hydrate this via
@@ -120,7 +167,7 @@ let internalStats: GameStats = emptyStats();
  */
 export type StoreFetchResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: 'aborted' | 'network-error' };
+  | { ok: false; reason: 'aborted' | 'network-error' | 'http-error'; status?: number };
 
 /**
  * Wrap a fetch() call so it rejects (well, returns ok:false) after
@@ -187,6 +234,35 @@ async function apiDeleteStats(): Promise<StoreFetchResult<GameStats>> {
   }
 }
 
+/**
+ * Server-authoritative solo outcome accumulator: the client only names
+ * who won + which player; the POST /api/solo-stats handler reads the
+ * per-name row, applies recordOutcome, and returns the new full row as
+ * { stats: GameStats }. Mirrors apiRecordOutcome's { ok, value } |
+ * { ok, false, reason } contract but adds an http-error reason (the
+ * solo route can 422 on a bad name; ranked never 422s on the body
+ * shape because the body is just { outcome }). Caller (makeMove's solo
+ * branch, retrySoloSync) stamps soloSync.{pending, error} from the
+ * result.
+ */
+async function apiPostSoloOutcome(
+  name: string,
+  outcome: 'X' | 'O' | 'draw',
+): Promise<StoreFetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout('/api/solo-stats', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, outcome }),
+    });
+    if (!r.ok) return { ok: false, reason: 'http-error' };
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
+  }
+}
+
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
 
@@ -210,6 +286,19 @@ export const useGameStore = create<GameStore>((set) => ({
       // Reload semantics: a solo session resumes from the browser-
       // persisted baseline so accumulation survives page reloads.
       internalStats = loadSoloStats();
+      // Rehydrate the player name from localStorage when the store
+      // booted without one (SSR first frame, fresh page navigation).
+      // Done here so the solo branch in makeMove can read state.
+      // playerName on the first move without a localStorage round-trip
+      // in the hot path. SSR-safe via lib/player-name's window guard.
+      if (!useGameStore.getState().playerName) {
+        const stored = getPlayerName();
+        if (stored) {
+          // Direct set — mirrors the localStorage value into state so
+          // the very next makeMove sees it.
+          useGameStore.setState({ playerName: stored });
+        }
+      }
     }
     const firstPlayer = randomizeFirstPlayer();
     set({
@@ -248,13 +337,26 @@ export const useGameStore = create<GameStore>((set) => ({
       // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
       if (s.mode === 'solo') {
-        // Solo: zero network writes. Accumulate locally from the internal
-        // cache (seeded from localStorage by startGame('solo')) and persist
-        // for the next session. No lastWriteAt stamp — that timestamp
-        // means "a network write settled", and solo never writes; this
-        // also keeps lastWriteAt subscribers (ranked navigation) silent.
+        // Solo: local accumulation from the internal cache (seeded by
+        // startGame('solo')) + localStorage persistence. The named-mode
+        // auto-POST happens here (not in the panel) so the sync fires
+        // regardless of whether the user is on the board view or the
+        // stats view — the panel is unmounted on the board view in
+        // wave 1 / 2, and we still need the network write to land.
         internalStats = recordOutcome(internalStats, win.player);
         persistSoloStats(internalStats);
+        if (s.playerName) {
+          set({ soloSync: { pending: win.player, inflight: true, error: null } });
+          const r = await apiPostSoloOutcome(s.playerName, win.player);
+          if (r.ok) {
+            set({
+              soloSync: { pending: null, inflight: false, error: null },
+              lastWriteAt: Date.now(),
+            });
+          } else {
+            set({ soloSync: { pending: win.player, inflight: false, error: r.reason } });
+          }
+        }
         return;
       }
       // Server-authoritative write: the client only names the winner; the
@@ -278,10 +380,22 @@ export const useGameStore = create<GameStore>((set) => ({
       });
       playSound('draw');
       if (s.mode === 'solo') {
-        // Same solo contract as the win branch: local accumulation,
-        // localStorage persistence, zero network, zero lastWriteAt.
+        // Same solo contract as the win branch: local accumulation +
+        // localStorage persistence; named-mode auto-POST fires here.
         internalStats = recordOutcome(internalStats, 'draw');
         persistSoloStats(internalStats);
+        if (s.playerName) {
+          set({ soloSync: { pending: 'draw', inflight: true, error: null } });
+          const r = await apiPostSoloOutcome(s.playerName, 'draw');
+          if (r.ok) {
+            set({
+              soloSync: { pending: null, inflight: false, error: null },
+              lastWriteAt: Date.now(),
+            });
+          } else {
+            set({ soloSync: { pending: 'draw', inflight: false, error: r.reason } });
+          }
+        }
         return;
       }
       // Same server-authoritative contract as the win branch above: the
@@ -335,5 +449,41 @@ export const useGameStore = create<GameStore>((set) => ({
     const result = await apiDeleteStats();
     internalStats = result.ok ? result.value : emptyStats();
     set({ lastWriteAt: Date.now() });
+  },
+
+  setPlayerName: (name) => {
+    // Mirror to localStorage so reloads re-hydrate the same value. Pass
+    // null to clear (the panel's clear button uses this). SSR-safe via
+    // the inner typeof window guard in lib/player-name.ts; we still
+    // update the in-memory state unconditionally so server-rendered
+    // RSC trees that call this in a future use case see the latest
+    // value without depending on a localStorage round-trip.
+    if (name === null) {
+      clearPlayerNameLocal();
+    } else {
+      setPlayerNameLocal(name);
+    }
+    set({
+      playerName: name,
+      // Name change clears any stale pending sync — the previous name
+      // belongs to a different row on the server, retrying it under a
+      // new name would 422. The new name's pending state starts clean.
+      soloSync: { pending: null, inflight: false, error: null },
+    });
+  },
+
+  retrySoloSync: async (): Promise<void> => {
+    const s = useGameStore.getState();
+    if (!s.playerName || !s.soloSync.pending) return;
+    set({ soloSync: { ...s.soloSync, inflight: true, error: null } });
+    const r = await apiPostSoloOutcome(s.playerName, s.soloSync.pending);
+    if (r.ok) {
+      set({
+        soloSync: { pending: null, inflight: false, error: null },
+        lastWriteAt: Date.now(),
+      });
+    } else {
+      set({ soloSync: { pending: s.soloSync.pending, inflight: false, error: r.reason } });
+    }
   },
 }));

@@ -84,6 +84,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **仓库内任何"清理/迁移/deslop"批量文件操作必须走 git 通道：删 tracked 文件前先 commit，删 untracked/ignored 内容前先备份** —— worktree-only 删除可由 `git ls-files -d -z | xargs -0 git checkout --` 一条命令恢复，但 ignored 内容（如 `.omx/backups` 备份 tar）被删即永久丢失。2026-09-12 00:00:08-23 实证：40 个 tracked 文件（全部属于最后提交日期 2026-09-07 的 cohort）+ `.git/hooks` + `.omx/backups/repo.git.tar` 在 15 秒内被未知进程按清单删除；同波进程还触碰了 /tmp 顶层 35 个不相关目录。
 - **herdr 多 pane 工作区内，同一 worktree 同时只允许一个 agent 写入；午夜定时任务窗口（00:00±15min）不做绕过 git 的批量文件操作** —— 2026-09-12 实证：仓库删除（00:00:08-23）与 `/tmp/hooks-v2` 空骨架创建（00:00:15）交错 6 秒，指向同一迁移脚本中途停止；三个 herdr pane 的会话转录在窗口内均零条目，hermes 生态 4 个 cron 同窗触发但无一认领删除行为——reflog/index 零记录证明它绕过了 git。
 - **commit-msg hook 位于 `.git/` 内，git 永不跟踪；重建只能靠文档契约，重建后必须双向冒烟** —— 契约三源：docs/commit-policy.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B（audit 脚本是策略真源，hook 委托 audit）。任何 commit（含 `fcbde26f`）都不含 hook 原件；`.git/HEAD` 丢失用 `echo 'ref: refs/heads/main' > .git/HEAD` 恢复；hook 重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B。
+- **solo by-name 同步：客户端禁止手动 PUT solo 全行，POST 只发单个 outcome** —— 与 ranked 同根约束。`lib/db.ts:accumulateSoloRecord` 是 solo server 侧权威累加点（read → recordOutcome → upsert）；客户端仅 POST `{name, outcome}` 收 server 回传的 `{stats}`。`components/SoloStatsPanel.tsx` 的「同步」按钮在无 pending 时退化为纯 GET 刷新，避免 double-count footgun。
+- **`ttt.player.name.v1` 白名单必须与 `app/api/solo-stats/route.ts` `normalizeName` 同源** —— trim → 1–24 字符 → 禁 `< 0x20 / 0x7F / 0x80–0x9F` 控制字符；`lib/player-name.ts:isPlayerName` 是单一客户端真相，DRIFT = 「保存名字 → POST 422」坏 UX。
+- **未命名 solo 路径零新增网络行为** —— `SoloStatsPanel` 用 `playerName` 三元 if 而非无条件 GET 是 wave 2 §A5 验收硬约束（sync-qa step 01 探针断言）；任何「顺手 GET 一次」改动都破坏该契约。
+- **同名并发故意 last-write-wins，README 注明边界** —— 不做 CRDT / 时间戳合并；单机 UX 场景下「跨设备累加足够」，过度合并引入「为什么不同步删除」的迷惑。
 - **store 不得在客户端预计算战绩后 PUT 全行；recordOutcome 必须在 server 侧执行** —— 客户端各自 `recordOutcome(internalStats, outcome)` 后 PUT 会因 last-write-wins 丢跨端更新。服务端权威累加：本 plan 的 `lib/db.ts:recordAndSave` 是唯一累加点；客户端只 POST `{outcome}` 收 server 回传的 `{stats}`。
 
 ## 项目特有风格

@@ -41,8 +41,11 @@ Turso HTTP on Vercel).
 
 - 🎯 **Two modes**: **ranked** — two players take turns on one device
   (pass-and-play), scores persist server-side; **solo** — single-player
-  practice, scores live in browser `localStorage` with zero server writes,
-  so scoring works fully offline.
+  practice. Without a name, scores live in browser `localStorage` with
+  zero server writes (fully offline). With a player name, solo scores
+  sync per-name to the server's `solo_records` ledger (same name
+  across devices shares history; concurrent same-name writes are
+  last-write-wins).
 - 💾 **Score persistence (ranked)**: wins / losses / draws / streaks land in
   a single-row `game_stats` table — file: sqlite locally, Turso HTTP on
   Vercel (@libsql/client).
@@ -71,7 +74,7 @@ Turso HTTP on Vercel).
 | --- | --- |
 | `/` | Home: stats card + start game + reset stats |
 | `/play` | Game: 3x3 board + current player indicator + restart |
-| `/solo` | Solo practice: 3x3 board + local stats panel + clear local stats (zero network writes) |
+| `/solo` | Solo practice: 3x3 board + solo stats panel (named → GET pull + auto-POST on settle + manual sync button) + clear local stats |
 | `/result` | Result: outcome + play again + back home + reset stats |
 | `GET /api/stats` | Read stats (Node runtime) |
 | `PUT /api/stats` | Write stats seed / admin (@deprecated; clients use POST outcome) |

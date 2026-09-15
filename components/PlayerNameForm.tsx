@@ -1,43 +1,48 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPlayerName, setPlayerName } from '@/lib/player-name';
+import { isPlayerName } from '@/lib/player-name';
+import { useGameStore } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 /**
  * Player-name input mounted on the home page's stats card. SSR-safe by
  * construction: the first frame renders the "no name set" default, then
- * a mount effect hydrates from localStorage (same pattern as
- * SoundToggle / SoloStatsPanel — never read localStorage in the server
- * frame).
+ * a mount effect hydrates from the store (which itself reads localStorage
+ * via lib/player-name.ts). Saving writes to the store via setPlayerName
+ * — the store mirrors the value into localStorage and broadcasts it to
+ * the live SoloStatsPanel on /solo via the same-tab CustomEvent.
  *
- * Saving writes to localStorage and triggers a custom event so the
- * SoloStatsPanel on /solo can re-pull without a hard navigation. The
- * form intentionally does NOT surface a "save failed" message: the API
- * whitelist is the authoritative gate (saves the API would reject fail
- * silently here too) and the spec keeps the form a one-field affordance.
+ * The form intentionally does NOT surface a "save failed" message: the
+ * API whitelist is the authoritative gate (saves the API would reject
+ * fail silently here too) and the spec keeps the form a one-field
+ * affordance.
  */
 export function PlayerNameForm() {
+  const playerName = useGameStore((s) => s.playerName);
+  const setStoreName = useGameStore((s) => s.setPlayerName);
   const [name, setName] = useState<string>('');
-  const [savedName, setSavedName] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState<boolean>(false);
 
+  // Hydrate the input from the store on mount. The store mirrors
+  // localStorage['ttt.player.name.v1'] so a single source of truth is
+  // read here. playerName is null on the SSR first frame (the store is
+  // a client module and never persisted a name server-side), so we
+  // render an empty input + placeholder until hydration finishes.
   useEffect(() => {
-    const current = getPlayerName();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSavedName(current);
-    setName(current ?? '');
+    setName(playerName ?? '');
     setHydrated(true);
-  }, []);
+  }, [playerName]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    const ok = setPlayerName(name);
-    if (!ok) return;
     const trimmed = name.trim();
-    setSavedName(trimmed);
-    // Notify in-page subscribers (SoloStatsPanel) that the name changed
-    // — `name` event is the same key they should listen on.
+    if (!isPlayerName(trimmed)) return;
+    setStoreName(trimmed);
+    // Mirror to a CustomEvent so a same-tab SoloStatsPanel listener can
+    // re-fetch from the server even when it was mounted before this
+    // form's setState propagated through zustand (defense in depth).
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ttt:player-name-changed'));
     }
@@ -45,15 +50,12 @@ export function PlayerNameForm() {
 
   function handleClear(): void {
     setName('');
-    setSavedName(null);
+    setStoreName(null);
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('ttt.player.name.v1');
       window.dispatchEvent(new CustomEvent('ttt:player-name-changed'));
     }
   }
 
-  // Before hydration, render nothing extra so SSR output matches the
-  // first client frame (the savedName label would otherwise flicker).
   if (!hydrated) {
     return (
       <div className="flex flex-col gap-2" data-testid="player-name-section">
@@ -62,7 +64,7 @@ export function PlayerNameForm() {
     );
   }
 
-  const hasSaved = savedName !== null && savedName.length > 0;
+  const hasSaved = playerName !== null && playerName.length > 0;
 
   return (
     <form
@@ -84,7 +86,7 @@ export function PlayerNameForm() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={24}
-          placeholder={hasSaved ? savedName : '1-24 字符'}
+          placeholder={hasSaved ? playerName! : '1-24 字符'}
           className="flex-1 bg-bg-elevated border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong"
           data-testid="player-name-input"
           aria-label="玩家名"
@@ -114,7 +116,7 @@ export function PlayerNameForm() {
           className="text-small text-text-muted"
           data-testid="player-name-current"
         >
-          当前：<span className="text-text-primary font-mono">{savedName}</span>
+          当前：<span className="text-text-primary font-mono">{playerName}</span>
         </p>
       ) : null}
     </form>

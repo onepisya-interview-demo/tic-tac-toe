@@ -187,4 +187,17 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 
 ---
 
+### Solo by-name sync (W-SYNC wave 2)
+
+| Contract | Value | Notes |
+| --- | --- | --- |
+| Storage key | `ttt.player.name.v1` (localStorage) | Versioned for future shape changes. SSR-safe + fail-soft, mirrors `ttt.solo.stats.v1`. |
+| API: read | `GET /api/solo-stats?name={trimmed}` → `{ stats: GameStats \| null }` | 422 on invalid name (whitelist mirror of client-side `isPlayerName`) |
+| API: write | `POST /api/solo-stats` body `{ name, outcome }` → `{ stats: GameStats }` | Server-authoritative — read → recordOutcome → upsert, last-write-wins |
+| DB | `solo_records` (name TEXT PRIMARY KEY + 5 ints + updated_at) | One row per name; same shape as `game_stats` |
+| Client UI | `components/PlayerNameForm.tsx` (input + save + clear) mounted in home 战绩 Card; `components/SoloStatsPanel.tsx` shows the name in heading when set | No new Tailwind tokens |
+| Test ids | `player-name-input` / `player-name-save` / `player-name-clear` / `player-name-current` / `player-name-section` / `solo-stats-heading` / `solo-sync` / `solo-stats-error` | Stable QA contract; added on top of wave 1's `view-toggle` / `solo-stats` / `reset-solo-stats` |
+| Concurrency model | Last-write-wins per name (intentional simplicity) | README documents the boundary; no CRDT / no timestamp merging |
+| Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | A5 acceptance — verified by sync-qa step 01 |
+
 This contract is the single source of truth for design tokens. Any deviation must update this file first.

@@ -65,6 +65,8 @@ function resetStore(): void {
     winner: null,
     winLine: null,
     lastWriteAt: null,
+    playerName: null,
+    soloSync: { pending: null, inflight: false, error: null },
   });
   useGameStore.getState().__resetInternalForTests();
 }
@@ -955,5 +957,181 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     // baseline is empty — the next startGame('solo') reseeds from
     // emptyStats, not the in-memory post-throw value.
     expect(loadSoloStats()).toEqual(emptyStats());
+  });
+});
+
+// ── W-SYNC wave 2: player-name + solo auto-POST + retry ──
+//
+// The solo branch used to be "zero network writes" by contract. Wave 2
+// keeps that contract for unnamed play (playerName === null) but adds
+// a server-authoritative POST when playerName is set; the POST
+// happens inside makeMove so it fires regardless of which view the
+// user is on (the panel is unmounted on the board view, which would
+// otherwise drop the network write). The manual sync button calls
+// retrySoloSync; soloSync.{pending, inflight, error} is the
+// observable seam between the store and the panel UI.
+
+describe('lib/store wave 2 (player-name + solo auto-POST)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetStore();
+  });
+
+  it('setPlayerName stores a valid name and clears any pending solo sync', () => {
+    useGameStore.setState({
+      soloSync: { pending: 'X', inflight: false, error: 'network-error' },
+    });
+    useGameStore.getState().setPlayerName('alice');
+    expect(useGameStore.getState().playerName).toBe('alice');
+    expect(useGameStore.getState().soloSync).toEqual({
+      pending: null,
+      inflight: false,
+      error: null,
+    });
+  });
+
+  it('setPlayerName(null) clears the stored name', () => {
+    useGameStore.getState().setPlayerName('alice');
+    expect(useGameStore.getState().playerName).toBe('alice');
+    useGameStore.getState().setPlayerName(null);
+    expect(useGameStore.getState().playerName).toBeNull();
+  });
+
+  it('unnamed solo win: zero network writes (wave-1 contract preserved)', async () => {
+    const { calls, restore } = mockFetch([]);
+    seedInternalStats({ totalGames: 2, xWins: 1, oWins: 0, draws: 1, currentStreak: 0 });
+    useGameStore.getState().startGame('solo');
+    expect(useGameStore.getState().playerName).toBeNull();
+    // Drive a top-row win (X-first): 0, 1, 2 — X wins.
+    await useGameStore.getState().makeMove(0);
+    await useGameStore.getState().makeMove(3);
+    await useGameStore.getState().makeMove(1);
+    await useGameStore.getState().makeMove(4);
+    await useGameStore.getState().makeMove(2);
+    expect(useGameStore.getState().phase).toBe('won');
+    // No fetch should have been called — solo without a name is the
+    // original wave-1 contract.
+    expect(calls).toHaveLength(0);
+    restore();
+  });
+
+  it('named solo win: POST /api/solo-stats with { name, outcome } and clears pending on success', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('solo');
+    // Drive a top-row win (cells 0, 3, 1, 4, 2 — whichever player
+    // takes 0, 1, 2 wins row 0).
+    await useGameStore.getState().makeMove(0);
+    await useGameStore.getState().makeMove(3);
+    await useGameStore.getState().makeMove(1);
+    await useGameStore.getState().makeMove(4);
+    await useGameStore.getState().makeMove(2);
+    expect(useGameStore.getState().phase).toBe('won');
+    const winner = useGameStore.getState().winner;
+    expect(winner).not.toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/solo-stats');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(calls[0].init?.body as string)).toEqual({ name: 'alice', outcome: winner });
+    expect(useGameStore.getState().soloSync.pending).toBeNull();
+    expect(useGameStore.getState().soloSync.inflight).toBe(false);
+    expect(useGameStore.getState().soloSync.error).toBeNull();
+    restore();
+  });
+
+  it('named solo draw: POST outcome=draw and clears pending on success', async () => {
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0 } } },
+    ]);
+    useGameStore.getState().setPlayerName('bob');
+    useGameStore.getState().startGame('solo');
+    // X-first: a sequence that reaches the draw branch instead of an
+    // X win. We avoid giving X three in a row until the board is full.
+    // Sequence: X=0, O=1, X=4, O=5, X=8, O=3, X=2, O=7, X=6 → drawn.
+    const drawSeq = [4, 0, 8, 5, 3, 7, 2, 6, 1];
+    for (const i of drawSeq) {
+      await useGameStore.getState().makeMove(i);
+    }
+    expect(useGameStore.getState().phase).toBe('drawn');
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init?.body as string)).toEqual({ name: 'bob', outcome: 'draw' });
+    expect(useGameStore.getState().soloSync.pending).toBeNull();
+    restore();
+  });
+
+  it('named solo POST failure: keeps pending set + records error (for retry button)', async () => {
+    const { restore } = mockFetchWithAbort();
+    useGameStore.getState().setPlayerName('carol');
+    useGameStore.getState().startGame('solo');
+    // Drive a top-row win (sequence forces X to be the first player by
+    // playing cells 0, 3, 1, 4, 2 — X wins row 0 regardless of the
+    // random first-player assignment, because X plays 0, 1, 2 and O
+    // plays 3, 4).
+    await useGameStore.getState().makeMove(0);
+    await useGameStore.getState().makeMove(3);
+    await useGameStore.getState().makeMove(1);
+    await useGameStore.getState().makeMove(4);
+    await useGameStore.getState().makeMove(2);
+    expect(useGameStore.getState().phase).toBe('won');
+    expect(useGameStore.getState().winner).not.toBeNull();
+    expect(useGameStore.getState().soloSync.pending).toBe(useGameStore.getState().winner);
+    expect(useGameStore.getState().soloSync.inflight).toBe(false);
+    expect(useGameStore.getState().soloSync.error).toBe('aborted');
+    restore();
+  });
+
+  it('retrySoloSync re-POSTs the pending outcome and clears it on success', async () => {
+    // First call: abort (failure). Second call (retry): 200.
+    const calls: FetchCall[] = [];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      calls.push({ url, init });
+      if (calls.length === 1) {
+        throw new DOMException('aborted', 'TimeoutError');
+      }
+      return new Response(
+        JSON.stringify({ stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    useGameStore.getState().setPlayerName('dave');
+    useGameStore.getState().startGame('solo');
+    await useGameStore.getState().makeMove(0);
+    await useGameStore.getState().makeMove(3);
+    await useGameStore.getState().makeMove(1);
+    await useGameStore.getState().makeMove(4);
+    await useGameStore.getState().makeMove(2);
+    const winner = useGameStore.getState().winner;
+    expect(winner).not.toBeNull();
+    expect(useGameStore.getState().soloSync.pending).toBe(winner);
+    expect(useGameStore.getState().soloSync.error).toBe('aborted');
+    await useGameStore.getState().retrySoloSync();
+    expect(useGameStore.getState().soloSync.pending).toBeNull();
+    expect(useGameStore.getState().soloSync.error).toBeNull();
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1].init?.body as string)).toEqual({ name: 'dave', outcome: winner });
+    fetchMock.mockRestore();
+  });
+
+  it('retrySoloSync is a no-op when there is no pending outcome', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    useGameStore.getState().setPlayerName('erin');
+    await useGameStore.getState().retrySoloSync();
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it('setPlayerName clears any in-flight soloSync state (stale name must not retry)', () => {
+    useGameStore.setState({
+      soloSync: { pending: 'X', inflight: false, error: 'network-error' },
+    });
+    useGameStore.getState().setPlayerName('newplayer');
+    expect(useGameStore.getState().soloSync).toEqual({
+      pending: null,
+      inflight: false,
+      error: null,
+    });
   });
 });

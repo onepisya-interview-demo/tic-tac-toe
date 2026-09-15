@@ -37,7 +37,8 @@ Turso HTTP）。
 ## Features
 
 - 🎯 **双模式**：**ranked 对战**——两人同设备 pass-and-play 轮流下，战绩经服务端持久化；
-  **solo 单机练习**——战绩存浏览器 localStorage，零服务端写，离线也能完整计分。
+  **solo 单机练习**——未命名时战绩存浏览器 localStorage，零服务端写、离线也能完整计分；
+  设置玩家名后自动按名同步到服务端 `solo_records`（同名多设备历史共享；同名并发为后到者累加）。
 - 💾 **战绩持久化（ranked）**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
@@ -57,7 +58,7 @@ Turso HTTP）。
 | --- | --- |
 | `/` | 首页：战绩卡片 + 开始游戏 + 重置战绩 |
 | `/play` | 游戏页：3x3 棋盘 + 当前玩家指示 + 重新开局 |
-| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板 + 清空本地战绩（零网络写） |
+| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板（已命名时按名 GET 拉回 + 局终自动 POST + 同步按钮兜底）+ 清空本地战绩 |
 | `/result` | 结算页：胜负结果 + 再来一局 + 返回首页 + 重置战绩 |
 | `GET /api/stats` | 读战绩 (Node runtime) |
 | `PUT /api/stats` | 写战绩 seed / admin（@deprecated；客户端走 POST outcome） |
