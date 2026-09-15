@@ -1,11 +1,18 @@
 // Visual + functional QA via Playwright.
 // Runs against the production server on http://localhost:3000.
-// Captures one screenshot per route + a play-through ending in a win.
-// The /solo stage (added for ulw-solo-mode-split-view-transitions C6)
-// navigates to the new solo-practice route so every route documented in
-// the README preview has a screenshot; the solo gameplay contract itself
-// (zero network writes, localStorage persistence) stays covered by
-// tests/qa/solo-mode-qa.mjs — this probe only needs the visual.
+//
+// Two passes per invocation:
+//   * Desktop pass (1280×900) — home, play, result, home-after, play-again,
+//     solo (board view + stats view after toggle), API stats.
+//   * Mobile pass (375×667) — home, play, solo (board + stats), result.
+// Every mobile stage asserts scrollWidth === viewport.width (no horizontal
+// overflow); the desktop pass keeps the apple-touch-icon + mono-preload
+// contract pinned by the existing snapshot() helper.
+//
+// The /solo stage now drives the view-toggle (board↔stats) introduced by
+// the W-UI wave 1 (ulw-ux-mobile-sync T3): SoloStatsPanel renders only
+// when the toggle is in the stats position, so visual-qa must click
+// [data-testid="view-toggle"] before reading the stats surface.
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
@@ -73,13 +80,23 @@ async function snapshot(page) {
   }, GEIST_MONO_FONT_HASH);
 }
 
-async function main() {
-  await ensureDir(EVIDENCE_DIR);
-  const { browser, ctx, page } = await launchQA();
-  const shoot = shootTo(EVIDENCE_DIR);
+async function mobileOverflow(page) {
+  // The mobile-pass contract: the page must fit inside the viewport with no
+  // horizontal overflow. We assert scrollWidth strictly equals the layout
+  // viewport (clientWidth); a strict equality is required because the
+  // page-shell + globals.css already set body { overflow-x: hidden } so any
+  // internal overflow would already be clipped — but the underlying
+  // scrollWidth would still exceed clientWidth, which is the contract we
+  // pin (matches the existing ux-qa.mjs `assertUXContract` for mobile
+  // scenarios).
+  return page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+}
 
-  const log = [];
-
+async function desktopPass(page, shoot, log) {
   // ---- 1. Home / ----
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="start-game"]');
@@ -135,14 +152,96 @@ async function main() {
   const replaySnap = await snapshot(page);
   log.push({ stage: 'play-again', shot: replayShot, snapshot: replaySnap });
 
-  // ---- 7. /solo route screenshot (solo practice; no writes by contract) ----
+  // ---- 7. /solo route — board view (default) + stats view (after toggle) ----
   await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  const soloBoardShot = await shoot(page, '06a-solo-board.png');
+  const soloBoardSnap = await snapshot(page);
+  log.push({ stage: 'solo-board', shot: soloBoardShot, snapshot: soloBoardSnap });
+
+  // Click view-toggle to swap to stats view (T3 in-page swap).
+  await page.click('[data-testid="view-toggle"]');
   await page.waitForSelector('[data-testid="solo-stats"]');
-  await page.waitForTimeout(200);
-  const soloShot = await shoot(page, '06-solo.png');
-  const soloSnap = await snapshot(page);
-  log.push({ stage: 'solo', shot: soloShot, snapshot: soloSnap });
+  await page.waitForTimeout(220);
+  const soloStatsShot = await shoot(page, '06b-solo-stats.png');
+  const soloStatsSnap = await snapshot(page);
+  log.push({ stage: 'solo-stats', shot: soloStatsShot, snapshot: soloStatsSnap });
+}
+
+async function mobilePass(page, shoot, log) {
+  // All four canonical routes at 375×667 (iPhone SE first-gen reference).
+  // Per-stage contract: scrollWidth === clientWidth (no horizontal overflow).
+  // Each stage opens the same browser tab sequentially (single context) to
+  // share localStorage state where useful (e.g. home reset before /solo).
+  const stages = [];
+
+  // Home: reset stats first so we capture a clean empty-state home.
+  await page.request.delete(`${BASE}/api/stats`);
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="start-game"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm1-home.png');
+  const homeOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-home', overflow: homeOverflow });
+
+  // /play
+  await Promise.all([
+    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
+    page.click('[data-testid="start-game"]'),
+  ]);
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm2-play.png');
+  const playOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-play', overflow: playOverflow });
+
+  // /solo — capture both views (board default + stats after toggle).
+  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm3a-solo-board.png');
+  const soloBoardOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-solo-board', overflow: soloBoardOverflow });
+
+  // Click view-toggle → stats view.
+  await page.click('[data-testid="view-toggle"]');
+  await page.waitForSelector('[data-testid="solo-stats"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm3b-solo-stats.png');
+  const soloStatsOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-solo-stats', overflow: soloStatsOverflow });
+
+  // /result — drive a ranked win on /play then navigate. The previous
+  // step left us on /solo (stats view) which has no start-game button,
+  // so navigate directly via goto rather than click.
+  await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="board"]');
+  await driveTopRowWin(page);
+  await page.waitForURL(`${BASE}/result`, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="result-headline"]');
+  await page.waitForTimeout(300);
+  await shoot(page, 'm4-result.png');
+  const resultOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-result', overflow: resultOverflow });
+
+  return stages;
+}
+
+async function main() {
+  await ensureDir(EVIDENCE_DIR);
+  const { browser, ctx, page } = await launchQA();
+  const shoot = shootTo(EVIDENCE_DIR);
+
+  const log = [];
+
+  // === Desktop pass (existing 1280×900 viewport from launchQA) ===
+  await desktopPass(page, shoot, log);
+
+  // === Mobile pass: switch viewport to 375×667 (iPhone SE) ===
+  await page.setViewportSize({ width: 375, height: 667 });
+  const mobileStages = await mobilePass(page, shoot, log);
+  log.push({ stage: 'mobile-overflow', stages: mobileStages });
 
   await ctx.close();
   await browser.close();
@@ -150,9 +249,9 @@ async function main() {
   await writeQaLog(EVIDENCE_DIR, log);
   console.log('QA complete. Screenshots and qa-log.json written to', EVIDENCE_DIR);
 
-  // Programmatic contract: every snapshot must have a non-null appleTouchIconHref
-  // and monoPreloadAbsent === true. Guards against silent regressions in commit 1
-  // (apple-icon) and commit 2 (mono preload).
+  // Programmatic contract #1: every desktop snapshot must have a non-null
+  // appleTouchIconHref and monoPreloadAbsent === true. Guards against
+  // silent regressions in commit 1 (apple-icon) and commit 2 (mono preload).
   const failures = log
     .filter((entry) => entry.snapshot)
     .filter((entry) => !entry.snapshot.appleTouchIconHref || entry.snapshot.monoPreloadAbsent !== true);
@@ -163,7 +262,21 @@ async function main() {
     }
     process.exit(1);
   }
-  console.log(`QA contract verified: ${log.filter((e) => e.snapshot).length} stages all pass.`);
+
+  // Programmatic contract #2: every mobile stage must have
+  // scrollWidth === clientWidth === viewportWidth (no horizontal overflow).
+  const overflowFailures = (log.find((e) => e.stage === 'mobile-overflow')?.stages ?? [])
+    .filter((s) => s.overflow.scrollWidth !== s.overflow.clientWidth
+                  || s.overflow.scrollWidth !== s.overflow.viewportWidth);
+  if (overflowFailures.length > 0) {
+    console.error(`Mobile overflow contract failed for ${overflowFailures.length} stage(s):`);
+    for (const f of overflowFailures) {
+      console.error(`  - ${f.stage}: client=${f.overflow.clientWidth} scroll=${f.overflow.scrollWidth} viewport=${f.overflow.viewportWidth}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(`QA contract verified: ${log.filter((e) => e.snapshot).length} desktop stages pass; ${mobileStages.length} mobile stages no-overflow.`);
 }
 
 main().catch((e) => {

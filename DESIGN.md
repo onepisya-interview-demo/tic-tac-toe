@@ -174,6 +174,17 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 本文件的验收域是设计契约本身：视觉 QA 断言暗色 `#0A0A0A` 基底、Geist / Inter 加载（无 FOUT）、
 无 emoji、focus ring 可见、动效符合第 5 节时长/缓动表。
 
+**截图来源**（重制于 W-UI 波 1，commit 3）：
+
+- 桌面 1280×900：`docs/screenshots/{home,board,result,solo}.png`（visual-qa 桌面 pass）
+- 移动 375×667：`docs/screenshots/mobile/{home,board,solo,solo-stats,result}.png`（visual-qa 移动 pass，
+  4 路由 + solo 双视图各一张）
+
+**Mobile one-screen rule**（T3 验收契约，visual-qa 移动 pass `scrollWidth === viewport.width`
+断言 + 显式度量）：`/play` / `/result` 路由在 375×667 视口下滚动长度严格等于视口高度（无纵向滚动）；
+`/solo` 在 board ↔ stats 两视图下同样满足。`/home` 战绩为空时可一屏；战绩非空时 StatsGrid + 战绩卡
++ 按钮组纵向铺，仍允许轻量滚动（与桌面同等体验）。
+
 ---
 
 This contract is the single source of truth for design tokens. Any deviation must update this file first.
