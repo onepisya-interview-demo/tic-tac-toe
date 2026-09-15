@@ -129,3 +129,58 @@ jobs:
           path: ${RUNNER_TEMP}/visual-qa
           retention-days: 7
           if-no-files-found: warn
+
+  stats-race:
+    # Mirror of visual-qa: same production build + start + probe pattern, but
+    # drives tests/qa/stats-race-qa.mjs (SW-activation race + cross-context PUT
+    # race probe set — not covered by visual-qa). 14/14 expected on main HEAD.
+    name: Stats-Race QA (Playwright probe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/stats-race-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server
+        run: |
+          set -euo pipefail
+          pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "Server ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run stats-race-qa probe
+        run: pnpm exec node tests/qa/stats-race-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: stats-race-qa-evidence
+          path: ${RUNNER_TEMP}/stats-race-qa
+          retention-days: 7
+          if-no-files-found: warn

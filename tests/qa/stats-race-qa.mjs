@@ -365,7 +365,7 @@ try {
     // always 1.
     swPostCount = 0;
     await deleteStats(page);
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
     await page.click('[data-testid="start-game"]');
     await page.waitForURL("**/play");
     await page.waitForSelector('[data-testid="board"]');
@@ -377,8 +377,15 @@ try {
       }
     });
     await page.waitForTimeout(200);
-    await driveTopRowWin(page);
-    await page.waitForURL("**/result", { timeout: 6000 });
+    // Run the win driver and the navigation wait concurrently so the URL
+    // transition can be observed the moment the route changes — avoids
+    // waiting for the full 5-click chain (5 × 120 ms = 600 ms) BEFORE
+    // waitForURL even starts, which is the source of the original 6 s
+    // timeout flake. driveTopRowWin does not navigate; Promise.all is safe.
+    await Promise.all([
+      page.waitForURL("**/result", { timeout: 10000 }),
+      driveTopRowWin(page),
+    ]);
     await page.waitForTimeout(800);
     assert.equal(swPostCount, 1, `expected 1 POST through SW, got ${swPostCount}`);
   });
