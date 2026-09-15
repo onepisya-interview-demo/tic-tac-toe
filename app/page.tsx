@@ -4,6 +4,7 @@ import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
 import { ResetStatsButton } from '@/components/ResetStatsButton';
 import { StartGameButton } from '@/components/StartGameButton';
+import { PlayerNameForm } from '@/components/PlayerNameForm';
 import { StatsHydrator } from '@/components/StatsHydrator';
 import { loadStats } from '@/lib/db';
 
@@ -41,6 +42,7 @@ export default async function HomePage() {
             </p>
           ) : null}
           <StatsGrid stats={stats} />
+          <PlayerNameForm />
         </div>
       </Card>
 
