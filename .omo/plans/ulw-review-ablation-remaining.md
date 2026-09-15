@@ -18,16 +18,15 @@
 
 ## 2. 正交划分（文件面互斥）
 
-**波 1 · 六路并行（全部 fresh codex，herdr tab）**
+**波 1 实录（R2）**：六路 codex 并行。通道疾二次（RA 噪启、RC/wart 工具 EOF），就席催发/新席重派后全竣：
+- RA：7 账 0 修（internalStats 双语义、白名单、跨模式测缺、隐私测缺、mode 错配脆性）
+- RB：0 修 6 账 2 疵（六对抗点全 PASS）
+- RC：0 修 2 账（实测 21min：guide 逐条/降级矩阵/emulateMedia/受害面扫描全 PASS；stats-race fetch 偶发 race 账）
+- RD：1 修（双 launchQA 泄漏）+ 2 账
+- W-abl：AB1 绿（VT 摘除安全）/ AB2 红（零写探针抓注写回归）/ AB3 矩阵（双闸各自必要）——三防线实证 ✓ commit b4fd9f2
+- wart2：social-card 四变体重制 1280×640 对齐旧尺寸，五门禁绿 ✓ commit 9e2d2b8
 
-| lane | 类型 | 范围（文件面） | 产出 |
-|------|------|--------------|------|
-| RA | review 只读 | lib/store.ts、lib/solo-stats.ts（commit 4f5ec71）：SSR 守卫/隐私模式容错/shape 校验旁路/internalStats 双模式串台/ranked 零变化证明 | reports/review/RA.md |
-| RB | review 只读 | bb171bf+c65d876+2b79d14 组件面：testid 契约逐项、a11y（Board focus 迁移）、GameShell server-compatible、SoloStatsPanel SSR 安全、测试缺口 | reports/review/RB.md |
-| RC | review 只读+有限实测 | 0bab68e+f45ddbf：guide 逐条对照；降级矩阵（page.emulateMedia reducedMotion 实测；旧引擎以 CSS 逻辑审）；扫其余探针还有无 hydration-check 式「同步断言 effects」受害点 | reports/review/RC.md |
-| RD | review 只读 | a8a7063/7c29d62（探针测真契约否：DELETE 匹配精确性、轮询超时路径）+ 02c654d（README 双语一致、截图 vs 真实 UI）+ d8329a4/f8fd69e | reports/review/RD.md |
-| W-art | 写：docs+public | social-card 四变体重制（令牌直绘 HTML + Playwright 截图 + cp -p 镜 public；brandmark 不动） | docs/ + public/ 新图 + commit |
-| W-abl | 写：独立 worktree + reports | 三轮消融 AB1/AB2/AB3（../ttt-ablation worktree，每轮 patch→build→探针→还原），证据落 reports/ablation/ | AB 报告 + commit |
+**波 2 实录**：FX1（stats-race 三修：双 launchQA 合并/DELETE 显式超时/fetch 重试）∥ FX2（solo 契约五加固：白名单/resetSoloStats 守卫/PlayController mode 错配重置/跨模式两用例/隐私用例，含反向自证）并行。
 
 **波 2 · 修复（按 findings 文件面分组派 fresh codex；与波 1 产出互斥则可并行）**
 **波 3 · 终验（fresh codex 对抗复核 + 全门禁 + 探针全量）**
