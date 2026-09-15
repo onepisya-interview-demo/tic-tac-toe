@@ -40,7 +40,32 @@ async function step(name, fn) {
 // same response the user would see. Cache-bust every fetch.
 async function getStats(page) {
   return page.evaluate(async () => {
-    const r = await fetch("/api/stats", { cache: "no-store" });
+    // 2026-09-15 hardening: 1 retry + 5s timeout per attempt via
+    // Promise.race. Kills the occasional "TypeError: Failed to fetch"
+    // observed at :189 / :368 on local sqlite when the SW lifecycle
+    // races a probe-issued read.
+    const fetchWithRetry = async (url, init = {}) => {
+      const withTimeout = (p, ms) =>
+        Promise.race([
+          p,
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error("fetch timeout")), ms),
+          ),
+        ]);
+      let lastErr;
+      for (let i = 0; i < 2; i++) {
+        try {
+          return await withTimeout(
+            fetch(url, { ...init, cache: "no-store" }),
+            5000,
+          );
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr;
+    };
+    const r = await fetchWithRetry("/api/stats");
     return r.json();
   });
 }
@@ -55,17 +80,41 @@ async function deleteStats(page) {
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   }
   const status = await page.evaluate(async (base) => {
-    const r = await fetch(`${base}/api/stats`, {
+    // 2026-09-15 hardening: same retry contract as getStats. The
+    // DELETE path is the one that races SW lifecycle most often
+    // because the reset button fires it right after a navigation.
+    const fetchWithRetry = async (url, init = {}) => {
+      const withTimeout = (p, ms) =>
+        Promise.race([
+          p,
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error("fetch timeout")), ms),
+          ),
+        ]);
+      let lastErr;
+      for (let i = 0; i < 2; i++) {
+        try {
+          return await withTimeout(
+            fetch(url, { ...init, cache: "no-store" }),
+            5000,
+          );
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr;
+    };
+    const r = await fetchWithRetry(`${base}/api/stats`, {
       method: "DELETE",
-      cache: "no-store",
     });
     return r.status;
   }, BASE);
   assert.equal(status, 200, `DELETE expected 200, got ${status}`);
 }
 
-const { browser, ctx } = await launchQA();
-let { page } = await launchQA();
+const launch = await launchQA();
+const { browser, ctx } = launch;
+let { page } = launch;
 
 // Count PUTs that flow through the SW during the page lifetime. Service
 // worker pass-through is the regression vector for B-1; this counts only
@@ -352,6 +401,7 @@ try {
     await page.waitForSelector('[data-testid="reset-stats"]');
     const deleteSettled = page.waitForResponse(
       (r) => r.request().method() === "DELETE" && r.url().includes("/api/stats"),
+      { timeout: 10000 },
     );
     await page.click('[data-testid="reset-stats"]');
     await deleteSettled;
