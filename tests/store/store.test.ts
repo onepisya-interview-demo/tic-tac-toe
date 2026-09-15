@@ -64,7 +64,6 @@ function resetStore(): void {
     currentPlayer: null,
     winner: null,
     winLine: null,
-    lastOutcome: null,
     lastWriteAt: null,
   });
   useGameStore.getState().__resetInternalForTests();
@@ -288,7 +287,6 @@ describe('lib/store (zustand game store)', () => {
     useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
-    expect(s.lastOutcome).toBe('draw');
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('draw');
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toHaveLength(1);
@@ -314,7 +312,6 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: null,
       winner: 'X',
       winLine: [0, 1, 2],
-      lastOutcome: 'X',
     });
     seedInternalStats({
       totalGames: 1,
@@ -473,7 +470,6 @@ describe('lib/store (zustand game store)', () => {
     await new Promise((r) => setTimeout(r, 10));
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
-    expect(s.lastOutcome).toBe('draw');
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('/api/stats/outcome');
     expect(calls[0].init?.method).toBe('POST');
@@ -913,7 +909,6 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
       currentPlayer: null,
       winner: 'X',
       winLine: [0, 4, 8],
-      lastOutcome: 'X',
     });
 
     // Switch to solo: internalStats must reseed from localStorage baseline,

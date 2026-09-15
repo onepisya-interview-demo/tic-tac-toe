@@ -47,7 +47,6 @@ afterEach(() => {
     currentPlayer: null,
     winner: null,
     winLine: null,
-    lastOutcome: null,
     lastWriteAt: null,
   });
   useGameStore.getState().__resetInternalForTests();

@@ -35,7 +35,6 @@ export interface GameState {
   currentPlayer: Player | null;
   winner: Player | null;
   winLine: readonly [number, number, number] | null;
-  lastOutcome: 'X' | 'O' | 'draw' | null;
   /**
    * Wall-clock timestamp (Date.now()) of the most recent network write
    * (POST /api/stats/outcome or DELETE /api/stats). Set inside the async
@@ -99,7 +98,6 @@ const initial: GameState = {
   currentPlayer: null,
   winner: null,
   winLine: null,
-  lastOutcome: null,
   lastWriteAt: null,
 };
 
@@ -220,8 +218,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentPlayer: firstPlayer,
       winner: null,
       winLine: null,
-      lastOutcome: null,
-      mode: resolvedMode,
+          mode: resolvedMode,
     });
   },
 
@@ -240,7 +237,6 @@ export const useGameStore = create<GameStore>((set) => ({
         phase: 'won',
         winner: win.player,
         winLine: win.line,
-        lastOutcome: win.player,
       });
       // checkWinner is called only after applyMove(board, index, currentPlayer),
       // so win.player is currentPlayer by construction.
@@ -279,7 +275,6 @@ export const useGameStore = create<GameStore>((set) => ({
         phase: 'drawn',
         winner: null,
         winLine: null,
-        lastOutcome: 'draw',
       });
       playSound('draw');
       if (s.mode === 'solo') {
@@ -311,8 +306,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentPlayer: null,
       winner: null,
       winLine: null,
-      lastOutcome: null,
-    });
+        });
   },
 
   resetSoloStats: () => {

@@ -33,7 +33,7 @@ function panelValues(): (string | null)[] {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
-  useGameStore.setState({ phase: 'idle', currentPlayer: null, winner: null, lastOutcome: null });
+  useGameStore.setState({ phase: 'idle', currentPlayer: null, winner: null });
   useGameStore.getState().__resetInternalForTests();
   refreshMock.mockClear();
 });
@@ -63,7 +63,7 @@ describe('components/SoloStatsPanel', () => {
     // state and assert the panel picks up the new row.
     seedSoloStats({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 });
     act(() => {
-      useGameStore.setState({ phase: 'won', winner: 'X', lastOutcome: 'X' });
+      useGameStore.setState({ phase: 'won', winner: 'X' });
     });
     expect(panelValues()).toEqual(['1', '1', '0', '0', 'X 连胜 1']);
   });
