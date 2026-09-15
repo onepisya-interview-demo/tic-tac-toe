@@ -1,7 +1,7 @@
 # ulw · 全量 review + 消融实验 + 遗留待办（push 冻结）
 
 - **日期**：2026-09-15
-- **状态**：APPROVED（主公谕：$omo:review-work；全部 codex 执行；并行按上下文正交划分）
+- **状态**：DONE（2026-09-15 终验毕；push 冻结待主公亲手，合并必经 PR）
 - **对象**：main 领先 origin/main 之 11 commit（bb171bf…f8fd69e，见 git log 51f164c..HEAD）
 - **铁律**：push 冻结（合格亦须主公亲自 push）；合并必经 PR（GitHub main-gate 本制）；codex 编辑一律 shell（sed/python/heredoc/git apply），**禁 apply_patch**（通道已知缺陷）
 
@@ -26,7 +26,9 @@
 - W-abl：AB1 绿（VT 摘除安全）/ AB2 红（零写探针抓注写回归）/ AB3 矩阵（双闸各自必要）——三防线实证 ✓ commit b4fd9f2
 - wart2：social-card 四变体重制 1280×640 对齐旧尺寸，五门禁绿 ✓ commit 9e2d2b8
 
-**波 2 实录**：FX1（stats-race 三修：双 launchQA 合并/DELETE 显式超时/fetch 重试）∥ FX2（solo 契约五加固：白名单/resetSoloStats 守卫/PlayController mode 错配重置/跨模式两用例/隐私用例，含反向自证）并行。
+**波 2-3 实录**：FX1（6cff53a 三修）∥ FX2（f9f4074 五加固 + 40eec4a 两回归，含去守卫反向自证）∥ FX3b（b9dbc37 步 09 + CI job）；Stryker store 60.00（三连升）+ coverage 95.28/87.57/94.23/98.36；V2 终验揪 FINDING-F2（探针高负载 flaky，FX1 之 2×PASS 不可复现）→ FX4b（f6b5717 步 05 race + harness 兜 unhandled；曾误 --no-verify 自省 reset 重交）→ 调度者独立 3×14/14 ✓。计划文书两份已入库 ad8753c。通道疾四起（wart/fx3/fx4 噪聋弃席重派），皆记 sessions.local.md。
+
+**资源回收终扫（主公谕）**：port 3000/3100 零监听；next-server/playwright/chromium 零游魂；worktree 唯 main；.stryker-tmp 5 沙箱已清（43MB→12K）；pane 唯 first；/tmp 委派件与日志已焚。三个非本 session 之驻守（coze-bridge/auth-proxy/vp-devtools）依令不碰。
 
 **波 2 · 修复（按 findings 文件面分组派 fresh codex；与波 1 产出互斥则可并行）**
 **波 3 · 终验（fresh codex 对抗复核 + 全门禁 + 探针全量）**
