@@ -71,6 +71,23 @@
 | `StatsCard` | — | `label`, `value` |
 | `StatusBar` | — | `currentPlayer`, `gameOver?`, `winner?` |
 
+**Header composition contract** (added by ulw-mobile-one-line-ux plan):
+
+| Route | Composition (single flex-row) | h1 slot | testid |
+| --- | --- | --- | --- |
+| `/` | (no single-line header — home is the score-cards layout) | n/a | n/a |
+| `/play` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "游戏中" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
+| `/solo` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "单机练习" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
+| `/result` | `[ResultBanner h1 | SoundToggle]` | `result-headline` is the h1 | `result-headline` (aria-live=assertive) |
+
+Each row is a single `flex flex-row items-center justify-between gap-3` line. The h1
+slot is `text-h2 font-semibold` (compact) on `/play` and `/solo`; on `/result` the
+h1 is `result-headline` itself (`text-h1 font-display font-medium`) because the
+redundant `<h1>本局结束</h1>` was dropped during this pass. `StatusBar` is the
+inline-flex pill variant (`text-small`, `whitespace-nowrap`) so the row's tallest
+slot is the title, not the status text. `SoundToggle` keeps its own padding. Mobile
+375×667 header boundingBox: 26px (was 62/62/90). Exactly one h1 per page.
+
 **Implementation rule**: every primitive MUST use the tokens above; no inline hex.
 
 ## 5. Motion
