@@ -24,9 +24,13 @@ import { Button } from '@/components/ui/Button';
 type Props = {
   scope?: 'server' | 'local';
   onCleared?: () => void;
+  /** Optional className forwarded to the underlying Button — used by the
+   *  home page to make the ghost reset button full-width on mobile while
+   *  keeping its natural width on desktop (`w-full sm:w-auto`). */
+  className?: string;
 };
 
-export function ResetStatsButton({ scope = 'server', onCleared }: Props) {
+export function ResetStatsButton({ scope = 'server', onCleared, className }: Props) {
   const router = useRouter();
   const resetAll = useGameStore((s) => s.resetAll);
   const resetSoloStats = useGameStore((s) => s.resetSoloStats);
@@ -54,6 +58,7 @@ export function ResetStatsButton({ scope = 'server', onCleared }: Props) {
     <Button
       variant="ghost"
       onClick={handleClick}
+      className={className}
       loading={pending}
       data-testid={isLocal ? 'reset-solo-stats' : 'reset-stats'}
       aria-label={isLocal ? '清空单机战绩' : '重置战绩'}

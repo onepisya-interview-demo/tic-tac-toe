@@ -44,10 +44,10 @@ export default async function HomePage() {
         </div>
       </Card>
 
-      <div className="flex flex-row gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />
         <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />
-        <ResetStatsButton />
+        <ResetStatsButton className="w-full sm:w-auto" />
       </div>
     </main>
     </ViewTransition>
