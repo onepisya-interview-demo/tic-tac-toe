@@ -857,4 +857,108 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(useGameStore.getState().__getInternalForTests()).toEqual(serverRow);
   });
 
+  it('cross-mode (a): solo fall-through then startGame("ranked")+makeMove takes ranked branch without touching localStorage', async () => {
+    // Solo fall-through: seed localStorage with a non-empty row.
+    useGameStore.getState().startGame('solo');
+    useGameStore.setState({
+      phase: 'playing',
+      mode: 'solo',
+      currentPlayer: 'X',
+      board: soloWinBoard(),
+    });
+    await useGameStore.getState().makeMove(8);
+    expect(useGameStore.getState().__getInternalForTests().totalGames).toBe(1);
+    const persisted = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
+    expect(persisted.totalGames).toBe(1);
+
+    // Switch to ranked; localStorage must NOT change as a side-effect of
+    // the mode switch (startGame('ranked') only reseeds from localStorage
+    // for solo mode). The next move must POST the outcome and the local
+    // row must remain the solo baseline.
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
+    useGameStore.getState().startGame('ranked');
+    expect(useGameStore.getState().mode).toBe('ranked');
+    const persistedBefore = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
+    useGameStore.setState({
+      phase: 'playing',
+      mode: 'ranked',
+      currentPlayer: 'X',
+      board: soloWinBoard(),
+    });
+    await useGameStore.getState().makeMove(8);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/stats/outcome');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(persistedBefore);
+    restore();
+  });
+
+  it('cross-mode (b): ranked fall-through then startGame("solo") reseeds internalStats from localStorage baseline', () => {
+    // Seed localStorage with a non-zero baseline; seed internal cache
+    // with a (mock) ranked server row that differs.
+    const baseline = { totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 };
+    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
+    const serverRow = { totalGames: 99, xWins: 50, oWins: 30, draws: 19, currentStreak: 10 };
+    useGameStore.getState().setInitialStats(serverRow);
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(serverRow);
+
+    // Simulate a finished ranked game.
+    useGameStore.setState({
+      phase: 'won',
+      mode: 'ranked',
+      currentPlayer: null,
+      winner: 'X',
+      winLine: [0, 4, 8],
+      lastOutcome: 'X',
+    });
+
+    // Switch to solo: internalStats must reseed from localStorage baseline,
+    // not carry the (stale) ranked server row into a solo game.
+    useGameStore.getState().startGame('solo');
+    expect(useGameStore.getState().mode).toBe('solo');
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
+  });
+
+  it('privacy mode: setItem throws QuotaExceededError → makeMove succeeds, in-memory accumulates, reload reads emptyStats', async () => {
+    // Simulate localStorage.setItem throwing a QuotaExceededError as it
+    // does in Safari Private Browsing and quota-exhausted Chrome.
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+
+    useGameStore.getState().startGame('solo');
+    useGameStore.setState({
+      phase: 'playing',
+      mode: 'solo',
+      currentPlayer: 'X',
+      board: soloWinBoard(),
+    });
+
+    // makeMove must NOT propagate the setItem throw — the in-memory
+    // accumulation is the source of truth for the live UI; persistence
+    // is best-effort.
+    await expect(useGameStore.getState().makeMove(8)).resolves.toBeUndefined();
+    expect(useGameStore.getState().__getInternalForTests()).toEqual({
+      totalGames: 1,
+      xWins: 1,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 1,
+    });
+    expect(setItemSpy).toHaveBeenCalled();
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+
+    // Tear down the spy first so the reload read is not mocked-throw.
+    setItemSpy.mockRestore();
+
+    // Simulate reload: since setItem never succeeded, the persisted
+    // baseline is empty — the next startGame('solo') reseeds from
+    // emptyStats, not the in-memory post-throw value.
+    expect(loadSoloStats()).toEqual(emptyStats());
+  });
 });
