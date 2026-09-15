@@ -805,5 +805,56 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
     restore();
+  });  it('loadSoloStats rejects extra fields (strict whitelist, including __proto__/constructor)', () => {
+    // Extra string field: current isGameStats accepts this — must reject.
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1, extra: 'foo' }),
+    );
+    expect(loadSoloStats()).toEqual(emptyStats());
+
+    // Extra numeric field
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1, bonus: 7 }),
+    );
+    expect(loadSoloStats()).toEqual(emptyStats());
+
+    // __proto__ as own data property (JSON.parse does NOT trigger the
+    // prototype setter; it is just an extra key). The strict whitelist
+    // must reject it as a contract gap regardless of attack surface.
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1,"__proto__":{"polluted":true}}',
+    );
+    expect(loadSoloStats()).toEqual(emptyStats());
+
+    // constructor as own data property
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1,"constructor":{"polluted":true}}',
+    );
+    expect(loadSoloStats()).toEqual(emptyStats());
+
+    // Missing key (already covered by the base test, but listed for clarity).
+    window.localStorage.removeItem(SOLO_STATS_KEY);
+    expect(loadSoloStats()).toEqual(emptyStats());
   });
+
+  it('resetSoloStats is a no-op when mode is not "solo" (defensive guard)', () => {
+    // Seed localStorage with non-empty data and the internal cache with
+    // a (mock) server row. mode is 'ranked' after resetStore.
+    const baseline = { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 };
+    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
+    const serverRow = { totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 };
+    useGameStore.getState().setInitialStats(serverRow);
+    expect(useGameStore.getState().mode).toBe('ranked');
+
+    // resetSoloStats called in ranked context must be a no-op — the
+    // server-row mirror must NOT be wiped by a stray solo-clear call.
+    useGameStore.getState().resetSoloStats();
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBe(JSON.stringify(baseline));
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(serverRow);
+  });
+
 });

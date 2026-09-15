@@ -316,6 +316,15 @@ export const useGameStore = create<GameStore>((set) => ({
   },
 
   resetSoloStats: () => {
+    // Defensive guard: resetSoloStats is solo-mode-only. The sole
+    // current caller is components/ResetStatsButton (scope='local',
+    // rendered only by SoloStatsPanel), so this branch is unreachable
+    // in production today. It is added so a future caller that
+    // forgets to gate on mode cannot silently wipe the ranked server
+    // row mirror in `internalStats` with emptyStats(). Reads mode
+    // through getState() to avoid a stale closure if a future caller
+    // schedules resetSoloStats asynchronously after a mode switch.
+    if (useGameStore.getState().mode !== 'solo') return;
     clearSoloStats();
     internalStats = emptyStats();
     // Deliberately no lastWriteAt stamp: solo reset is local-only with no

@@ -21,11 +21,28 @@ export function PlayController({ children, mode = 'ranked' }: Props) {
   const lastWriteAt = useGameStore((s) => s.lastWriteAt);
   const startGame = useGameStore((s) => s.startGame);
 
-  // 副作用 1: auto-start on idle。mode 显式入 deps：/solo 挂载时以
-  // startGame('solo') 开局（store 会从 localStorage 基线灌入战绩缓存），
-  // /play 的缺省 'ranked' 行为与 startGame() 完全一致。
+  // 副作用 1: auto-start on idle + mode mismatch restart。mode 显式入
+  // deps：/solo 挂载时以 startGame('solo') 开局（store 会从 localStorage
+  // 基线灌入战绩缓存），/play 的缺省 'ranked' 行为与 startGame() 完全
+  // 一致。
+  //
+  // 契约缺口（mode mismatch 路径）：原实现只在 phase==='idle' 时调
+  // startGame(mode)。若用户从 /play 中途软导航到 /solo（phase 残留
+  // 'playing'、store.mode='ranked'），本 effect 不动 store，mode 字段
+  // 仍为 'ranked'——下一次 makeMove 走 ranked 分支发起网络写，破
+  // "solo 全程零网络写" 合同。修法：当 store.mode 与本 controller 的
+  // mode prop 不一致（典型场景：soft nav /play → /solo 中途），先
+  // restart() 把 phase 拉回 idle、再 startGame(mode) 让其内部的 solo
+  // 分支（loadSoloStats 重灌战绩缓存）正确触发；同名 phase==='idle'
+  // 走原路径（直接 startGame，restart 是 no-op 因为 phase 已是 idle）。
+  // store.mode===mode && phase==='playing' 路径跳过（用户在当前会话
+  // 中对局中，不应被无意义重启）。
   useEffect(() => {
-    if (phase === 'idle') startGame(mode);
+    const s = useGameStore.getState();
+    if (s.mode !== mode || s.phase === 'idle') {
+      if (s.phase !== 'idle') useGameStore.getState().restart();
+      startGame(mode);
+    }
   }, [phase, startGame, mode]);
 
   // 副作用 2: 写事件落库后跳 /result（事件驱动而非 setTimeout 时间假设）。

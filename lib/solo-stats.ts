@@ -15,12 +15,21 @@ export const SOLO_STATS_KEY = 'ttt.solo.stats.v1';
 function isGameStats(value: unknown): value is GameStats {
   if (typeof value !== 'object' || value === null) return false;
   const s = value as Record<string, unknown>;
+  // Type-checks above only confirm the five known fields are finite
+  // numbers; without an explicit key-set check we still accept *extra*
+  // properties (`__proto__`, `constructor`, `polluted`, etc.) as part
+  // of the GameStats contract. The strict whitelist below closes the
+  // contract gap: a parsed JSON object is accepted iff it has exactly
+  // the five GameStats keys and nothing else. Persistence path
+  // self-heals on the next `recordOutcome` (pure spread), but the
+  // load-time contract is now explicit.
   return (
     typeof s.totalGames === 'number' && Number.isFinite(s.totalGames) &&
     typeof s.xWins === 'number' && Number.isFinite(s.xWins) &&
     typeof s.oWins === 'number' && Number.isFinite(s.oWins) &&
     typeof s.draws === 'number' && Number.isFinite(s.draws) &&
-    typeof s.currentStreak === 'number' && Number.isFinite(s.currentStreak)
+    typeof s.currentStreak === 'number' && Number.isFinite(s.currentStreak) &&
+    Object.keys(s).sort().join(',') === 'currentStreak,draws,oWins,totalGames,xWins'
   );
 }
 

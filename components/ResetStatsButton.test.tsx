@@ -2,8 +2,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResetStatsButton } from './ResetStatsButton';
+import { useGameStore } from '@/lib/store';
 import { emptyStats } from '@/lib/game';
 import { SOLO_STATS_KEY } from '@/lib/solo-stats';
+import { act } from 'react';
 
 const refreshMock = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
@@ -33,6 +35,17 @@ describe('components/ResetStatsButton scope=local', () => {
       SOLO_STATS_KEY,
       JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 }),
     );
+
+    // resetSoloStats is gated on mode === 'solo' (F-5.1 defensive
+    // guard). In production the local-scope button only renders on
+    // /solo where PlayController has set mode='solo'; the isolated
+    // test render does not include PlayController, so mirror that
+    // state here. Without this setState the guard fires and the
+    // click is a no-op — exactly the regression the guard is designed
+    // to prevent in real code paths.
+    act(() => {
+      useGameStore.setState({ mode: 'solo' });
+    });
 
     render(<ResetStatsButton scope="local" onCleared={onCleared} />);
     const btn = screen.getByTestId('reset-solo-stats');
