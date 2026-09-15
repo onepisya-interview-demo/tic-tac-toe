@@ -485,4 +485,221 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       await closeDb();
     }
   });
+  // ── W-SYNC wave 2 (ulw-ux-mobile-sync plan): solo_records per-name ledger ──
+  // Mirrors the recordAndSave surface but rows are keyed by `name` (TEXT PK)
+  // and rows are absent on first read instead of being seeded — loadSoloRecord
+  // returns null so callers can branch on "fresh player" without sentinel
+  // values. Pattern parity with the game_stats suite: tmpDbDir +
+  // __setCreateClientForTests when reaching beyond a fake, real sqlite
+  // file when asserting the on-disk shape.
+
+  it('loadSoloRecord returns null on first read for an unknown name', async () => {
+    const { loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      const row = await loadSoloRecord('alice');
+      expect(row).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('upsertSoloRecord writes a row that loadSoloRecord reads back', async () => {
+    const { upsertSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await upsertSoloRecord('bob', {
+        totalGames: 3,
+        xWins: 2,
+        oWins: 1,
+        draws: 0,
+        currentStreak: 1,
+      });
+      const row = await loadSoloRecord('bob');
+      expect(row).toEqual({
+        totalGames: 3,
+        xWins: 2,
+        oWins: 1,
+        draws: 0,
+        currentStreak: 1,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('upsertSoloRecord overwrites a row by name (PK is name, not id)', async () => {
+    const { upsertSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await upsertSoloRecord('carol', {
+        totalGames: 1,
+        xWins: 1,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 1,
+      });
+      await upsertSoloRecord('carol', {
+        totalGames: 4,
+        xWins: 3,
+        oWins: 0,
+        draws: 1,
+        currentStreak: -1,
+      });
+      const row = await loadSoloRecord('carol');
+      expect(row).toEqual({
+        totalGames: 4,
+        xWins: 3,
+        oWins: 0,
+        draws: 1,
+        currentStreak: -1,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it("accumulateSoloRecord('X') on a fresh name seeds from emptyStats and returns xWins:1", async () => {
+    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      const next = await accumulateSoloRecord('dave', 'X');
+      expect(next).toEqual({
+        totalGames: 1,
+        xWins: 1,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 1,
+      });
+      const read = await loadSoloRecord('dave');
+      expect(read).toEqual(next);
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('accumulateSoloRecord 累加两次相同 outcome 写入同一行（PK=name）', async () => {
+    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await accumulateSoloRecord('erin', 'X');
+      const next = await accumulateSoloRecord('erin', 'X');
+      expect(next).toEqual({
+        totalGames: 2,
+        xWins: 2,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 2,
+      });
+      const read = await loadSoloRecord('erin');
+      expect(read).toEqual(next);
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it("accumulateSoloRecord('draw') resets the streak to 0 on a non-empty row", async () => {
+    const { accumulateSoloRecord, upsertSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await upsertSoloRecord('frank', {
+        totalGames: 3,
+        xWins: 3,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 3,
+      });
+      const next = await accumulateSoloRecord('frank', 'draw');
+      expect(next).toEqual({
+        totalGames: 4,
+        xWins: 3,
+        oWins: 0,
+        draws: 1,
+        currentStreak: 0,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it("accumulateSoloRecord('O') flips streak polarity +1 to -1", async () => {
+    const { accumulateSoloRecord, upsertSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await upsertSoloRecord('gina', {
+        totalGames: 2,
+        xWins: 2,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 2,
+      });
+      const next = await accumulateSoloRecord('gina', 'O');
+      expect(next).toEqual({
+        totalGames: 3,
+        xWins: 2,
+        oWins: 1,
+        draws: 0,
+        currentStreak: -1,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('accumulateSoloRecord 两个名字写入两行（per-name ledger is the whole point）', async () => {
+    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await accumulateSoloRecord('player1', 'X');
+      await accumulateSoloRecord('player2', 'O');
+      expect(await loadSoloRecord('player1')).toEqual({
+        totalGames: 1,
+        xWins: 1,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 1,
+      });
+      expect(await loadSoloRecord('player2')).toEqual({
+        totalGames: 1,
+        xWins: 0,
+        oWins: 1,
+        draws: 0,
+        currentStreak: -1,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('bootstrap DDL creates solo_records with stable physical columns', async () => {
+    const { accumulateSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      await accumulateSoloRecord('bootstrap-check', 'X');
+      const { createClient } = await import('@libsql/client');
+      const probe = createClient({ url: `file:${path.join(dir, 'tic-tac-toe.db')}` });
+      const rs = await probe.execute('PRAGMA table_info(solo_records)');
+      const cols = rs.rows.map((row) => String(row.name));
+      expect(cols).toEqual([
+        'name',
+        'total_games',
+        'x_wins',
+        'o_wins',
+        'draws',
+        'current_streak',
+        'updated_at',
+      ]);
+      const types = rs.rows.map((row) => String(row.type));
+      expect(types.every((t) => t === 'INTEGER' || t === 'TEXT')).toBe(true);
+      expect(String(rs.rows.find((row) => row.name === 'name')?.type)).toBe('TEXT');
+      expect(Number(rs.rows.find((row) => row.name === 'name')?.pk)).toBe(1);
+      probe.close();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('schema module exports the solo_records table with required columns', async () => {
+    const schema = await import('@/db/schema');
+    expect(schema.soloRecords).toBeDefined();
+    const t = schema.soloRecords as unknown as Record<string, unknown>;
+    expect(t).toHaveProperty('name');
+    expect(t).toHaveProperty('totalGames');
+    expect(t).toHaveProperty('xWins');
+    expect(t).toHaveProperty('oWins');
+    expect(t).toHaveProperty('draws');
+    expect(t).toHaveProperty('currentStreak');
+    expect(t).toHaveProperty('updatedAt');
+  });
 });

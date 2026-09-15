@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
-import { gameStats } from '../db/schema';
+import { gameStats, soloRecords } from '../db/schema';
 import { emptyStats, recordOutcome, type GameStats } from './game';
 
 const STATS_ROW_ID = 1;
@@ -127,9 +127,26 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   cachedClient = createClientFn(config);
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
+  // Bootstrap tables — keeps the app runnable without a manual `db:push`.
+  // DDL via the raw client ensures the schema exists before drizzle hits
+  // it. Each CREATE TABLE goes through its own execute() call because the
+  // @libsql client.execute() runs only the first statement of a multi-
+  // statement script (verified empirically with the standalone client);
+  // splitting the DDL keeps the second table from being silently dropped.
   await cachedClient.execute(`
     CREATE TABLE IF NOT EXISTS game_stats (
       id INTEGER PRIMARY KEY,
+      total_games INTEGER NOT NULL DEFAULT 0,
+      x_wins INTEGER NOT NULL DEFAULT 0,
+      o_wins INTEGER NOT NULL DEFAULT 0,
+      draws INTEGER NOT NULL DEFAULT 0,
+      current_streak INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  await cachedClient.execute(`
+    CREATE TABLE IF NOT EXISTS solo_records (
+      name TEXT PRIMARY KEY,
       total_games INTEGER NOT NULL DEFAULT 0,
       x_wins INTEGER NOT NULL DEFAULT 0,
       o_wins INTEGER NOT NULL DEFAULT 0,
@@ -219,6 +236,77 @@ export async function resetStats(): Promise<GameStats> {
   const zero = emptyStats();
   await saveStats(zero);
   return zero;
+}
+
+/**
+ * Load a per-player solo record by name. Returns null when the row is
+ * absent so callers (the /api/solo-stats GET handler, accumulateSoloRecord
+ * on its read step) can branch on "fresh name" without sentinel values.
+ */
+export async function loadSoloRecord(name: string): Promise<GameStats | null> {
+  const db = await getDb();
+  const existing = await db
+    .select()
+    .from(soloRecords)
+    .where(eq(soloRecords.name, name))
+    .get();
+  if (!existing) return null;
+  return {
+    totalGames: existing.totalGames,
+    xWins: existing.xWins,
+    oWins: existing.oWins,
+    draws: existing.draws,
+    currentStreak: existing.currentStreak,
+  };
+}
+
+/** Write a per-player solo record (insert-or-update by name). */
+export async function upsertSoloRecord(
+  name: string,
+  stats: GameStats,
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+  await db
+    .insert(soloRecords)
+    .values({
+      name,
+      totalGames: stats.totalGames,
+      xWins: stats.xWins,
+      oWins: stats.oWins,
+      draws: stats.draws,
+      currentStreak: stats.currentStreak,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: soloRecords.name,
+      set: {
+        totalGames: stats.totalGames,
+        xWins: stats.xWins,
+        oWins: stats.oWins,
+        draws: stats.draws,
+        currentStreak: stats.currentStreak,
+        updatedAt: now,
+      },
+    })
+    .run();
+}
+
+/**
+ * Server-authoritative solo accumulation for one finished game: read the
+ * current row (or emptyStats when absent), apply the outcome via the pure
+ * `recordOutcome` rule (lib/game.ts), and write the new full row back.
+ * Returns the new stats. Mirrors `recordAndSave` (single-row server
+ * ledger) so the two ledgers share the load → record → save invariant.
+ */
+export async function accumulateSoloRecord(
+  name: string,
+  outcome: 'X' | 'O' | 'draw',
+): Promise<GameStats> {
+  const current = (await loadSoloRecord(name)) ?? emptyStats();
+  const next = recordOutcome(current, outcome);
+  await upsertSoloRecord(name, next);
+  return next;
 }
 
 /** Close the cached client (used by tests / shutdown). */
