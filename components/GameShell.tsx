@@ -13,23 +13,31 @@ type Props = {
 };
 
 /**
- * Shared shell for the two in-game pages (/play, /solo): page header with
- * the h1 + SoundToggle, the live StatusBar, the play Card, and a footer
- * action row. Server-compatible on purpose (no 'use client', no hooks) —
- * SoundToggle / StatusBarClient carry their own client boundaries, and
- * children keep whatever client wrapper the page passes in. This is the
- * same pure-presentation move as ui/BoardGrid: pages compose, the shell
- * only owns structure, so the QA testid contract stays in one place.
+ * Shared shell for the two in-game pages (/play, /solo): single-line
+ * header with [h1 compact | status text inline | SoundToggle], the play
+ * Card, and a footer action row. Server-compatible on purpose (no
+ * 'use client', no hooks) — SoundToggle / StatusBarClient carry their
+ * own client boundaries, and children keep whatever client wrapper the
+ * page passes in.
+ *
+ * Mobile single-row contract (375×667, ulw-mobile-one-line-ux plan):
+ * the h1, the live status text, and the SoundToggle all share one
+ * `flex flex-row items-center justify-between` row so the play card
+ * never gets pushed below the fold by a stacked header. The h1 uses
+ * `text-h2 font-semibold` so the row's tallest slot is the status text
+ * (which can grow when a player name is appended); the SoundToggle's
+ * own padding decides its own width. Status text gets `text-small`
+ * (14/20) to match the design tokens — never a new token.
  */
 export function GameShell({ title, children, actions }: Props) {
   return (
     <main className="page-shell page-fade-in">
-      <header className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="text-h1 font-display font-semibold">{title}</h1>
-          <SoundToggle />
+      <header className="flex flex-row items-center justify-between gap-3">
+        <h1 className="text-h2 font-display font-semibold shrink-0">{title}</h1>
+        <div className="flex-1 flex justify-center min-w-0">
+          <StatusBarClient />
         </div>
-        <StatusBarClient />
+        <SoundToggle />
       </header>
 
       <Card>{children}</Card>

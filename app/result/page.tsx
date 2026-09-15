@@ -17,12 +17,9 @@ export default async function ResultPage() {
     <ViewTransition enter="page" exit="page" default="none">
     <main className="page-shell page-fade-in">
       <StatsHydrator stats={stats} />
-      <header className="flex flex-col gap-2 relative">
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="text-display font-display font-semibold tracking-tight">本局结束</h1>
-          <SoundToggle />
-        </div>
-        <ResultBanner />
+      <header className="flex flex-row items-center justify-between gap-3 relative">
+        <ResultBanner headingLevel={1} />
+        <SoundToggle />
       </header>
 
       <Card>
