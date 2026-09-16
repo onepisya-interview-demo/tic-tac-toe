@@ -310,6 +310,25 @@ export async function accumulateSoloRecord(
 }
 
 /** Close the cached client (used by tests / shutdown). */
+/**
+ * Idempotent empty-row bootstrap for "save a name on device A, pick it up
+ * on device B" vertical slice (ulw-solo-sync-rebuild.md B-T1). Reads the
+ * row; if absent, upserts emptyStats() under the trimmed name and returns
+ * the resulting row. Mirrors the read-before-write shape of
+ * accumulateSoloRecord so a future race window (two PUTs in flight) still
+ * converges on one canonical row, never silently overwrites existing
+ * stats. Single Node process serializes callers within an instance;
+ * cross-instance last-write-wins is documented in the multi-user-stats
+ * future-work note and out of scope here.
+ */
+export async function ensureSoloRecord(name: string): Promise<GameStats> {
+  const existing = await loadSoloRecord(name);
+  if (existing) return existing;
+  const zero = emptyStats();
+  await upsertSoloRecord(name, zero);
+  return zero;
+}
+
 export async function closeDb(): Promise<void> {
   if (cachedClient) {
     await cachedClient.close();

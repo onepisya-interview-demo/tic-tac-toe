@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { isPlayerName } from '@/lib/player-name';
 import { useGameStore } from '@/lib/store';
+import { putSoloName } from '@/lib/solo-net';
 import { Button } from '@/components/ui/Button';
 
 /**
@@ -46,6 +47,14 @@ export function PlayerNameForm() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ttt:player-name-changed'));
     }
+    // Fire-and-forget idempotent empty-row bootstrap so a fresh name
+    // lands on the server immediately, fulfilling the “save on device A,
+    // pick up on device B” contract (ulw-solo-sync-rebuild.md B-T1). 8s
+    // timeout via putSoloName's withTimeout; failure (network, 422,
+    // aborted) is fail-soft: localStorage save already succeeded, the
+    // panel will surface a retry affordance on next sync — the user
+    // never sees a save error from this call.
+    void putSoloName(trimmed);
   }
 
   function handleClear(): void {

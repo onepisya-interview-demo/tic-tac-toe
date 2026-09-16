@@ -85,3 +85,32 @@ export async function postSoloOutcome(
     return { ok: false, reason: reasonFromError(err) };
   }
 }
+
+/**
+ * PUT /api/solo-stats with { name } → { stats: GameStats }. The
+ * handler is idempotent: a fresh name returns the just-inserted empty
+ * row, an existing name returns the existing row untouched. Mirrors
+ * the { ok, value } | { ok, false, reason } contract used by the GET
+ * and POST helpers above so the PlayerNameForm caller can fire-and-
+ * forget without try/catch — UI stays correct regardless of network
+ * outcome, the network write is only a durability aid for the
+ * “save name on device A, pick it up on device B” flow.
+ */
+export async function putSoloName(
+  name: string,
+): Promise<SoloFetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout('/api/solo-stats', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}
