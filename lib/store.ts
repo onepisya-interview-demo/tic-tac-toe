@@ -14,7 +14,12 @@ import {
   type GameStats,
   type Player,
 } from './game';
-import { clearSoloStats, loadSoloStats, persistSoloStats } from './solo-stats';
+import {
+  clearSoloStats,
+  loadSoloStats,
+  persistSoloStats,
+  persistSyncedServerTotal,
+} from './solo-stats';
 import {
   clearPlayerName as clearPlayerNameLocal,
   getPlayerName,
@@ -349,6 +354,12 @@ export const useGameStore = create<GameStore>((set) => ({
           set({ soloSync: { pending: win.player, inflight: true, error: null } });
           const r = await apiPostSoloOutcome(s.playerName, win.player);
           if (r.ok) {
+            // Server’s authoritative answer; mirror its totalGames into
+            // the sync-sentinel so a subsequent manual sync button
+            // click can compute the real unsynced-diff instead of
+            // double-counting the same games the auto-POST just landed.
+            persistSyncedServerTotal(r.value.stats.totalGames);
+            internalStats = r.value.stats;
             set({
               soloSync: { pending: null, inflight: false, error: null },
               lastWriteAt: Date.now(),
@@ -388,6 +399,8 @@ export const useGameStore = create<GameStore>((set) => ({
           set({ soloSync: { pending: 'draw', inflight: true, error: null } });
           const r = await apiPostSoloOutcome(s.playerName, 'draw');
           if (r.ok) {
+            persistSyncedServerTotal(r.value.stats.totalGames);
+            internalStats = r.value.stats;
             set({
               soloSync: { pending: null, inflight: false, error: null },
               lastWriteAt: Date.now(),
@@ -478,6 +491,8 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ soloSync: { ...s.soloSync, inflight: true, error: null } });
     const r = await apiPostSoloOutcome(s.playerName, s.soloSync.pending);
     if (r.ok) {
+      persistSyncedServerTotal(r.value.stats.totalGames);
+      internalStats = r.value.stats;
       set({
         soloSync: { pending: null, inflight: false, error: null },
         lastWriteAt: Date.now(),

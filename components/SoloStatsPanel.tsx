@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { emptyStats, type GameStats } from '@/lib/game';
-import { clearSoloStats, loadSoloStats } from '@/lib/solo-stats';
+import {
+  clearSoloStats,
+  clearSyncedServerTotal,
+  loadSoloStats,
+  loadSyncedServerTotal,
+  pendingSyncCount,
+  persistSyncedServerTotal,
+} from '@/lib/solo-stats';
 import { fetchSoloStats, postSoloSync, putSoloName } from '@/lib/solo-net';
 import { useGameStore } from '@/lib/store';
 import { StatsGrid } from '@/components/ui/StatsGrid';
@@ -66,11 +73,17 @@ export function SoloStatsPanel() {
   const refreshFromServer = useCallback(async (name: string) => {
     const r = await fetchSoloStats(name);
     if (r.ok) {
+      const serverStats = r.value.stats ?? emptyStats();
       // Server is authoritative; adopt its answer even when null
       // (fresh player). Never fall back to localStats here — that
       // would re-introduce the cross-device drift bug this whole
       // vertical slice exists to fix.
-      setStats(r.value.stats ?? emptyStats());
+      setStats(serverStats);
+      // Mirror the server’s totalGames into the local sentinel so a
+      // subsequent manual sync button click can compute the real
+      // unsynced-diff instead of assuming a fresh context has zero
+      // synced games (the cross-device save-only case).
+      persistSyncedServerTotal(serverStats.totalGames);
     }
   }, []);
 
@@ -103,14 +116,20 @@ export function SoloStatsPanel() {
   }, [playerName, refreshFromServer]);
 
   /**
-   * Sync-button click: decide dialog vs. pure GET based on whether
-   * localStorage holds anything. Empty local + 0 pending = refresh
-   * only (wave-2 §A5 contract — no POST); otherwise open the dialog.
+   * Sync-button click: decide dialog vs. pure GET based on the real
+   * unsynced diff = local.totalGames - lastSyncedServerTotalGames.
+   * The sentinel is updated by every successful auto-POST in the
+   * store (lib/store.ts:persistSyncedServerTotal) so a wave-1 named
+   * game that auto-POSTed cleanly has diff=0 — the manual button
+   * then degrades to a pure GET refresh per wave-2 §A5 contract,
+   * not a double-count merge. A real diff > 0 means there are games
+   * the server doesn’t yet know about (failed auto-POST or new
+   * device); only then does the dialog open.
    */
   const handleSync = useCallback(() => {
-    const local = loadSoloStats();
-    const hasPending = pendingOutcome !== null || local.totalGames > 0;
-    if (!hasPending) {
+    const diff = pendingSyncCount();
+    const hasFailedOutcome = pendingOutcome !== null;
+    if (diff === 0 && !hasFailedOutcome) {
       void refreshOnly();
       return;
     }
@@ -159,11 +178,14 @@ export function SoloStatsPanel() {
       }
       // Step 3a: server is authoritative; adopt its answer.
       setStats(r.value.stats);
-      // Step 3b: clear local solo stats (the next phase-change
-      // refreshLocal would otherwise resurrect the merged-into-
-      // server values from localStorage; clearing keeps the panel
-      // and server in sync until the next game).
+      // Step 3b: clear local solo stats + reset the sync sentinel.
+      // The merge result is now the canonical state; persisting the
+      // new server totalGames into the sentinel means the next
+      // sync-button click diff will be 0 and degrade to a pure GET
+      // refresh (wave-2 §A5 contract).
       clearSoloStats();
+      clearSyncedServerTotal();
+      persistSyncedServerTotal(r.value.stats.totalGames);
       useGameStore.getState().__resetInternalForTests();
       useGameStore.setState({
         soloSync: { pending: null, inflight: false, error: null },
@@ -292,7 +314,7 @@ export function SoloStatsPanel() {
       <ResetStatsButton scope="local" onCleared={refreshLocal} />
       <SyncConfirmDialog
         open={dialogOpen}
-        pendingGamesCount={localSnapshotForDialog.totalGames}
+        pendingGamesCount={Math.max(0, localSnapshotForDialog.totalGames - loadSyncedServerTotal())}
         initialName={playerName ?? ''}
         onConfirm={confirmSync}
         onReject={closeDialog}
