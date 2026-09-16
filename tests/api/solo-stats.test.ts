@@ -17,9 +17,11 @@ import path from 'node:path';
 // across resetModules for the test file).
 const loadSoloRecordMock = vi.fn();
 const accumulateSoloRecordMock = vi.fn();
+const ensureSoloRecordMock = vi.fn();
 vi.doMock('@/lib/db', () => ({
   loadSoloRecord: loadSoloRecordMock,
   accumulateSoloRecord: accumulateSoloRecordMock,
+  ensureSoloRecord: ensureSoloRecordMock,
 }));
 
 const loadRoute = async () => {
@@ -28,6 +30,7 @@ const loadRoute = async () => {
   vi.doMock('@/lib/db', () => ({
     loadSoloRecord: loadSoloRecordMock,
     accumulateSoloRecord: accumulateSoloRecordMock,
+    ensureSoloRecord: ensureSoloRecordMock,
   }));
   return import('@/app/api/solo-stats/route');
 };
@@ -36,6 +39,7 @@ beforeEach(() => {
   process.env.DATABASE_URL = `file:${path.join(os.tmpdir(), 'unused-' + Math.random() + '.db')}`;
   loadSoloRecordMock.mockReset();
   accumulateSoloRecordMock.mockReset();
+  ensureSoloRecordMock.mockReset();
 });
 
 afterEach(() => {
@@ -275,5 +279,155 @@ describe('app/api/solo-stats/route', () => {
       expect(accumulateSoloRecordMock).toHaveBeenNthCalledWith(2, 'bob', 'O');
       expect(accumulateSoloRecordMock).toHaveBeenNthCalledWith(3, 'bob', 'draw');
     });
+  });
+});
+
+describe('PUT', () => {
+  it('returns 400 on invalid json', async () => {
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: 'not json',
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 422 when the body has no name field', async () => {
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({}),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it('returns 422 when the name is too long', async () => {
+    const { PUT } = await loadRoute();
+    const long = 'a'.repeat(25);
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: long }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it('returns 422 when the name contains a control character', async () => {
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'badname' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it('returns 422 when extra keys are present (defensive against accidental stats PUT)', async () => {
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: 'alice',
+          totalGames: 99,
+        }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it('trims whitespace before validating and calls ensureSoloRecord with trimmed name', async () => {
+    ensureSoloRecordMock.mockResolvedValue({
+      totalGames: 0,
+      xWins: 0,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 0,
+    });
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: '  alice  ' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(ensureSoloRecordMock).toHaveBeenCalledWith('alice');
+  });
+
+  it('returns the empty row from ensureSoloRecord when the name is fresh', async () => {
+    ensureSoloRecordMock.mockResolvedValue({
+      totalGames: 0,
+      xWins: 0,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 0,
+    });
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'newbie' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      stats: {
+        totalGames: 0,
+        xWins: 0,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 0,
+      },
+    });
+  });
+
+  it('returns the existing row from ensureSoloRecord (idempotent: never zeros an existing row)', async () => {
+    ensureSoloRecordMock.mockResolvedValue({
+      totalGames: 7,
+      xWins: 4,
+      oWins: 2,
+      draws: 1,
+      currentStreak: -2,
+    });
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'veteran' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stats.totalGames).toBe(7);
+    expect(body.stats.currentStreak).toBe(-2);
+  });
+
+  it('returns 500 when ensureSoloRecord throws (db unavailable)', async () => {
+    ensureSoloRecordMock.mockRejectedValue(new Error('boom'));
+    const { PUT } = await loadRoute();
+    const res = await PUT(
+      new Request('http://localhost/api/solo-stats', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'alice' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    expect(res.status).toBe(500);
   });
 });

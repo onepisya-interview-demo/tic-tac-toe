@@ -95,3 +95,42 @@ describe('components/SoloStatsPanel', () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe('B-T3/B-T4 sync confirm flow', () => {
+  it('playerName + empty localStorage: 同步 钮退化为纯 GET（无 dialog，无 POST）', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    useGameStore.setState({ playerName: 'syncflow-A' });
+    render(<SoloStatsPanel />);
+    await user.click(screen.getByTestId('solo-sync'));
+    // Dialog stays closed (no `open` attribute): sync button
+    // degraded to pure GET per wave-2 §A5 contract.
+    expect(screen.getByTestId('sync-confirm-dialog').hasAttribute('open')).toBe(false);
+    // No POST /sync fired (PUT is the only allowed POST-shaped write).
+    const writes = fetchSpy.mock.calls.filter((c) => {
+      const init = (c[1] ?? {}) as RequestInit;
+      const m = (init.method ?? 'GET').toUpperCase();
+      return m !== 'GET' && m !== 'HEAD';
+    });
+    expect(writes.length).toBe(0);
+    fetchSpy.mockRestore();
+  });
+
+  it('playerName + localStorage 有局 → 同步 钮打开 dialog；保留本地 零网络写', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    useGameStore.setState({ playerName: 'syncflow-B' });
+    seedSoloStats({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 });
+    render(<SoloStatsPanel />);
+    await user.click(screen.getByTestId('solo-sync'));
+    // Dialog opened with the pending count surfaced.
+    const dialog = screen.getByTestId('sync-confirm-dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByTestId('sync-confirm-desc')).toHaveTextContent('将上传本机 3 局');
+    // Click "保留本地" → onReject, no network writes.
+    fetchSpy.mockClear();
+    await user.click(screen.getByTestId('sync-confirm-reject'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});

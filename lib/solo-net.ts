@@ -85,3 +85,61 @@ export async function postSoloOutcome(
     return { ok: false, reason: reasonFromError(err) };
   }
 }
+
+/**
+ * PUT /api/solo-stats with { name } → { stats: GameStats }. The
+ * handler is idempotent: a fresh name returns the just-inserted empty
+ * row, an existing name returns the existing row untouched. Mirrors
+ * the { ok, value } | { ok, false, reason } contract used by the GET
+ * and POST helpers above so the PlayerNameForm caller can fire-and-
+ * forget without try/catch — UI stays correct regardless of network
+ * outcome, the network write is only a durability aid for the
+ * “save name on device A, pick it up on device B” flow.
+ */
+export async function putSoloName(
+  name: string,
+): Promise<SoloFetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout('/api/solo-stats', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}
+
+/**
+ * POST /api/solo-stats/sync with { name, stats } → { stats: GameStats }.
+ * Server folds client totals into the per-name row via accumulate per-
+ * field addition (ulw-solo-sync-rebuild.md B-T2 / B-T4). Caller (the
+ * sync-confirm dialog flow) adopts the server's answer as the panel
+ * state, then clears local solo stats. Same { ok, value } | { ok, false,
+ * reason } contract as putSoloName so the caller can branch on the
+ * server's authoritative answer without try/catch.
+ */
+export async function postSoloSync(
+  name: string,
+  stats: GameStats,
+): Promise<SoloFetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout('/api/solo-stats/sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, stats }),
+    });
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}

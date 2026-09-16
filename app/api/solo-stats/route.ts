@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   accumulateSoloRecord,
+  ensureSoloRecord,
   loadSoloRecord,
 } from '@/lib/db';
 
@@ -95,6 +96,61 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const next = await accumulateSoloRecord(name, body.outcome);
     return NextResponse.json({ stats: next });
+  } catch {
+    return NextResponse.json({ error: 'db unavailable' }, { status: 500 });
+  }
+}
+
+/**
+ * Body shape for PUT: just { name }. The whitelist is the same
+ * normalizeName() used by GET / POST so a name that GETs cleanly can
+ * also be PUT to create its row. We accept nothing else in the body
+ * — clients must never PUT a full stats row (AGENTS.md 反模式:
+ * “客户端禁手动 PUT solo 全行” preserves the server's
+ * authority over the accumulator).
+ */
+function isSoloNameBody(v: unknown): v is { name: string } {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (typeof r.name !== 'string') return false;
+  // Disallow extra keys defensively so the future PUT { name, stats }
+  // temptation cannot slip through silently.
+  for (const k of Object.keys(r)) {
+    if (k !== 'name') return false;
+  }
+  return true;
+}
+
+/**
+ * Idempotent empty-row bootstrap for the “save name on device A, pull
+ * the row on device B” contract (ulw-solo-sync-rebuild.md B-T1). Returns
+ * { stats } with the canonical empty row when the name is fresh, or the
+ * existing row when the name was already known — callers see the same
+ * shape either way and never accidentally zero an existing row.
+ */
+export async function PUT(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid json' }, { status: 400 });
+  }
+  if (!isSoloNameBody(body)) {
+    return NextResponse.json(
+      { error: 'invalid request shape' },
+      { status: 422 },
+    );
+  }
+  const name = normalizeName(body.name);
+  if (name === null) {
+    return NextResponse.json(
+      { error: 'invalid player name' },
+      { status: 422 },
+    );
+  }
+  try {
+    const stats = await ensureSoloRecord(name);
+    return NextResponse.json({ stats });
   } catch {
     return NextResponse.json({ error: 'db unavailable' }, { status: 500 });
   }

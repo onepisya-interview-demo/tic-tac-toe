@@ -73,3 +73,61 @@ export function clearSoloStats(): void {
     // Nothing to recover — the key may simply not exist.
   }
 }
+
+/**
+ * Sentinel for the most recent server-confirmed totalGames value.
+ * Written by the store after every successful solo POST (auto or
+ * manual merge) and by the manual-sync-confirm handler; read by the
+ * panel to compute the unsynced-diff = local.totalGames - synced.
+ * Solves the “auto-POST happens for every named game, so local
+ * always matches server — manual sync must NOT double-count”
+ * contract (ulw-solo-sync-rebuild.md B-T4 step 2 precondition).
+ */
+export const SOLO_SYNCED_SERVER_KEY = 'ttt.solo.server.synced.v1';
+
+/** Read the most-recent server-confirmed totalGames. SSR-safe. */
+export function loadSyncedServerTotal(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(SOLO_SYNCED_SERVER_KEY);
+    if (raw === null) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Persist the server-confirmed totalGames. Failures are swallowed. */
+export function persistSyncedServerTotal(totalGames: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SOLO_SYNCED_SERVER_KEY, String(totalGames));
+  } catch {
+    // Degrade to in-memory only.
+  }
+}
+
+/** Remove the sentinel — used after a successful merge so the next
+ *  sync-button click re-evaluates against the now-cleared local row.
+ */
+export function clearSyncedServerTotal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(SOLO_SYNCED_SERVER_KEY);
+  } catch {
+    // Nothing to recover.
+  }
+}
+
+/**
+ * Compute the unsynced-diff = local.totalGames - serverSynced.
+ * Positive = there are unsynced games pending push; zero = local
+ * already matches the last known server state; negative = impossible
+ * under LWW semantics (clamped to 0).
+ */
+export function pendingSyncCount(): number {
+  const local = loadSoloStats();
+  const synced = loadSyncedServerTotal();
+  return Math.max(0, local.totalGames - synced);
+}
