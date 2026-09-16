@@ -54,6 +54,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | game | 纯规则 + 战绩 | lib/game.ts:1 | 9（4 prod + 5 test） | 棋盘、胜负、落子、连胜、streakLabel |
 | useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、API 同步、AbortController |
 | stats API | Route handlers | app/api/stats/{route,outcome/route}.ts | 1 prod + 8 QA + 1 test | GET/PUT/DELETE 全行 + POST outcome 服务端权威增量 |
+| solo-stats API | Route handlers | app/api/solo-stats/{route,sync/route}.ts | 2 prod + 7 QA + 2 test | GET 读行 / POST 单局累加 / PUT 存名（空行幂等 upsert）/ POST /sync 跨设备 per-field 合并 |
+| lib/db solo | DB helpers | lib/db.ts:loadSoloRecord/upsertSoloRecord/accumulateSoloRecord/mergeSoloRecord/ensureSoloRecord/accumulateMergeStats | 6（5 prod + 1 test）| solo_records 表的 read→mutate→upsert 单线；ensureSoloRecord 幂等空行；accumulateMergeStats 纯函数 per-field 相加 |
+| lib/solo-net | 浏览器 HTTP | lib/solo-net.ts:fetchSoloStats/postSoloOutcome/putSoloName/postSoloSync | 4 prod + 2 test | withTimeout 8s + {ok,value}/{ok,reason} 契约 |
+| lib/solo-stats | localStorage | lib/solo-stats.ts:SOLO_STATS_KEY/SOLO_SYNCED_SERVER_KEY + load/persist/clear | 2 prod + 1 test | 浏览器战绩持久化 + 同步哨兵（防 double-count） |
+| SyncConfirmDialog | 原生 modal | components/SyncConfirmDialog.tsx:1 | 1 direct（SoloStatsPanel）；1 test | 主「合并战绩」/ 次「保留本地」 + n/24 live 计数 + ESC 关 + reduced-motion |
 | Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/play）；间接经 PlayController/ResultBanner 等消费 | roving focus、键盘输入、落子动画 |
 | launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 9 探针 | 统一 Chromium、context、autoplay policy |
 
@@ -89,6 +94,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **未命名 solo 路径零新增网络行为** —— `SoloStatsPanel` 用 `playerName` 三元 if 而非无条件 GET 是 wave 2 §A5 验收硬约束（sync-qa step 01 探针断言）；任何「顺手 GET 一次」改动都破坏该契约。
 - **同名并发故意 last-write-wins，README 注明边界** —— 不做 CRDT / 时间戳合并；单机 UX 场景下「跨设备累加足够」，过度合并引入「为什么不同步删除」的迷惑。
 - **store 不得在客户端预计算战绩后 PUT 全行；recordOutcome 必须在 server 侧执行** —— 客户端各自 `recordOutcome(internalStats, outcome)` 后 PUT 会因 last-write-wins 丢跨端更新。服务端权威累加：本 plan 的 `lib/db.ts:recordAndSave` 是唯一累加点；客户端只 POST `{outcome}` 收 server 回传的 `{stats}`。
+
+- **PUT /api/solo-stats 仅接 `{name}`，禁接 stats 字段** —— wave 2「存名即落库」契约（ulw-solo-sync-rebuild.md B-T1）：body 严格白名单 `{name}`，handler 用 `isSoloNameBody` 拒绝任何 extra key，422 防止「客户端 PUT 全行 stats」footgun 渗透。客户端 PlayerNameForm 在 `setStoreName` 后 fire-and-forget `void putSoloName(trimmed)`，8s AbortController timeout + fail-soft（失败仅本地生效，不阻断 UI）。
+- **POST /api/solo-stats/sync 是「用户主动确认的合并」接口，body 接 `{name, stats: GameStats}`** —— wave 2「合并需弹框问询」契约（B-T2/B-T3/B-T4）：server 端 read→`accumulateMergeStats` per-field 相加→upsert→返回合并后 `{stats}`，幂等（同一 stats 第二次 POST 会双计——这是 why 客户端在成功后 `clearSoloStats()` + 写 sentinel `persistSyncedServerTotal(mergedTotal)` 防再点）；调用方必须在 SyncConfirmDialog 主 CTA 「合并并清空」按下后才发，「保留本地」零网络写。
+- **同步哨兵 `ttt.solo.server.synced.v1` 锁死「未同步 = 本机 ahead」语义** —— wave 2 §A5「无 pending 退化为纯 GET」契约（B-T4）的实现机制：store 在每个 auto-POST 成功分支（win/draw/retrySoloSync）写 `persistSyncedServerTotal(r.value.stats.totalGames)`；SoloStatsPanel 在每次 GET 成功时同步刷新（跨设备 fresh context 拉到即认）；`handleSync` 改用 `pendingSyncCount = max(0, local.totalGames - synced)` 决定开 dialog 还是退化为纯 GET。手动 sync 成功后清本地 + 把哨兵更新为 merged total，下一次 sync 必然 diff=0 → 纯 GET。
 
 ## 项目特有风格
 
