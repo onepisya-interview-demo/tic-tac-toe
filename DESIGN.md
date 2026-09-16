@@ -106,14 +106,32 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | Page transition | `opacity` | 150ms | ease-out |
 | View Transitions (route) | opacity crossfade 双向 | 150ms | ease-out |
 | In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
+| /solo Card morph | `view-transition-name: solo-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
+| view-toggle button width | grid-stack 双图层（StatusBar 4 态 `grid-area: 1/1` 同格叠放，visibility 切换可见态）+ button `min-width: max-content` 锁宽 | — (静态) | — |
 
 - **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
 - **In-page view switch**: 同上平台 API 的 `update` 路径（React 19 `<ViewTransition update="view-swap">` + `useTransition` 驱动），仅 `/solo` 顶栏切换棋盘↔战绩时启用；CSS 关键帧 `translate` + `opacity`，GPU-only，不动布局属性；`prefers-reduced-motion` 归零；不动 `prefers-reduced-motion` 既有全局 `*` 兜底
+- **/solo Card morph（A-T3，ulw-solo-sync-rebuild W-A）**: Card 根加 `view-transition-name: solo-card`，浏览器对 OLD/NEW 各拍一张 group snapshot 做同位 morph；同容器 `min-h: 28rem` 锁高，使两态在同位 crossfade 而非高度 snap。28rem 是 Board (~22rem) 与 SoloStatsPanel (~24rem) 中取大者再留呼吸空间；hardcode 而非 `clamp` 是因为 Card 内容由 React 控制，不需要响应式伸缩
+- **view-toggle button width（A-T2，ulw-solo-sync-rebuild W-A）**: StatusBar 4 态文本（准备开始 / 轮到 X / X 获胜 / 平局）以 `display: inline-grid` + `grid-area: 1/1` 同格叠放，非活动态 `visibility: hidden`；grid 容器宽度 = max(全部子项) = 活动态自带脉冲点的最宽态；button 仅 `min-width: max-content`，不写硬编码像素；`prefers-reduced-motion` 下行为不变（visibility 是布局态而非动画态）
 - **No bounce / no slide-in / no parallax**; transitions communicate a move, outcome, or route change only
 - GPU-only (`transform`, `opacity`, `background-color`)
 - `prefers-reduced-motion`: collapse all to `0ms`
 - **Interaction reference**: beui.dev Button / Number / Animated Badge mechanisms; adapted to CSS-only transitions and keyed content swaps
 - **Sound**: optional, muted by default, native Web Audio one-shot tones only; no background music
+
+### Why-not-the-other notes for new motion rules
+
+(sanyam 克制原则：每个新动效必须有「为什么不选另一条」注释)
+
+- **A-T2 StatusBar grid-stack 为什么不选 min-w-[7rem] / min-w-[8ch]**
+  像素/字符 token 锁定会让可见文本与按钮内边距产生视觉间隙（短消息「平局」右侧出现明显留白），且 zh 字符度量与 en 字符度量不一致，硬编码 token 在多语言场景会失效。grid-stack 用「内容真实宽度」驱动，token 与字体度量解耦；只有 `.status-pill` 兜底 `min-width: 7ch` 防退化到一字宽（极小字号下中文回退）。
+- **A-T3 view-transition-name 为什么不选纯 CSS transition（`transition: opacity 180ms`）**
+  CSS transition 只在元素 ID/class 变化时连续插值；本场景 board ↔ stats 是「不同 DOM 子树整体替换」，CSS transition 无法对一组子节点整体做 in-place morph。`view-transition-name` 走浏览器快照层 API，对 OLD/NEW 同一名称的两个快照做 position+size morph，是平台原生支持的「共享元素」正确路径（rvt §1.3）。
+- **A-T3 min-h: 28rem 为什么不选 `aspect-ratio` 或 JS 测量**
+  `aspect-ratio` 要求父容器有明确宽度才能算出高度，本场景 Card 是 `max-w-[640px]` + `p-6` 但宽度自适应，aspect-ratio 反推高度会随 viewport 抖动；JS 测量需 ResizeObserver + useState，引入额外水合触发点（AGENTS 反模式），与 status text 一样硬码 token 反而最简单稳定。
+- **A-T4 按钮条件渲染 为什么不选 CSS `hidden` + `aria-disabled`**
+  主公验收 V3 要求「stats 视图 DOM 无 data-testid="restart"」，CSS hidden 只是视觉消失，DOM 节点仍存在，违反契约；React 条件渲染从根上保证 stats 视图 DOM 不出现 restart 节点。
+
 
 ## 6. Accessibility
 
