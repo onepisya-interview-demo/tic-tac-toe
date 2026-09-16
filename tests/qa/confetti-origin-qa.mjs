@@ -200,5 +200,74 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Bug B / V1 (ulw-solo-sync-rebuild W-A): on /solo, the view-toggle
+// (board↔stats) must NOT replay the win-confetti burst. Hoisted
+// SoloConfetti keeps the burst target stable across toggles; the only
+// acceptance is that [data-testid="confetti"] stays mounted exactly
+// once and the burst does not fire a second time.
+//
+// Run shape: desktop viewport, drive top-row win on /solo, toggle to
+// stats, then back to board, assert confetti count == 1 at each
+// observation point. The count being 1 throughout (NOT 1→0→1 like the
+// pre-fix behaviour) is the load-bearing assertion — it proves the
+// hoisted mount target is stable.
+{
+  const { browser: b2, ctx: c2, page: p2 } = await launchQA({
+    viewport: { width: 1280, height: 900 },
+  });
+  await c2.addInitScript(() => {
+    try { window.OffscreenCanvasRenderingContext2D = undefined; } catch {}
+  });
+  try {
+    await step('solo-bugb: drive top-row win on /solo, observe confetti', async () => {
+      await p2.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+      await driveTopRowWin(p2);
+      await p2.waitForFunction(
+        () => /获胜/.test(
+          document.querySelector('[data-testid="status-text"]')?.textContent ?? '',
+        ),
+        null,
+        { timeout: 4000 },
+      );
+      await p2.waitForSelector('[data-testid="confetti"]', { timeout: 2000 });
+      await p2.waitForTimeout(200); // let the burst settle
+      const before = await p2.evaluate(() => ({
+        count: document.querySelectorAll('[data-testid="confetti"]').length,
+      }));
+      assert.equal(before.count, 1, `expected confetti count 1 after win, got ${before.count}`);
+      findings.push({ name: 'solo-bugb-initial', status: 'INFO', ...before });
+    });
+
+    await step('solo-bugb: toggle board→stats, confetti stays mounted (no unmount)', async () => {
+      await p2.click('[data-testid="view-toggle"]');
+      await p2.waitForSelector('[data-testid="solo-stats"]');
+      await p2.waitForTimeout(200);
+      const onStats = await p2.evaluate(() => ({
+        count: document.querySelectorAll('[data-testid="confetti"]').length,
+      }));
+      // Acceptance: count stays at 1. Pre-fix this was 0 (DOM unmounted
+      // when view switched to stats) — the visual bug was the new
+      // mount on toggle-back firing burstConfetti() again.
+      assert.equal(onStats.count, 1, `expected confetti count 1 on stats (no unmount), got ${onStats.count}`);
+      findings.push({ name: 'solo-bugb-onstats', status: 'INFO', ...onStats });
+    });
+
+    await step('solo-bugb: toggle stats→board, confetti count stays at 1', async () => {
+      await p2.click('[data-testid="view-toggle"]');
+      await p2.waitForSelector('[data-testid="board"]');
+      await p2.waitForTimeout(200);
+      const after = await p2.evaluate(() => ({
+        count: document.querySelectorAll('[data-testid="confetti"]').length,
+      }));
+      assert.equal(after.count, 1, `expected confetti count 1 after toggle-back, got ${after.count}`);
+      findings.push({ name: 'solo-bugb-aftertoggle', status: 'INFO', ...after });
+    });
+  } finally {
+    await c2.close();
+    await b2.close();
+  }
+}
+
 await writeQaLog(OUT, findings);
 console.log(`evidence: ${OUT}`);

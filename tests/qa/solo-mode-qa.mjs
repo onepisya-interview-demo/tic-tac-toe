@@ -232,6 +232,108 @@ try {
     assert.equal(domTotal, "0", `expected home DOM total=0, got ${domTotal}`);
     await shoot(page, "home-after-solo.png");
   });
+
+  // === W-A: Bug C width stability (ulw-solo-sync-rebuild W-A, V2) ===
+  // Drive a fresh solo win and measure view-toggle button width at
+  // each phase transition. Acceptance V2: max-min < 2px (pre-fix: 16px
+  // jump when StatusBar pulse dot disappears on win).
+  await step("07 view-toggle button width is stable across phase transitions", async () => {
+    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="view-toggle"]');
+    const widths = [];
+    // playing-empty (StatusBar pulse dot present, text = 轮到 X|O)
+    widths.push({ phase: "playing", ...(await page.evaluate(() => {
+      const b = document.querySelector('[data-testid="view-toggle"]');
+      const r = b?.getBoundingClientRect();
+      return { w: r?.width ?? 0, text: b?.textContent ?? "" };
+    })) });
+    // won (no pulse dot, text = X|O 获胜)
+    await driveTopRowWin(page, { clickGapMs: 50 });
+    await page.waitForFunction(
+      () => /获胜/.test(
+        document.querySelector('[data-testid="status-text"]')?.textContent ?? "",
+      ),
+      null,
+      { timeout: 4000 },
+    );
+    widths.push({ phase: "won", ...(await page.evaluate(() => {
+      const b = document.querySelector('[data-testid="view-toggle"]');
+      const r = b?.getBoundingClientRect();
+      return { w: r?.width ?? 0, text: b?.textContent ?? "" };
+    })) });
+    const min = Math.min(...widths.map((x) => x.w));
+    const max = Math.max(...widths.map((x) => x.w));
+    findings.push({ name: "width-stability-evidence", widths, delta: max - min });
+    assert.ok(
+      max - min < 2,
+      `view-toggle button width delta ${(max - min).toFixed(2)}px must be < 2px (V2 acceptance); widths: ${JSON.stringify(widths)}`,
+    );
+  });
+
+  // === W-A: Bug B stability (ulw-solo-sync-rebuild W-A, V1) ===
+  // After the win in step 07, toggle board→stats→board and assert
+  // [data-testid="confetti"] stays mounted exactly once (no
+  // unmount/remount across toggles).
+  await step("08 confetti span stays mounted across view toggles (Bug B)", async () => {
+    const before = await page.evaluate(() =>
+      document.querySelectorAll('[data-testid="confetti"]').length,
+    );
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForTimeout(150);
+    const onStats = await page.evaluate(() =>
+      document.querySelectorAll('[data-testid="confetti"]').length,
+    );
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="board"]');
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() =>
+      document.querySelectorAll('[data-testid="confetti"]').length,
+    );
+    findings.push({ name: "confetti-mounts", before, onStats, after });
+    assert.equal(before, 1, `expected confetti count 1 on board, got ${before}`);
+    assert.equal(onStats, 1, `expected confetti count 1 on stats (no unmount), got ${onStats}`);
+    assert.equal(after, 1, `expected confetti count 1 back on board, got ${after}`);
+  });
+
+  // === W-A: A-T4 restart button conditional (V3) + Bug C height (V2) ===
+  // On the stats view, the restart button must NOT be in the DOM.
+  // On the board view, it must be present. Plus card height must stay
+  // stable across the two views (< 8px delta).
+  await step("09 restart button conditional + card height stable (V3 + V2)", async () => {
+    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="view-toggle"]');
+    // board view: restart present, height measured
+    const boardRestart = await page.locator('[data-testid="restart"]').count();
+    const boardH = await page.evaluate(() => {
+      const main = document.querySelector("main.page-shell");
+      const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
+      return card?.getBoundingClientRect().height ?? 0;
+    });
+    // toggle to stats
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForTimeout(220);
+    const statsRestart = await page.locator('[data-testid="restart"]').count();
+    const statsH = await page.evaluate(() => {
+      const main = document.querySelector("main.page-shell");
+      const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
+      return card?.getBoundingClientRect().height ?? 0;
+    });
+    // toggle back to board
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="board"]');
+    const boardRestartAgain = await page.locator('[data-testid="restart"]').count();
+    findings.push({ name: "restart-conditional", boardRestart, statsRestart, boardRestartAgain, boardH, statsH });
+    assert.equal(boardRestart, 1, `expected restart button on board view, got ${boardRestart}`);
+    assert.equal(statsRestart, 0, `expected NO restart button on stats view (V3 acceptance), got ${statsRestart}`);
+    assert.equal(boardRestartAgain, 1, `expected restart button back on board, got ${boardRestartAgain}`);
+    const heightDelta = Math.abs(boardH - statsH);
+    assert.ok(
+      heightDelta < 8,
+      `card height delta ${heightDelta.toFixed(2)}px must be < 8px (V2 acceptance); board=${boardH} stats=${statsH}`,
+    );
+  });
 } catch (e) {
   console.error("\nQA FAILED:", e.message);
   try {
