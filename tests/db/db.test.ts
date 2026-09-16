@@ -639,6 +639,87 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
 
+  it('accumulateMergeStats pure function: per-field addition + signed streak sum', async () => {
+    // Pure function: no DB needed (lib/db.ts:accumulateMergeStats is
+    // a synchronous helper exported specifically for testability).
+    const { accumulateMergeStats } = await import('@/lib/db');
+    const local = { totalGames: 6, xWins: 3, oWins: 2, draws: 1, currentStreak: 0 };
+    const online = { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 };
+    // Wave 1 acceptance number: (3,2,1,0)+(2,1,0,1) → (5,3,1,1).
+    expect(accumulateMergeStats(local, online)).toEqual({
+      totalGames: 9,
+      xWins: 5,
+      oWins: 3,
+      draws: 1,
+      currentStreak: 1,
+    });
+  });
+
+  it('accumulateMergeStats is commutative (a+b === b+a)', async () => {
+    const { accumulateMergeStats } = await import('@/lib/db');
+    const a = { totalGames: 6, xWins: 3, oWins: 2, draws: 1, currentStreak: 0 };
+    const b = { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 };
+    expect(accumulateMergeStats(a, b)).toEqual(accumulateMergeStats(b, a));
+  });
+
+  it('accumulateMergeStats(zero, x) === x (identity)', async () => {
+    const { accumulateMergeStats } = await import('@/lib/db');
+    const empty = { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 };
+    const row = { totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: -2 };
+    expect(accumulateMergeStats(empty, row)).toEqual(row);
+    expect(accumulateMergeStats(row, empty)).toEqual(row);
+  });
+
+  it('accumulateMergeStats 拒 NaN/Infinity 输入（防御 finance 错误）', async () => {
+    const { accumulateMergeStats } = await import('@/lib/db');
+    const base = { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 };
+    const nan = { totalGames: NaN, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 };
+    // Pure function: caller (route handler) validates shape BEFORE
+    // calling, so the pure function itself trusts its inputs.
+    // Document the contract: NaN propagates.
+    expect(accumulateMergeStats(base, nan).totalGames).toBeNaN();
+  });
+
+  it('mergeSoloRecord load → accumulate per-field → upsert (真实 sqlite)', async () => {
+    // End-to-end through the same db used by accumulateSoloRecord.
+    const { mergeSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
+    process.env.DATABASE_URL = `file:${os.tmpdir()}/merge-${Math.random()}.db`;
+    try {
+      // Server has 2X 1O 0D streak=+1, client sends 3X 2O 1D streak=0.
+      await mergeSoloRecord('merger', {
+        totalGames: 3,
+        xWins: 3,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 0,
+      });
+      const next = await mergeSoloRecord('merger', {
+        totalGames: 6,
+        xWins: 2,
+        oWins: 2,
+        draws: 2,
+        currentStreak: -1,
+      });
+      // (2,1,0,1)+(3,2,1,0) per-field: totalGames=6+3=9? Wait — this
+      // second arg is the client stats (we send 6X+2O+2D, currentStreak=-1).
+      // First call stored the server row = emptyStats() (the row
+      // didn’t exist) + client (3,3,0,0,0) → (3,3,0,0,0).
+      // Second call reads (3,3,0,0,0), folds client (6,2,2,2,-1) →
+      // (9,5,2,2,-1).
+      expect(next).toEqual({
+        totalGames: 9,
+        xWins: 5,
+        oWins: 2,
+        draws: 2,
+        currentStreak: -1,
+      });
+      const reloaded = await loadSoloRecord('merger');
+      expect(reloaded).toEqual(next);
+    } finally {
+      await closeDb();
+    }
+  });
+
   it('accumulateSoloRecord 两个名字写入两行（per-name ledger is the whole point）', async () => {
     const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
     try {

@@ -311,6 +311,52 @@ export async function accumulateSoloRecord(
 
 /** Close the cached client (used by tests / shutdown). */
 /**
+ * Pure per-field addition for the cross-device merge path
+ * (ulw-solo-sync-rebuild.md B-T2). Adds server-side totals and
+ * client-supplied totals; currentStreak is summed because the
+ * client cannot know the chronological order of two devices’
+ * independent sessions and the “服务器是权威累加点” contract
+ * says the post-sync row carries every game’s contribution
+ * without dropping any (counts stay exact; streak becomes a
+ * best-effort signed heuristic — README 边界注 covers it).
+ *
+ * Lifted to a pure exported function so tests can pin the math
+ * without sqlite, and so route handlers can call it after the
+ * load step.
+ */
+export function accumulateMergeStats(
+  server: GameStats,
+  client: GameStats,
+): GameStats {
+  return {
+    totalGames: server.totalGames + client.totalGames,
+    xWins: server.xWins + client.xWins,
+    oWins: server.oWins + client.oWins,
+    draws: server.draws + client.draws,
+    currentStreak: server.currentStreak + client.currentStreak,
+  };
+}
+
+/**
+ * Server-authoritative cross-device merge (ulw-solo-sync-rebuild.md
+ * B-T2). Reads the per-name row (or emptyStats when absent), folds
+ * the client-supplied totals via the pure accumulateMergeStats,
+ * upserts the result, and returns the new row. Mirrors
+ * accumulateSoloRecord’s load → mutate → upsert shape so the
+ * caller (POST /api/solo-stats/sync) can adopt the server’s
+ * authoritative answer without an extra GET.
+ */
+export async function mergeSoloRecord(
+  name: string,
+  clientStats: GameStats,
+): Promise<GameStats> {
+  const server = (await loadSoloRecord(name)) ?? emptyStats();
+  const next = accumulateMergeStats(server, clientStats);
+  await upsertSoloRecord(name, next);
+  return next;
+}
+
+/**
  * Idempotent empty-row bootstrap for "save a name on device A, pick it up
  * on device B" vertical slice (ulw-solo-sync-rebuild.md B-T1). Reads the
  * row; if absent, upserts emptyStats() under the trimmed name and returns

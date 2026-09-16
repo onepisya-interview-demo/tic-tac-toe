@@ -114,3 +114,32 @@ export async function putSoloName(
     return { ok: false, reason: reasonFromError(err) };
   }
 }
+
+/**
+ * POST /api/solo-stats/sync with { name, stats } → { stats: GameStats }.
+ * Server folds client totals into the per-name row via accumulate per-
+ * field addition (ulw-solo-sync-rebuild.md B-T2 / B-T4). Caller (the
+ * sync-confirm dialog flow) adopts the server's answer as the panel
+ * state, then clears local solo stats. Same { ok, value } | { ok, false,
+ * reason } contract as putSoloName so the caller can branch on the
+ * server's authoritative answer without try/catch.
+ */
+export async function postSoloSync(
+  name: string,
+  stats: GameStats,
+): Promise<SoloFetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout('/api/solo-stats/sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, stats }),
+    });
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}
