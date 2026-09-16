@@ -38,6 +38,70 @@
   @apply mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
 }
 
+/* StatusBar (Bug C width jitter fix, ulw-solo-sync-rebuild W-A) — stacks all
+   four phase messages into the same inline-grid cell so phase transitions
+   (轮到 X → X 获胜 → 平局 → 准备开始) never resize the wrapping <button>.
+   See components/ui/StatusBar.tsx for the JSX side. The pattern is
+   "grid-stack" (Hubert Sablonnière, ALSGST): all children share
+   grid-area: 1/1, the container's intrinsic width is the max of all
+   children, and visibility:hidden removes non-active cells from the
+   accessibility tree without affecting layout sizing. Why not
+   (a) min-w-[Nch] on the wrapping <button>: clamps visible text to a
+   fixed slot and forces a visible gap on short messages, or (b) a
+   pseudo-element placeholder: same constraint, extra DOM for no
+   reason. The grid-stack is layout-only, no extra nodes. */
+.status-pill {
+  display: inline-grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  align-items: center;
+  min-width: 7ch; /* belt-and-suspenders: at text-small the longest
+                     message is ~4.2ch; reserve 7ch so single-character
+                     zh fallbacks still fit. */
+}
+
+.status-cell {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-cell-hidden {
+  visibility: hidden;
+  /* visibility: hidden (NOT display: none) keeps the cell in layout so
+     its intrinsic width still contributes to the grid cell's width,
+     and removes the cell from the accessibility tree so the aria-live
+     announcer only sees the active message. The aria-hidden prop on
+     the JSX is belt-and-suspenders for assistive tech that doesn't
+     map visibility directly. */
+}
+
+/* GameShell header (Bug C width jitter fix, ulw-solo-sync-rebuild W-A).
+   Three fixed columns — h1 | status slot | SoundToggle — replace the
+   previous flex justify-between so phase transitions don't visually
+   drift the h1 or the SoundToggle. `1fr auto 1fr` lets the center
+   column size to its content (the StatusBar's grid-stack max width)
+   while the flanking 1fr columns absorb whatever space remains.
+   Justify-self-* puts each column's content at the row's three
+   anchors (start / center / end). On 375px the SoundToggle column
+   shrinks first, but the items remain in their anchors — no clipping. */
+.game-header {
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.game-header-status {
+  min-width: 0;
+}
+
+/* view-toggle button — explicit min-width so the column never collapses
+   below the StatusBar's grid-stack max. The StatusBar's pill already
+   enforces its own min-width via .status-pill (7ch), but we add a
+   padding floor so the tap target is comfortable on touch. */
+.view-toggle {
+  padding: 0.25rem 0.5rem;
+  min-width: max-content;
+}
+
 /* Focus indication is owned once, globally: *:focus-visible below implements
    the DESIGN.md §6 ring contract. Interactive components must NOT re-declare
    Tailwind focus-visible utilities on top of it. */
@@ -239,6 +303,18 @@ html, body {
   ::view-transition {
     pointer-events: none;
   }
+
+  /* A-T5 / rvt decision 1: this block DELIBERATELY does not declare
+     `@view-transition { navigation: auto }`. App Router's client-side
+     routing already intercepts every internal navigation, so the
+     cross-document at-rule would only fire for hard navigations
+     (URL bar entry, external links, target="_blank" returns) — and
+     adding it would introduce inconsistent "sometimes fade, sometimes
+     flash" behaviour between two visits of the same pair of pages,
+     violating the AGENTS contract that observable behaviour is
+     stable. The CSS at-rule stays available as a future extension
+     point if a hard-navigation fade is ever wanted; until then it
+     is left out by design, not by omission. */
 }
 
 /* The global reduced-motion rule above (`*, *::before, *::after`) does NOT
