@@ -77,8 +77,41 @@ const SCENARIOS = [
       // Drive a clean top-row win: first player takes 0, 1, 2.
       await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
+      // MINOR-F1 (reports/review/V3.md): the strict win-glow snapshot is
+      // invalid the instant PlayController's router.replace('/result')
+      // unmounts the board. Install a DOM MutationObserver BEFORE the
+      // winning click fires to record the peak `.win-glow` count seen
+      // across the whole setup window. After the existing 400ms post-win
+      // wait (which gives navigation time to complete for the screenshot),
+      // we evaluate the recorded peak and assert >= 3. Gated on
+      // UX_STRICT=1 so non-strict runs pay no cost. The observer covers
+      // the brief win frame deterministically — no race against the
+      // Next.js RSC navigation. See ux-contract.mjs for the matching
+      // strict-block removal.
+      if (process.env.UX_STRICT === '1') {
+        await page.evaluate(() => {
+          window.__winGlowPeak = 0;
+          const updatePeak = () => {
+            const count = document.querySelectorAll(
+              '[data-testid^="cell-"] .win-glow',
+            ).length;
+            if (count > window.__winGlowPeak) window.__winGlowPeak = count;
+          };
+          const observer = new MutationObserver(updatePeak);
+          observer.observe(document.body, { childList: true, subtree: true });
+          updatePeak();
+        });
+      }
       await driveTopRowWin(page, { clickGapMs: 100 });
       await page.waitForTimeout(400);
+      if (process.env.UX_STRICT === '1') {
+        const peak = await page.evaluate(() => window.__winGlowPeak);
+        if (peak < 3) {
+          throw new Error(
+            `winning cells must expose the win-glow animation (peak observed: ${peak})`,
+          );
+        }
+      }
     },
   },
   {

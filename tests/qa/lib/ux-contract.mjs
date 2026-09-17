@@ -60,12 +60,10 @@ export async function assertUXContract(page, name) {
     );
   }
 
-  if (name === 'play-win') {
-    assert.ok(
-      await page.locator('[data-testid^="cell-"] .win-glow').count() >= 3,
-      'winning cells must expose the win-glow animation',
-    );
-  }
+  // play-win: win-glow strict check moved into the play-win scenario setup
+  // (tests/qa/ux-qa.mjs) because PlayController's router.replace('/result')
+  // unmounts the board inside the existing 400ms wait, so the assertion
+  // here would see zero win-glow spans. See reports/review/V3.md MINOR-F1.
 
   if (name === 'result-after-win') {
     assert.equal(
