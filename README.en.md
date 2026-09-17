@@ -41,11 +41,14 @@ Turso HTTP on Vercel).
 
 - 🎯 **Two modes**: **ranked** — two players take turns on one device
   (pass-and-play), scores persist server-side; **solo** — single-player
-  practice. Without a name, scores live in browser `localStorage` with
-  zero server writes (fully offline). With a player name, solo scores
-  sync per-name to the server's `solo_records` ledger (same name
-  across devices shares history; concurrent same-name writes are
-  last-write-wins).
+  practice, **100% local** regardless of whether you set a player
+  name. The store never auto-POSTs an outcome; `localStorage` is the
+  only write path. Saving a name (`PUT /api/solo-stats`) merely
+  registers an empty row on the server so a future device can pull
+  stats back; merging local results to the server is **explicit** —
+  press "sync" on `/solo`, or click "start" on the home page while
+  local is ahead and confirm the merge dialog. Concurrent same-name
+  writes are last-write-wins.
 - 💾 **Score persistence (ranked)**: wins / losses / draws / streaks land in
   a single-row `game_stats` table — file: sqlite locally, Turso HTTP on
   Vercel (@libsql/client).
@@ -74,12 +77,16 @@ Turso HTTP on Vercel).
 | --- | --- |
 | `/` | Home: stats card + start game + reset stats |
 | `/play` | Game: 3x3 board + current player indicator + restart |
-| `/solo` | Solo practice: 3x3 board + solo stats panel (named → GET pull + auto-POST on settle + manual sync button) + clear local stats |
+| `/solo` | Solo practice: 3x3 board + solo stats panel (named → 100% local, no auto-POST; manual "sync" button or home-page intercept dialog merges to server on user intent) + clear local stats |
 | `/result` | Result: outcome + play again + back home + reset stats |
 | `GET /api/stats` | Read stats (Node runtime) |
 | `PUT /api/stats` | Write stats seed / admin (@deprecated; clients use POST outcome) |
 | `DELETE /api/stats` | Reset stats |
 | `POST /api/stats/outcome` | Client submits an outcome: body `{outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
+| `GET /api/solo-stats?name=...` | Read per-name solo stats (row missing → `{stats:null}`) |
+| `PUT /api/solo-stats` | Save name = upsert empty row: body `{name}` idempotent → 200 `{stats:GameStats}` |
+| `POST /api/solo-stats` | Per-outcome accumulation (endpoint retained; client no longer auto-calls): body `{name, outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}`. Pure-local clients reach the server only via `/sync`. |
+| `POST /api/solo-stats/sync` | Cross-device merge: body `{name, stats:GameStats}` → server reads, per-field sums, upserts → 200 `{stats:GameStats}` (must be triggered from the merge-confirm dialog; no silent "POST while I'm at it") |
 
 ## Local development
 
@@ -168,6 +175,24 @@ recording a score requires `POST /api/stats/outcome`; games finished while
 offline lose their score, and later PUT/DELETE calls don't backfill.
 Vercel Analytics noise (POSTs to `<vercel-analytics-sandbox-id>/view`)
 cannot be suppressed — it is a Vercel-injected beacon.
+
+**How does solo cross-device sync work?** The player name is the
+identity. Saving a name hits `PUT /api/solo-stats` to register an empty
+row on the server (idempotent — never overwrites an existing row);
+after that, every solo game stays purely local (`recordOutcome`
+accumulates into `localStorage['ttt.solo.stats.v1']`, the store never
+sends a fetch). Two explicit paths merge the local lead over to the
+server: (1) on the home page, clicking "start" while `pendingSyncCount() > 0`
+opens the merge-confirm dialog; "merge and clear" triggers `POST /sync`
+which the server processes as read → per-field sum → upsert, then
+the client zeroes local stats and updates the `ttt.solo.server.synced.v1`
+sentinel so a second click is a no-op; "keep local" navigates with
+zero network writes. (2) on `/solo`, the manual "sync" button offers
+the same dialog (or degrades to a pure `GET` refresh when there is
+nothing pending). Concurrent same-name merges are deliberately
+last-write-wins — there is no CRDT and no timestamp reconciliation.
+Over-engineering merge hides simple questions like "why isn't the
+deletion syncing?".
 
 **How do I clear stats?** The home "reset stats" button calls
 `DELETE /api/stats`; the single-row table (id=1) zeroes out. Local UI

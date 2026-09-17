@@ -141,6 +141,25 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
   R3 §3.1 一行 `padding: 1rem 0; gap: 1.5rem`（mobile-only `@media (width < 40rem)`）即可省 80px，远超 /solo 19px 溢出需求；引入 scroll-driven animation（`animation-timeline: scroll()`）或 JS IntersectionObserver 触发布局变化会破 DESIGN.md §5「GPU-only（transform / opacity / background-color）」+ AGENTS 反模式「不引入新水合触发点」双约束。scroll-driven caniuse 73%（Safari 18.4+），老 Safari 用户零降级，不达「零运行时成本」目标，故选静态 token 收紧。
 
 
+### 52 法则对照（ulw-solo-pure-local-closeout W4 增补）
+
+本节把 W1-W3 关键改动映射到「52 设计法则」（信源：`/Users/onepisya/code/UI Propmt/skills/elegant-ui/52-design-principles/`）。每条以「法则 → 对应改动 → 一句注意点」记入契约；证据详见
+`.omo/evidence/ulw/ulw-solo-pure-local-closeout/R2-principles-mapping.md` §0-§9。
+
+| 法则 | 对应改动 | 一句注意点 |
+| --- | --- | --- |
+| 形式追随功能（Form Follows Function） | W1 删 `lib/store.ts` 三处 auto-POST；W3 静态 token 收紧（mobile `py-12 → py-4`） | 「装饰性联网」不属单机；删比抽 helper 更净（V3 MINOR-F4 因此作废） |
+| 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框 | 弹框文案须显形「将上传 N 局 / 本机清零」（rux 决议 3/4 既约） |
+| 信噪比（Signal-To-Noise Ratio） | W1 收窄默认路径请求面（零网络写）；W2 sync-qa 唯一名 `syncprobe-<ts>` 复位 | 端点本身保留为公开 API 面（D2 决议），不是「删净」而是「挪走」 |
+| 渐进呈现（Progressive Disclosure） | W1 `pendingSyncCount > 0` 才弹 SyncConfirmDialog；零态静默直行 | 禁发明「始终弹一次以教育用户」的常驻噪音（验收 A3 硬约束） |
+| 留白感知（Horror Vacui） | W3 一屏收紧（19px 溢出 → 80px 节省）；sticky header 紧凑 ≤56px | 仍守 `bg-elevated` 与 `bg-base` ≥12px 呼吸间隔；战绩非空 /home 允许轻量滚动 |
+| 菲茨定律（Fitts's Law） | W1 弹框主/次 CTA 整行宽（移动端单列 1fr/1fr 堆叠）；按钮 padding 8/12/16 | 触区 ≥44px；遮罩外 click 不关弹框（用 ESC + 显式按钮替代） |
+| 多尔蒂门槛（Doherty Threshold） | W1 弹框显形 ≤100ms + 主 CTA loading + 8s `AbortController.timeout()` | 400ms 内用户必须看见反馈；HAR §P2 实证 30s 卡死反例 |
+| 图底关系（Figure-Ground） | W1 `::backdrop` 选 `bg-base/70` + `backdrop-blur-sm`；W3 sticky `bg-base` 实色 | 禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
+
+未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。心流 / Zeigarnik 与「紧凑化」无直接对位。
+
+
 ## 6. Accessibility
 
 - **Focus ring**: `outline: 2px solid var(--accent); outline-offset: 2px`
@@ -200,7 +219,7 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 本文件的验收域是设计契约本身：视觉 QA 断言暗色 `#0A0A0A` 基底、Geist / Inter 加载（无 FOUT）、
 无 emoji、focus ring 可见、动效符合第 5 节时长/缓动表。
 
-**截图来源**（重制于 W-UI 波 1，commit 3）：
+**截图来源**（重制于 ulw-solo-pure-local-closeout W4；详见本仓 `.omo/evidence/ulw/ulw-solo-pure-local-closeout/W4-gauntlet.log`）：
 
 - 桌面 1280×900：`docs/screenshots/{home,board,result,solo}.png`（visual-qa 桌面 pass）
 - 移动 375×667：`docs/screenshots/mobile/{home,board,solo,solo-stats,result}.png`（visual-qa 移动 pass，
@@ -225,5 +244,55 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 | Test ids | `player-name-input` / `player-name-save` / `player-name-clear` / `player-name-current` / `player-name-section` / `solo-stats-heading` / `solo-sync` / `solo-stats-error` | Stable QA contract; added on top of wave 1's `view-toggle` / `solo-stats` / `reset-solo-stats` |
 | Concurrency model | Last-write-wins per name (intentional simplicity) | README documents the boundary; no CRDT / no timestamp merging |
 | Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | A5 acceptance — verified by sync-qa step 01 |
+
+#### 玩家名输入对照（行业最佳实践，W4 增补）
+
+本节把 `components/PlayerNameForm.tsx` 的玩家名 / 字符计数 / 校验策略对照行业最佳实践
+（NN/g / GOV.UK / Material / OWASP / MDN / Roblox Wiki）做差距审计。证据详见
+`.omo/evidence/ulw/ulw-solo-pure-local-closeout/R1-name-input-best-practices.md` §1-§2。
+本节只列 W4 决策：**已符合** / **P0 采纳** / **已知差距，未采纳原因**——禁止造未实现的
+功能描述。
+
+**已符合**（无伪差距；与设计契约自洽）：
+
+- 可见 label 在字段上方 + counter 同行右侧；placeholder 不当 label（NN/g BP-A1/A2 / GOV.UK BP-B1）
+- `n/24` 实时计数 + `aria-live="polite"`（NN/g BP-B2 / Material BP-B3）
+- 服务端权威白名单 + 422 拒绝；`lib/player-name.ts:isPlayerName` 与 route handler
+  `isValidPlayerName` 字符范围同源（OWASP BP-F1 / BP-A5；AGENTS.md 反模式行显式约束）
+- 控制字符过滤 C0/C1/DEL（OWASP BP-F2）
+- 允许 CJK 与 emoji（字符接受侧；计数侧见已知差距）
+- SSR-safe + `aria-invalid` + `aria-describedby` + `role="alert"`（a11y 最佳实践）
+- 「先玩后填」匿名路径：`playerName === null` 时 UI 走「匿名玩家」且零网络写
+  （punchev BP-E3 路径；ulw-solo-pure-local-closeout W1 落地）
+
+**P0 采纳**（学界共识；本轮不改代码，但在设计契约中显形以兑现可见性）：
+
+- **「字符计数按 UTF-16」明示**：单 emoji 视作 2 字符；12 emoji 即可达到 24/24 计数上限
+  （Edward Ken Fox BP-C2）。R1 建议 W4 文档化即兑现，不引入 `Intl.Segmenter`
+  （grapheme 改造风险面大于收益）。
+- **「未命名 = 匿名玩家」兜底是合理选择**：BP-E1 的 Roblox `Guest NNNN` 模式适用于
+  「无服务端身份」场景；本仓已有显式命名作为身份，引入随机昵称会让用户每次刷新看到
+  不同名字，造成「为什么之前的战绩没了」的认知摩擦，故不采纳。
+
+**已知差距，未采纳原因**（R1 §3 P1/P2；本轮不动，记入未来 wave）：
+
+- **P1-4 `autoComplete="off"` + iOS `autoCapitalize="off" autoCorrect="off" spellCheck={false}`**：
+  避免浏览器把用户真名 autofill 到玩家名。**未采纳**：组件级 4 个 prop 改动属 UI 行为变更，
+  需独立 `fix(ui)` commit；本轮 W4 是 docs-only，不混入代码改动。
+- **P1-5 Enter 提交 IME composition 守卫**：现代 Chrome/Safari 已正确处理受控 input 的 IME
+  composition；当前实现不阻塞用户。**未采纳**：影响面极小（仅 CJK 用户 + Enter），
+  未来「本地化深改」wave 再处理。
+- **P1-6 onBlur 后首次触摸显示错误**：当前 `onSubmit` 单点反馈等价 NN/g BP-A3 的
+  「field-commit」分支；移动端体验已可接受。**未采纳**：需引入 `touched` 状态 +
+  onBlur 守卫，UX 行为变更不在 W4 scope。
+- **P2-7 接近上限视觉提示（≤5 字符剩余切换红色）**：影响 design tokens 与主题色；高对比度
+  需先核 WCAG AA。**未采纳**：色彩改动属 design-token wave，本轮不在 scope。
+- **P2-8 跨设备恢复暗示文案**：当前 sync 弹框已显式处理 merge UX；input 下加「同名玩家在
+  其他设备有战绩时会自动合并」可能让 99% 用户反而困惑。**未采纳**：弹框即单一真相，
+  input 不承担跨设备教学。
+- **P2-9 grapheme 计数改造**：影响 char counter 与 maxLength；W4 scope 不动。
+  **未采纳**：列入「本地化深改」wave。
+- **P2-10 IME composition maxLength 软化**：现代浏览器已正确处理，受影响用户极少。
+  **未采纳**：保留浏览器原生行为。
 
 This contract is the single source of truth for design tokens. Any deviation must update this file first.
