@@ -37,11 +37,12 @@ Turso HTTP）。
 ## Features
 
 - 🎯 **双模式**：**ranked 对战**——两人同设备 pass-and-play 轮流下，战绩经服务端持久化；
-  **solo 单机练习**——未命名时战绩存浏览器 localStorage，零服务端写、离线也能完整计分；
-  设置玩家名后自动按名同步到服务端 `solo_records`（同名多设备历史共享；同名并发为后到者累加）。
-  跨设备同步：保存名 → server 立即建空行（PUT `/{name}` 幂等）；战绩面板「同步」按钮在本地
-  有未推局时弹合并确认框（主「合并战绩」+ 副「将上传本机 N 局；同步后本机清零以防重复」，
-  选项「合并并清空」/「保留本地」），无未推局时退化为纯 GET 刷新——不会双计已自动 POST 的局。
+  **solo 单机练习**——**100% 纯本地**：无论是否命名、无论在线还是离线，局终战绩只落
+  localStorage，store 不发任何 fetch（主公谕：「单机版本，不需要发送任何请求，全部存在
+  本地」）。跨设备同步：保存名 → server 立即建空行（PUT `/{name}` 幂等），但战绩需要用户
+  主动点「同步」按钮才上行；首页「开始对战」/「单机练习」点击时若本地有未推局，会拦截
+  弹合并确认框（主「合并战绩」+ 副「将上传本机 N 局；同步后本机清零以防重复」，选项
+  「合并并清空」/「保留本地」）；无未推局时无弹框直行，「同步」按钮退化为纯 GET 刷新。
 - 💾 **战绩持久化（ranked）**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
@@ -61,7 +62,7 @@ Turso HTTP）。
 | --- | --- |
 | `/` | 首页：战绩卡片 + 开始游戏 + 重置战绩 |
 | `/play` | 游戏页：3x3 棋盘 + 当前玩家指示 + 重新开局 |
-| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板（已命名时按名 GET 拉回 + 局终自动 POST + 同步按钮兜底）+ 清空本地战绩 |
+| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板（命名/未命名一律纯本地 0 网络写；跨设备走首页拦截弹框或手动「同步」按钮）+ 清空本地战绩 |
 | `/result` | 结算页：胜负结果 + 再来一局 + 返回首页 + 重置战绩 |
 | `GET /api/stats` | 读战绩 (Node runtime) |
 | `PUT /api/stats` | 写战绩 seed / admin（@deprecated；客户端走 POST outcome） |
@@ -69,7 +70,7 @@ Turso HTTP）。
 | `POST /api/stats/outcome` | 客户端落局：body `{outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
 | `GET /api/solo-stats?name=...` | 读按名 solo 战绩（row 不存在 → `{stats:null}`） |
 | `PUT /api/solo-stats` | 存名即落库：body `{name}` 幂等 upsert 空战绩行 → 200 `{stats:GameStats}` |
-| `POST /api/solo-stats` | 单局累加：body `{name, outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
+| `POST /api/solo-stats` | 单局累加（保留端点，客户端不再自动调用）：body `{name, outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}`。客户端纯本地路线下仅 `POST /sync` 会上行 |
 | `POST /api/solo-stats/sync` | 跨设备合并：body `{name, stats:GameStats}` server 端 read → per-field 相加 → upsert → 200 `{stats:GameStats}`（必须经合并确认弹框，不允许「顺手 POST」） |
 
 ## 本地开发
@@ -153,14 +154,14 @@ public/               静态资源 (logo / favicon)
 （POST 到 `<vercel-analytics-sandbox-id>/view`）无法消除，是 Vercel 平台侧注入的 beacon。
 
 **solo 跨设备同步是怎么工作的？** 玩家名是身份：保存名 → server 立即建空战绩行（PUT，
-幂等不会覆盖既有）；同名玩家在不同设备各玩各的：每局自动 POST 一行 outcome，server
-权威累加（last-write-wins，无 CRDT）。本机比 server 多的局（典型场景：在 A 设备玩了几局
-没网，回到有网的 B 设备）会在面板「同步」按钮按下时弹合并确认框：选「合并并清空」
-触发 POST /sync 一次性 server 端 per-field 合并 + 本机清零防重复；选「保留本地」零网络写。
-同名并发故意 last-write-wins（同时间不同设备各 POST 一局 → 顺序依 server 接到顺序），
-刻意不做 CRDT / 时间戳合并——单机 UX 场景下「跨设备累加」够用，过度合并会引入
-「为什么不同步删除」的迷惑。无未推局时「同步」按钮退化为纯 GET 刷新，不会双计已自动
-POST 的局。
+幂等不会覆盖既有）；之后 solo 局一律纯本地，store 不发任何 fetch（主公谕：「单机版本，
+不需要发送任何请求，全部存在本地」）。本机比 server 多的局（典型场景：在 A 设备玩了
+几局没网，回到有网时想并入服务端）走两条显式路径：(1) 首页「开始对战」/「单机练习」
+点击时若 `pendingSyncCount() > 0` 拦截弹合并确认框；选「合并并清空」触发 POST /sync
+一次性 server 端 per-field 合并 + 本机清零防重复；选「保留本地」零网络写直接导航。
+(2) /solo 页手动点「同步」按钮，同样的弹框或纯 GET 刷新（无未推局时）。同名并发故意
+last-write-wins（POST /sync 是幂等合并而非并发竞速），刻意不做 CRDT / 时间戳合并——
+单机 UX 场景下「跨设备累加」够用，过度合并会引入「为什么不同步删除」的迷惑。
 
 **怎么清战绩？** 首页"重置战绩"按钮调用 `DELETE /api/stats`，单行表 id=1
 会被清零；本地 UI 状态不依赖服务端响应也能保持正确。

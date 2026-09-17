@@ -15,15 +15,18 @@ vi.mock('next/link', () => ({
     className,
     onClick,
     children,
+    'data-testid': dataTestid,
   }: {
     href: string;
     className?: string;
     onClick?: (event: { preventDefault(): void }) => void;
     children: ReactNode;
+    'data-testid'?: string;
   }) => (
     <a
       href={href}
       className={className}
+      data-testid={dataTestid}
       onClick={(event) => {
         event.preventDefault();
         onClick?.(event);
@@ -34,8 +37,21 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+// Mock next/navigation so StartGameButton's useRouter() doesn't blow up
+// in jsdom (which has no app router mounted). The router's push() is a
+// no-op here — the test cares about the click → startGame(mode) contract,
+// not Next.js routing.
+const routerPush = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
+
 afterEach(() => {
   cleanup();
+  // Clear any persisted solo baseline from previous tests so
+  // pendingSyncCount() reads 0 and the dialog never opens unexpectedly.
+  window.localStorage.clear();
+  routerPush.mockClear();
   useGameStore.setState({
     phase: 'idle',
     mode: 'ranked',
@@ -57,12 +73,14 @@ describe('components/StartGameButton (parameterized CTA)', () => {
     render(
       <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />,
     );
-    const link = screen.getByRole('link');
+    // W1: the testid now sits on the Link (<a>) itself — the dialog
+    // and intercept logic attach directly to the anchor so probe
+    // selectors like [data-testid="start-solo"] land on the link.
+    const link = screen.getByTestId('start-solo');
+    expect(link.tagName).toBe('A');
     expect(link).toHaveAttribute('href', '/solo');
     expect(link).toHaveClass('flex-1');
-    const btn = screen.getByTestId('start-solo');
-    expect(btn).toHaveTextContent('单机练习');
-    expect(btn).toHaveClass('bg-bg-elevated'); // secondary variant token
+    expect(link).toHaveTextContent('单机练习');
   });
 
   it('starts a ranked game on the /play CTA (default mode contract unchanged)', async () => {

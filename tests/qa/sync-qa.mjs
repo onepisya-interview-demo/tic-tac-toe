@@ -175,7 +175,12 @@ await step("01-unnamed-solo-zero-network", async () => {
 // ─────────────────────────────────────────────────────────────────────
 // STEP 2: Set a player name on the home page.
 // ─────────────────────────────────────────────────────────────────────
-const NAME_A = "syncprobe-A";
+// Unique-per-run name suffix (plan §1.3 F3: avoids stale-DB pollution
+// from prior runs against the same DB).
+// Short suffix (≤6 chars) so the composed names fit the 24-char
+// whitelist (lib/player-name.ts isPlayerName: trim → 1-24 chars).
+const RUN_SUFFIX = String(Date.now() % 1000000).padStart(6, '0');
+const NAME_A = `syncprobe-A-${RUN_SUFFIX}`;
 await step("02-home-save-player-name", async () => {
   await pageA.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await pageA.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
@@ -209,7 +214,7 @@ await step("02-home-save-player-name", async () => {
 // missed (diag.md §关键差异 1).
 // ─────────────────────────────────────────────────────────────────────
 await step("02.5-save-only-immediate-server-row", async () => {
-  const NAME_SAVE_ONLY = "syncprobe-saveonly";
+  const NAME_SAVE_ONLY = `saveonly-${RUN_SUFFIX}`;
   await pageA.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await pageA.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
   await pageA.reload({ waitUntil: "networkidle" });
@@ -249,14 +254,27 @@ await step("02.5-save-only-immediate-server-row", async () => {
   // Restore NAME_A in localStorage so subsequent steps (03/05) keep
   // their existing name assumption. Step 02.5 is a sibling that only
   // proves the save-only path; it must not perturb later steps.
-  await pageA.evaluate((key) => window.localStorage.setItem(key, "syncprobe-A"), PLAYER_KEY);
+  await pageA.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: PLAYER_KEY, value: NAME_A },
+  );
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// STEP 3: Named solo → POST on settle (auto, from store) + GET on
-// panel mount, server row updates.
+// STEP 3 (W1 pure-local): Named solo settles → NO auto-POST (server row
+// stays empty) but localStorage accumulates the win. The cross-device
+// persistence story now lives entirely behind the manual 「同步」 button:
+//   1. localStorage has the win (assert localStorage row exists)
+//   2. server still 0 (no auto-POST)
+//   3. Open the stats view → click 「同步」 → dialog opens
+//   4. Confirm → POST /sync → server merges per-field → local cleared
+//   5. Panel now shows server values.
 // ─────────────────────────────────────────────────────────────────────
 await step("03-named-solo-game-roundtrip", async () => {
+  // Clean local state from prior runs so this step is deterministic.
+  await pageA.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await pageA.evaluate((key) => window.localStorage.removeItem(key), "ttt.solo.stats.v1");
+  await pageA.evaluate((key) => window.localStorage.removeItem(key), "ttt.solo.server.synced.v1");
   apiCalls.length = 0;
   await reloadSoloUntilXFirst(pageA);
   await driveTopRowWin(pageA);
@@ -264,24 +282,33 @@ await step("03-named-solo-game-roundtrip", async () => {
     const text = document.querySelector('[data-testid="status-text"]')?.textContent ?? "";
     return text.includes("X 获胜") || text.includes("平局");
   });
-  // Wait for the store's auto-POST to settle.
   await pageA.waitForTimeout(800);
 
-  // The store's solo branch fires the POST regardless of which view
-  // the user is on. We should see at least one POST here, even though
-  // the panel isn't mounted yet.
-  const posts = apiCalls.filter((c) => c.method === "POST" && c.url.includes("/api/solo-stats"));
-  assert.ok(posts.length >= 1, `expected at least 1 POST /api/solo-stats, saw ${posts.length}`);
+  // Pure-local: NO /api/solo-stats writes fired during the win. The
+  // only writes that may exist are the PUT from step 02 (save name)
+  // and any GET that the stats panel mount fires — neither is a write.
+  const writes = apiCalls.filter((c) => c.method === "POST" || c.method === "PUT" || c.method === "DELETE");
+  assert.equal(
+    writes.length,
+    0,
+    `W1 pure-local: named solo win must NOT fire any writes; saw ${writes.length}: ${JSON.stringify(writes)}`,
+  );
 
-  // Verify the server now holds the result of this game. The probe
-  // drives X-first, so the server's xWins should be 1.
-  const serverResp = await getServerStats(pageA, NAME_A);
-  assert.equal(serverResp.status, 200, `GET server returned ${serverResp.status}`);
-  assert.equal(serverResp.body.stats.xWins, 1, `expected server xWins=1, got ${serverResp.body.stats.xWins}`);
-  assert.equal(serverResp.body.stats.totalGames, 1, `expected server totalGames=1, got ${serverResp.body.stats.totalGames}`);
+  // localStorage MUST hold the game (the W1 contract — pure-local).
+  const localRaw = await pageA.evaluate((key) => window.localStorage.getItem(key), "ttt.solo.stats.v1");
+  assert.ok(localRaw, `localStorage ttt.solo.stats.v1 must exist after named solo win; got null`);
+  const localStats = JSON.parse(localRaw);
+  assert.equal(localStats.totalGames, 1, `localStorage totalGames must be 1, got ${localStats.totalGames}`);
+  assert.equal(localStats.xWins + localStats.oWins + localStats.draws, 1, "localStorage wins+draws must equal 1");
 
-  // Toggle to stats view so the panel mounts. The mount effect fires
-  // a GET against /api/solo-stats to pull the canonical row.
+  // Server row should still be empty (no auto-POST means no accumulation).
+  const serverBefore = await getServerStats(pageA, NAME_A);
+  assert.equal(serverBefore.status, 200);
+  // Fresh name → server returns { stats: null }, so totalGames is 0 either way.
+  const serverGamesBefore = serverBefore.body.stats?.totalGames ?? 0;
+  assert.equal(serverGamesBefore, 0, `server row must be empty (no auto-POST); got totalGames=${serverGamesBefore}`);
+
+  // Toggle to stats view so the panel mounts.
   apiCalls.length = 0;
   await pageA.click('[data-testid="view-toggle"]');
   await pageA.waitForSelector('[data-testid="solo-stats"]');
@@ -290,10 +317,27 @@ await step("03-named-solo-game-roundtrip", async () => {
   const gets = apiCalls.filter((c) => c.method === "GET" && c.url.includes("/api/solo-stats"));
   assert.ok(gets.length >= 1, `expected at least 1 GET /api/solo-stats on panel mount, saw ${gets.length}`);
 
+  // Click 「同步」 — pending>0 (local=1, synced=0) → dialog must open.
+  await pageA.click('[data-testid="solo-sync"]');
+  await pageA.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 3000 });
+
+  // Confirm merge → POST /sync fires, server row updates, local cleared.
+  apiCalls.length = 0;
+  await pageA.click('[data-testid="sync-confirm-confirm"]');
+  await pageA.waitForTimeout(800);
+
+  const postSync = apiCalls.find((c) => c.method === "POST" && c.url.includes("/sync"));
+  assert.ok(postSync, `manual sync must fire POST /sync; saw ${JSON.stringify(apiCalls)}`);
+
+  // Server row must now reflect the merged result (1 win).
+  const serverAfter = await getServerStats(pageA, NAME_A);
+  assert.equal(serverAfter.status, 200);
+  assert.equal(serverAfter.body.stats.totalGames, 1, `merged server totalGames must be 1, got ${serverAfter.body.stats.totalGames}`);
+  assert.equal(serverAfter.body.stats.xWins, 1, `merged server xWins must be 1, got ${serverAfter.body.stats.xWins}`);
+
   // The panel should show server values.
   const values = await panelValues(pageA);
   assert.ok(values, "panel should have stat values");
-  // First value is totalGames, second is xWins.
   assert.equal(values[0], "1", `expected panel totalGames=1, got ${values[0]}`);
   assert.equal(values[1], "1", `expected panel xWins=1, got ${values[1]}`);
 
@@ -304,7 +348,7 @@ await step("03-named-solo-game-roundtrip", async () => {
     `heading should include ${NAME_A}, got ${heading}`,
   );
 
-  await shoot(pageA, "03-named-after-win.png");
+  await shoot(pageA, "03-named-after-sync.png");
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -366,7 +410,7 @@ await step("04-different-device-pulls-same-row", async () => {
 // step04 missed because step04 seeded the row by playing first.
 // ─────────────────────────────────────────────────────────────────────
 await step("04b-save-only-cross-device-pull", async () => {
-  const NAME_CROSS = "syncprobe-cross";
+  const NAME_CROSS = `cross-${RUN_SUFFIX}`;
   const { ctx: ctxC, page: pageC } = await launchQA();
   try {
     // Device A: save the name only (no games).
@@ -407,9 +451,14 @@ await step("04b-save-only-cross-device-pull", async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// STEP 5: Manual sync button works even after a game settles.
+// STEP 5 (W1 pure-local): Manual sync button is the sole network-write
+// trigger for named solo. Drive a named game → server stays 0, local=1.
+// Then exercise both dialog branches:
+//   (a) Click sync → dialog opens → 「保留本地」 = zero writes.
+//   (b) Click sync again → dialog opens → 「合并并清空」 = POST /sync,
+//       server=1, local cleared.
 // ─────────────────────────────────────────────────────────────────────
-const NAME_C = "syncprobe-C";
+const NAME_C = `syncprobe-C-${RUN_SUFFIX}`;
 await step("05-manual-sync-button", async () => {
   await pageB.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await seedPlayerName(pageB, NAME_C);
@@ -423,78 +472,38 @@ await step("05-manual-sync-button", async () => {
   });
   await pageB.waitForTimeout(800);
 
-  // Verify the server now has xWins=1 for NAME_C (auto-POST landed).
+  // Pure-local: NO server update from the win. Server stays empty.
   const before = await getServerStats(pageB, NAME_C);
-  assert.equal(before.body.stats.xWins, 1);
+  const beforeTotal = before.body.stats?.totalGames ?? 0;
+  assert.equal(beforeTotal, 0, `W1 pure-local: server row must stay empty after named win; got totalGames=${beforeTotal}`);
+
+  // Local must hold the win.
+  const localAfterWin = await pageB.evaluate(() => {
+    const raw = window.localStorage.getItem("ttt.solo.stats.v1");
+    return raw ? JSON.parse(raw) : null;
+  });
+  assert.ok(localAfterWin && localAfterWin.totalGames === 1, `localStorage must hold the win; got ${JSON.stringify(localAfterWin)}`);
 
   // Toggle to the stats view so the panel (and its sync button) mounts.
   await pageB.click('[data-testid="view-toggle"]');
   await pageB.waitForSelector('[data-testid="solo-sync"]');
   await pageB.waitForTimeout(500);
 
-  // (a) After a successful auto-POST, local matches server, so the
-  // sync button must DEGRADE to a pure GET refresh (wave-2 §A5):
-  // no dialog opens, no POST fires.
+  // (a) Click sync — local ahead of server → dialog opens.
   apiCalls.length = 0;
   await pageB.click('[data-testid="solo-sync"]');
-  await pageB.waitForTimeout(300);
-  const dialogAfterPureGet = await pageB.evaluate(
-    'document.querySelector(\'[data-testid="sync-confirm-dialog"]\').hasAttribute("open")'
-  );
-  assert.equal(dialogAfterPureGet, false, "sync button must NOT open the dialog when nothing is pending");
-  const callsAfterPureGet = apiCalls.filter((c) => c.url.includes("/api/solo-stats"));
-  assert.equal(
-    callsAfterPureGet.length,
-    1,
-    `sync button (no-pending) must fire exactly 1 GET; saw ${callsAfterPureGet.length}: ${JSON.stringify(callsAfterPureGet)}`,
-  );
-  assert.equal(callsAfterPureGet[0].method, "GET", "no-pending sync must be a GET, not POST");
+  await pageB.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 3000 });
+  await pageB.waitForTimeout(220);
 
-  // Server row still xWins=1 (no double-count from a refresh).
-  const afterPureGet = await getServerStats(pageB, NAME_C);
-  assert.equal(afterPureGet.body.stats.xWins, 1, `refresh must not double-count: xWins ${before.body.stats.xWins} → ${afterPureGet.body.stats.xWins}`);
-  await shoot(pageB, "05a-sync-no-pending-get-only.png");
-
-  // (b) Simulate "local ahead of server" by writing extra local stats
-  // while keeping the server sentinel at 1. The pendingSyncCount()
-  // diff then becomes 2-1=1 → clicking sync opens the dialog.
-  await pageB.evaluate(() => {
-    window.localStorage.setItem(
-      "ttt.solo.stats.v1",
-      JSON.stringify({
-        totalGames: 2,
-        xWins: 2,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 2,
-      }),
-    );
-  });
-  // Re-render the panel by toggling view → board → back.
-  await pageB.click('[data-testid="view-toggle"]');
-  await pageB.waitForTimeout(150);
-  await pageB.click('[data-testid="view-toggle"]');
-  await pageB.waitForSelector('[data-testid="solo-sync"]');
-  await pageB.waitForTimeout(300);
-
-  apiCalls.length = 0;
-  await pageB.click('[data-testid="solo-sync"]');
-  await pageB.waitForTimeout(300);
-  const dialogAfterPending = await pageB.evaluate(
-    'document.querySelector(\'[data-testid="sync-confirm-dialog"]\').hasAttribute("open")'
+  const dialogOpen = await pageB.evaluate(
+    () => document.querySelector('[data-testid="sync-confirm-dialog"]').hasAttribute("open")
   );
-  assert.equal(dialogAfterPending, true, "sync button must open the dialog when local has unsynced games");
+  assert.equal(dialogOpen, true, "sync button must open the dialog when local is ahead of server");
   const descText = await pageB.textContent('[data-testid="sync-confirm-desc"]');
   assert.ok(descText && descText.includes("将上传本机 1 局"), `dialog desc should expose 「本机 1 局」; got ${descText}`);
-  const callsBeforeConfirm = apiCalls.filter((c) => c.url.includes("/api/solo-stats"));
-  assert.equal(
-    callsBeforeConfirm.length,
-    0,
-    `opening the dialog must not fire network calls; saw ${callsBeforeConfirm.length}: ${JSON.stringify(callsBeforeConfirm)}`,
-  );
-  await shoot(pageB, "05b-sync-dialog-open.png");
+  await shoot(pageB, "05a-sync-dialog-open.png");
 
-  // (c) 保留本地 = zero network writes.
+  // (b) 「保留本地」 = zero network writes, local preserved.
   apiCalls.length = 0;
   await pageB.click('[data-testid="sync-confirm-reject"]');
   await pageB.waitForTimeout(300);
@@ -505,39 +514,30 @@ await step("05-manual-sync-button", async () => {
     `保留本地 must be zero network writes; saw ${callsAfterReject.length}: ${JSON.stringify(callsAfterReject)}`,
   );
   const afterReject = await getServerStats(pageB, NAME_C);
-  assert.equal(
-    afterReject.body.stats.xWins,
-    1,
-    `保留本地 must leave server row unchanged; xWins ${before.body.stats.xWins} → ${afterReject.body.stats.xWins}`,
-  );
-  // Local still has the 2-game row (preserve).
+  const afterRejectTotal = afterReject.body.stats?.totalGames ?? 0;
+  assert.equal(afterRejectTotal, 0, `保留本地 must leave server row unchanged; got totalGames=${afterRejectTotal}`);
+  // Local still has the 1-game row (preserve).
   const localAfterReject = await pageB.evaluate(() => {
     const raw = window.localStorage.getItem("ttt.solo.stats.v1");
     return raw ? JSON.parse(raw) : null;
   });
-  assert.equal(localAfterReject && localAfterReject.totalGames, 2, "保留本地 must preserve local stats");
-  await shoot(pageB, "05c-after-reject.png");
+  assert.equal(localAfterReject && localAfterReject.totalGames, 1, "保留本地 must preserve local stats");
+  await shoot(pageB, "05b-after-reject.png");
 
-  // (d) 合并并清空 = POST /sync + local cleared + server still 1 (no
-  // double-count of the auto-POSTed game; only the +1 simulated local
-  // adds to the server row → xWins goes 1→2 — that's the merge math).
+  // (c) Re-sync → confirm = POST /sync + local cleared + server = 1.
   await pageB.click('[data-testid="solo-sync"]');
-  await pageB.waitForTimeout(300);
+  await pageB.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 3000 });
   apiCalls.length = 0;
   await pageB.click('[data-testid="sync-confirm-confirm"]');
   await pageB.waitForTimeout(800);
   const callsAfterConfirm = apiCalls.filter((c) => c.url.includes("/api/solo-stats"));
-  assert.ok(
-    callsAfterConfirm.length >= 1,
-    `合并并清空 must fire network calls; saw ${callsAfterConfirm.length}`,
-  );
   const postSync = callsAfterConfirm.find((c) => c.method === "POST" && c.url.includes("/sync"));
   assert.ok(postSync, `合并并清空 must fire POST /sync; got ${JSON.stringify(callsAfterConfirm)}`);
 
-  // Merge math: server(1,1,0,0,1) + client(2,2,0,0,2) = (3,3,0,0,3).
+  // Merge math: server(0) + client(1) = (1).
   const afterMerge = await getServerStats(pageB, NAME_C);
-  assert.equal(afterMerge.body.stats.xWins, 3, `merge per-field math: xWins → 3, got ${afterMerge.body.stats.xWins}`);
-  assert.equal(afterMerge.body.stats.totalGames, 3, `merge per-field math: totalGames → 3, got ${afterMerge.body.stats.totalGames}`);
+  assert.equal(afterMerge.body.stats.xWins, 1, `merge per-field math: xWins → 1, got ${afterMerge.body.stats.xWins}`);
+  assert.equal(afterMerge.body.stats.totalGames, 1, `merge per-field math: totalGames → 1, got ${afterMerge.body.stats.totalGames}`);
 
   // Local cleared (防重复).
   const localAfter = await pageB.evaluate(() =>
@@ -552,10 +552,10 @@ await step("05-manual-sync-button", async () => {
   // Merge-note disclosure (rux 决议 8) appears on the panel.
   const noteText = await pageB.textContent('[data-testid="solo-stats-merge-note"]').catch(() => null);
   assert.ok(noteText && noteText.includes("已合并"), `merge note should disclose the breakdown; got ${noteText}`);
-  await shoot(pageB, "05d-after-merge.png");
+  await shoot(pageB, "05c-after-merge.png");
 });
 
-// ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────// ─────────────────────────────────────────────────────────────────────
 // STEP 6: Cleanup — close both contexts.
 // ─────────────────────────────────────────────────────────────────────
 await step("99-cleanup", async () => {

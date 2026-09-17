@@ -42,6 +42,15 @@ export interface SyncConfirmDialogProps {
    * inside the dialog so the user can retry or bail.
    */
   onConfirm: (name: string) => Promise<void> | void;
+  /**
+   * Fired AFTER `onConfirm` resolves successfully. Used by the home
+   * page's StartGameButton (W1) to continue navigation to /play
+   * after a successful merge. Not passed by SoloStatsPanel (its
+   * dialog close already happens inside `onConfirm` via
+   * `setDialogOpen(false)`); failure inside `onConfirm` keeps the
+   * dialog open so this hook does NOT fire on failure.
+   */
+  onAfterConfirm?: () => void;
   /** Fired when the user picks "保留本地" or hits ESC. Zero network writes. */
   onReject: () => void;
 }
@@ -51,6 +60,7 @@ export function SyncConfirmDialog({
   pendingGamesCount,
   initialName,
   onConfirm,
+  onAfterConfirm,
   onReject,
 }: SyncConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -110,6 +120,11 @@ export function SyncConfirmDialog({
     setError(null);
     try {
       await onConfirm(trimmed);
+      // Success path: if the caller provided a follow-up hook (e.g.
+      // StartGameButton navigating to /play after a successful merge),
+      // fire it now. Failure path keeps the dialog open via setError()
+      // so this hook MUST NOT run on throw.
+      onAfterConfirm?.();
     } catch (e) {
       // Surface the failure inside the dialog so the user can retry
       // or bail — never silently close (would hide a stuck sync).

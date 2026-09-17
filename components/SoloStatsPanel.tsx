@@ -32,18 +32,17 @@ import { Button } from '@/components/ui/Button';
  *      change to won/drawn, GET the canonical row from
  *      `/api/solo-stats?name=…` and adopt it as the panel state. Server
  *      is authoritative; the local row stays as a fallback only.
- *    - The auto-POST on game end lives in the store (lib/store.ts solo
- *      branch) so it fires regardless of which view the user is on;
- *      this panel just observes the result via `soloSync.pending` and
- *      shows the manual 「同步」 button (testid `solo-sync`).
- *    - When the local row holds anything (e.g. a game settled while
- *      the auto-POST was offline, or the user just saved a name with
- *      pre-existing local wins), clicking 同步 opens the
- *      SyncConfirmDialog (testid `sync-confirm-dialog`) so the user
- *      explicitly opts into the merge write. Rejection is a guaranteed
- *      zero-write path (wave-1 §A5 contract). After a successful merge
- *      the panel shows the “线上 a + 本机 b = 共 c” breakdown for
- *      a few seconds before falling back to the normal heading.
+ *    - **W1 pure-local**: the store no longer auto-POSTs solo outcomes
+ *      (主公谕: 「单机版本，不需要发送任何请求，全部存在本地」). All
+ *      solo games — named or unnamed — accumulate locally and persist
+ *      via lib/solo-stats.ts; the manual 「同步」 button is the sole
+ *      network-write trigger. It computes `diff = local.totalGames -
+ *      syncedServerTotal` and either (a) opens the SyncConfirmDialog
+ *      for an explicit merge, or (b) degrades to a pure GET refresh
+ *      when nothing is pending (wave-2 §A5 contract). Rejection of the
+ *      dialog is a guaranteed zero-write path. After a successful merge
+ *      the panel shows the "线上 a + 本机 b = 共 c" breakdown for a few
+ *      seconds before falling back to the normal heading.
  *
  * The two branches never mix: unnamed → localStorage only; named →
  * network first, localStorage only as a fallback.
@@ -51,10 +50,14 @@ import { Button } from '@/components/ui/Button';
 export function SoloStatsPanel() {
   const phase = useGameStore((s) => s.phase);
   const playerName = useGameStore((s) => s.playerName);
+  // W1 pure-local: pendingOutcome is permanently null because the
+  // store no longer auto-POSTs. We still read soloSync.pending so the
+  // subscription shape matches the store contract; it just never
+  // observes a non-null value in normal flow. inflight/error likewise
+  // stay false / null respectively.
   const pendingOutcome = useGameStore((s) => s.soloSync.pending);
   const inflight = useGameStore((s) => s.soloSync.inflight);
   const error = useGameStore((s) => s.soloSync.error);
-  const retrySync = useGameStore((s) => s.retrySoloSync);
   const [stats, setStats] = useState<GameStats>(emptyStats);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   // Pending local copy captured at the moment the dialog opens, so the
@@ -97,12 +100,12 @@ export function SoloStatsPanel() {
    */
   const openSyncDialog = useCallback(async () => {
     if (!playerName) return;
-    if (pendingOutcome) {
-      await retrySync();
-    }
+    // W1 pure-local: no auto-POST to retry; pendingOutcome is always
+    // null. We still take the localStorage snapshot at the moment the
+    // dialog opens so the 「本机 N 局」 copy stays stable.
     setPendingLocalSnapshot(loadSoloStats());
     setDialogOpen(true);
-  }, [playerName, pendingOutcome, retrySync]);
+  }, [playerName]);
 
   /**
    * Pure GET refresh — the wave-2 §A5 degraded path. When nothing
@@ -128,6 +131,10 @@ export function SoloStatsPanel() {
    */
   const handleSync = useCallback(() => {
     const diff = pendingSyncCount();
+    // W1 pure-local: pendingOutcome is always null (no auto-POST to
+    // fail), so the only branch that opens the dialog is when local is
+    // ahead of server (diff > 0). The hasFailedOutcome guard stays for
+    // defense-in-depth if a future change re-introduces pending.
     const hasFailedOutcome = pendingOutcome !== null;
     if (diff === 0 && !hasFailedOutcome) {
       void refreshOnly();
@@ -263,13 +270,10 @@ export function SoloStatsPanel() {
 
   const showSyncButton = playerName !== null;
   const showError = error !== null && playerName !== null;
-  const syncButtonLabel = inflight
-    ? '同步中…'
-    : pendingOutcome
-      ? '同步'
-      : dialogOpen
-        ? '同步'
-        : '同步';
+  // W1 pure-local: inflight stays false (no auto-POST in flight).
+  // The label collapses to a single 「同步」 so the button text doesn't
+  // chase an obsolete tri-state.
+  const syncButtonLabel = inflight ? '同步中…' : '同步';
   const localSnapshotForDialog = pendingLocalSnapshot;
 
   return (

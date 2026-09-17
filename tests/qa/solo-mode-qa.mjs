@@ -116,9 +116,10 @@ try {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-game"]');
     await page.waitForSelector('[data-testid="start-solo"]');
-    // The testid sits on the Button inside the wrapping Link; the anchor
-    // must carry href=/solo.
-    const soloHref = await page.getAttribute('a:has([data-testid="start-solo"])', "href");
+    // The testid sits on the <a> (Link) itself; the anchor must
+    // carry href=/solo. (Previously sat on a child Button before
+    // W1 added the intercept-handler refactor — selector updated.)
+    const soloHref = await page.getAttribute('[data-testid="start-solo"]', "href");
     assert.equal(soloHref, "/solo", `expected start-solo link href=/solo, got ${soloHref}`);
     await Promise.all([
       page.waitForURL("**/solo", { timeout: 6000 }),

@@ -20,6 +20,7 @@ export default defineConfig({
       '.vitest-tmp',
       'reports',
       'coverage',
+      '.delta/**',
     ],
     coverage: {
       provider: 'v8',

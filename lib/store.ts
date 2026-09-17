@@ -18,7 +18,6 @@ import {
   clearSoloStats,
   loadSoloStats,
   persistSoloStats,
-  persistSyncedServerTotal,
 } from './solo-stats';
 import {
   clearPlayerName as clearPlayerNameLocal,
@@ -58,22 +57,20 @@ export interface GameState {
   /**
    * Player name (mirror of `localStorage['ttt.player.name.v1']`).
    * Hydrated on mount by `setPlayerName` (the source of truth) and
-   * updated by PlayerNameForm on save / clear. Solo games with a
-   * non-null playerName auto-POST outcomes to /api/solo-stats; with
-   * null, the original wave-1 "zero network writes" contract holds.
+   * updated by PlayerNameForm on save / clear. W1 pure-local: setting
+   * a name no longer triggers auto-POST — solo outcomes are 100%
+   * local; cross-device sync is the user's opt-in via the
+   * SoloStatsPanel 「同步」 button.
    */
   playerName: string | null;
   /**
-   * Solo network-sync state for the most recent solo game:
-   * - `pending`: the outcome of the last solo game that has not yet
-   *   been confirmed by a successful POST. Lets the panel surface a
-   *   manual 「同步」button as a retry affordance without re-POSTing
-   *   successful outcomes.
-   * - `inflight`: true while the store is mid-POST; the panel's sync
-   *   button uses this for its loading/disabled state.
-   * - `error`: human-readable reason when the last POST attempt failed
-   *   ('aborted' | 'network-error' | 'http-error'); cleared on next
-   *   successful POST or on name change.
+   * Solo sync state — W1 pure-local: solo never auto-POSTs, so
+   * pending/inflight/error are permanently null. The shape is kept
+   * for compatibility with setPlayerName's reset (which still writes
+   * { pending: null, inflight: false, error: null }) and any panel
+   * that may still subscribe to it. The cross-device persistence
+   * story lives entirely in SoloStatsPanel + lib/solo-stats +
+   * lib/solo-net — see ulw-solo-pure-local-closeout.md §1 悬案一.
    */
   soloSync: {
     pending: 'X' | 'O' | 'draw' | null;
@@ -130,13 +127,6 @@ export interface GameActions {
    * by SoloStatsPanel on mount / name-change event.
    */
   setPlayerName: (name: string | null) => void;
-  /**
-   * Retry the most recent failed solo POST. No-op when no outcome is
-   * pending or no name is set. Sets soloSync.inflight around the call;
-   * clears `pending` on success and updates `error` on failure. The
-   * panel's 「同步」button calls this with no arguments.
-   */
-  retrySoloSync: () => Promise<void>;
 }
 
 export type GameStore = GameState & GameActions;
@@ -240,33 +230,19 @@ async function apiDeleteStats(): Promise<StoreFetchResult<GameStats>> {
 }
 
 /**
- * Server-authoritative solo outcome accumulator: the client only names
- * who won + which player; the POST /api/solo-stats handler reads the
- * per-name row, applies recordOutcome, and returns the new full row as
- * { stats: GameStats }. Mirrors apiRecordOutcome's { ok, value } |
- * { ok, false, reason } contract but adds an http-error reason (the
- * solo route can 422 on a bad name; ranked never 422s on the body
- * shape because the body is just { outcome }). Caller (makeMove's solo
- * branch, retrySoloSync) stamps soloSync.{pending, error} from the
- * result.
+ * Server-authoritative solo outcome accumulator (no longer called from
+ * the store — kept as a documentation breadcrumb for the W1 pure-local
+ * change). The /api/solo-stats route still exists (D2 preserved in
+ * .omo/plans/ulw-solo-pure-local-closeout.md §3) and is reachable
+ * through lib/solo-net.ts:postSoloOutcome, which the SoloStatsPanel
+ * 「合并并清空」 path uses during the manual sync.
+ *
+ * The store used to call this from makeMove's solo branch and from
+ * retrySoloSync (both removed in W1). The sentinel
+ * persistSyncedServerTotal is now written by the panel's
+ * SoloStatsPanel.confirmSync on a successful POST /sync, not from
+ * inside the store.
  */
-async function apiPostSoloOutcome(
-  name: string,
-  outcome: 'X' | 'O' | 'draw',
-): Promise<StoreFetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout('/api/solo-stats', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, outcome }),
-    });
-    if (!r.ok) return { ok: false, reason: 'http-error' };
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
-  }
-}
 
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
@@ -342,32 +318,16 @@ export const useGameStore = create<GameStore>((set) => ({
       // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
       if (s.mode === 'solo') {
-        // Solo: local accumulation from the internal cache (seeded by
-        // startGame('solo')) + localStorage persistence. The named-mode
-        // auto-POST happens here (not in the panel) so the sync fires
-        // regardless of whether the user is on the board view or the
-        // stats view — the panel is unmounted on the board view in
-        // wave 1 / 2, and we still need the network write to land.
+        // Solo (W1 pure-local): local accumulation from the internal
+        // cache (seeded by startGame('solo')) + localStorage persistence.
+        // NO network write — 主公谕: 「单机版本，不需要发送任何请求，
+        // 全部存在本地」 Cross-device persistence is the user's opt-in
+        // via SoloStatsPanel 「同步」 button (POST /sync → server merges
+        // per-field → local cleared). The sync sentinel
+        // (persistSyncedServerTotal) is also written by that path, not
+        // here, so it tracks only the server-confirmed totalGames.
         internalStats = recordOutcome(internalStats, win.player);
         persistSoloStats(internalStats);
-        if (s.playerName) {
-          set({ soloSync: { pending: win.player, inflight: true, error: null } });
-          const r = await apiPostSoloOutcome(s.playerName, win.player);
-          if (r.ok) {
-            // Server’s authoritative answer; mirror its totalGames into
-            // the sync-sentinel so a subsequent manual sync button
-            // click can compute the real unsynced-diff instead of
-            // double-counting the same games the auto-POST just landed.
-            persistSyncedServerTotal(r.value.stats.totalGames);
-            internalStats = r.value.stats;
-            set({
-              soloSync: { pending: null, inflight: false, error: null },
-              lastWriteAt: Date.now(),
-            });
-          } else {
-            set({ soloSync: { pending: win.player, inflight: false, error: r.reason } });
-          }
-        }
         return;
       }
       // Server-authoritative write: the client only names the winner; the
@@ -391,24 +351,11 @@ export const useGameStore = create<GameStore>((set) => ({
       });
       playSound('draw');
       if (s.mode === 'solo') {
-        // Same solo contract as the win branch: local accumulation +
-        // localStorage persistence; named-mode auto-POST fires here.
+        // Same W1 pure-local contract as the win branch (no network
+        // write, no lastWriteAt stamp). See the comment in the win
+        // branch for the cross-device persistence story.
         internalStats = recordOutcome(internalStats, 'draw');
         persistSoloStats(internalStats);
-        if (s.playerName) {
-          set({ soloSync: { pending: 'draw', inflight: true, error: null } });
-          const r = await apiPostSoloOutcome(s.playerName, 'draw');
-          if (r.ok) {
-            persistSyncedServerTotal(r.value.stats.totalGames);
-            internalStats = r.value.stats;
-            set({
-              soloSync: { pending: null, inflight: false, error: null },
-              lastWriteAt: Date.now(),
-            });
-          } else {
-            set({ soloSync: { pending: 'draw', inflight: false, error: r.reason } });
-          }
-        }
         return;
       }
       // Same server-authoritative contract as the win branch above: the
@@ -483,22 +430,5 @@ export const useGameStore = create<GameStore>((set) => ({
       // new name would 422. The new name's pending state starts clean.
       soloSync: { pending: null, inflight: false, error: null },
     });
-  },
-
-  retrySoloSync: async (): Promise<void> => {
-    const s = useGameStore.getState();
-    if (!s.playerName || !s.soloSync.pending) return;
-    set({ soloSync: { ...s.soloSync, inflight: true, error: null } });
-    const r = await apiPostSoloOutcome(s.playerName, s.soloSync.pending);
-    if (r.ok) {
-      persistSyncedServerTotal(r.value.stats.totalGames);
-      internalStats = r.value.stats;
-      set({
-        soloSync: { pending: null, inflight: false, error: null },
-        lastWriteAt: Date.now(),
-      });
-    } else {
-      set({ soloSync: { pending: s.soloSync.pending, inflight: false, error: r.reason } });
-    }
   },
 }));
