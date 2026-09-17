@@ -35,7 +35,25 @@
 /* Page container shared by all three routes (DESIGN.md §3).
    Single source so layout changes never need three-file edits. */
 .page-shell {
-  @apply mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
+  @apply mx-auto w-full max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
+}
+
+/* W3 mobile-only tightening (plan: ulw-solo-pure-local-closeout.md §2 W3,
+   R3 evidence §3.1). Desktop commitment (DESIGN.md §3) is preserved —
+   the @media block re-writes only py/gap below 40rem so 1280×900 / 1440
+   keep their existing rhythm. Why mobile-only and not a single tightening:
+   the desktop breath carries the "premium linear/vercel" feel (§5 why-not
+   in DESIGN.md); collapsing it on the wide canvas would look dense, not
+   compact (留白感知, R2 §5 horror vacui inverse — fear of empty space is
+   asymmetric; dense sub-platforms want compact empty pages, wide platforms
+   want generous empty pages). 80px recovered (32+32 py + 8 gap × 2 → 24).
+*/
+@media (width < 40rem) {
+  .page-shell {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    gap: 1.5rem;
+  }
 }
 
 /* StatusBar (Bug C width jitter fix, ulw-solo-sync-rebuild W-A) — stacks all
@@ -110,7 +128,16 @@ html, body {
   color: var(--color-text-primary);
   font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   min-height: 100%;
-  overflow-x: hidden;
+  /* W3: overflow-x: clip (NOT hidden) — clip prevents horizontal content
+     overflow without establishing a scroll container on the y axis.
+     `overflow-x: hidden` would force body to become the scroll container
+     for sticky descendants (per CSS spec, hidden on one axis implies
+     auto on the other, creating a scroll context), which broke the
+     GameShell header sticky behavior. clip keeps the same clipping
+     visual while letting sticky use the html viewport as its containing
+     block. caniuse: Chrome 90+ / FF 81+ / Safari 16+ (broad coverage
+     since 2022). */
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

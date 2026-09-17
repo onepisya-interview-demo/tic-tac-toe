@@ -52,10 +52,16 @@ type Props = {
  * callback must cross the React boundary; the wrapper markup itself is
  * tiny so the bundle cost is negligible.
  *
- * Header layout (Bug C width jitter fix, ulw-solo-sync-rebuild W-A):
+ * Header layout (Bug C width jitter fix, ulw-solo-sync-rebuild W-A; W3
+ * sticky added by ulw-solo-pure-local-closeout):
  *   The header is a 3-column grid `grid-cols-[1fr_auto_1fr]` instead of
  *   the previous `flex justify-between`. Each column has a fixed slot:
  *     [h1 (left) | status slot (center) | SoundToggle (right)].
+ *   The header is also `sticky top-0 z-30 bg-base border-b border-border-subtle
+ *   min-h-[44px]` — see DESIGN.md §5 sticky row + §5 why-not sticky-vs-fixed
+ *   / bg-base-vs-blur / static-vs-scroll-driven for the full rationale.
+ *   Sticky only applies to GameShell users (/play, /solo); / and /result
+ *   render their own <header> and stay non-sticky by design.
  *   The status slot's intrinsic width is locked by the StatusBar's
  *   internal grid-stack (see components/ui/StatusBar.tsx) so phase
  *   transitions (轮到 X → X 获胜 → 平局 → 准备开始) never resize the
@@ -104,7 +110,7 @@ export function GameShell({
 
   return (
     <main className="page-shell page-fade-in">
-      <header className="game-header grid items-center gap-3">
+      <header className="game-header grid items-center gap-3 sticky top-0 z-30 bg-base border-b border-border-subtle min-h-[44px]">
         <h1 className="text-h2 font-display font-semibold justify-self-start shrink-0">
           {title}
         </h1>

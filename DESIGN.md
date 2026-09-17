@@ -52,14 +52,14 @@
 ## 3. Spacing & Layout
 
 - **Grid**: 8px base
-- **Page container**: `max-w-[640px] mx-auto px-6 py-12`
+- **Page container**: `max-w-[640px] mx-auto w-full px-6 py-12` (desktop) / `py-4 gap-6` (mobile < 40rem, W3 tightening)
 - **Card padding**: `p-6` (24px)
 - **Card gap**: `gap-4` (16px)
 - **Cell size**: `w-24 h-24` (96 × 96)
 - **Cell size mobile**: `w-20 h-20` (80 × 80), keeping the board inside the mobile card
 - **Cell gap**: `gap-2` (8px)
 - **Button padding**: `px-4 py-2` (16 × 8)
-- **Section gap**: `gap-8` (32px)
+- **Section gap**: `gap-8` (32px desktop, `gap-6` 24px mobile < 40rem via `.page-shell @media` — W3)
 
 ## 4. Components (Primitives)
 
@@ -105,6 +105,7 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | Result confetti | `opacity`, `transform: translate3d()` | 1.1s once | ease-in |
 | Page transition | `opacity` | 150ms | ease-out |
 | View Transitions (route) | opacity crossfade 双向 | 150ms | ease-out |
+| GameShell header sticky (`sticky top-0`) | position 状态 (非动画) | — | — |
 | In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
 | /solo Card morph | `view-transition-name: solo-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
 | view-toggle button width | grid-stack 双图层（StatusBar 4 态 `grid-area: 1/1` 同格叠放，visibility 切换可见态）+ button `min-width: max-content` 锁宽 | — (静态) | — |
@@ -131,6 +132,13 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
   `aspect-ratio` 要求父容器有明确宽度才能算出高度，本场景 Card 是 `max-w-[640px]` + `p-6` 但宽度自适应，aspect-ratio 反推高度会随 viewport 抖动；JS 测量需 ResizeObserver + useState，引入额外水合触发点（AGENTS 反模式），与 status text 一样硬码 token 反而最简单稳定。
 - **A-T4 按钮条件渲染 为什么不选 CSS `hidden` + `aria-disabled`**
   主公验收 V3 要求「stats 视图 DOM 无 data-testid="restart"」，CSS hidden 只是视觉消失，DOM 节点仍存在，违反契约；React 条件渲染从根上保证 stats 视图 DOM 不出现 restart 节点。
+
+- **W3 sticky vs fixed（GameShell header）**
+  sticky 在文档底部时随文档退出，不与底部 actions 重叠；本仓 `/result` 文档高 ≤ 视口，fixed 会与底部 actions 重叠，故选 sticky。sticky 不脱离文档流，浏览器无需 JS 测量位置（与 AGENTS 反模式「不引入新水合触发点」对齐），纯 CSS `position: sticky; top: 0` 即生效。
+- **W3 实色 bg-base vs backdrop-blur（sticky header 背板）**
+  R3 调研 sanyam.sh/lab 21 文件 grep backdrop 0 命中——克制站点不做 blur。`backdrop-blur-md` (12px) 在 `bg-base #0A0A0A` 暗色下几乎不可见（V3 visual-qa 24 张截图无 blur 命中痕迹），徒增 ~30% 合成层成本；选 `bg-base` 实色 + `border-b border-border-subtle` (1px chrome 分隔) 维持与既有 token 一致。reduced-motion 用户感知不到任何差异（sticky 是 layout 态非动画态）。
+- **W3 静态 token 收紧 vs scroll-driven 动画（mobile 一屏）**
+  R3 §3.1 一行 `padding: 1rem 0; gap: 1.5rem`（mobile-only `@media (width < 40rem)`）即可省 80px，远超 /solo 19px 溢出需求；引入 scroll-driven animation（`animation-timeline: scroll()`）或 JS IntersectionObserver 触发布局变化会破 DESIGN.md §5「GPU-only（transform / opacity / background-color）」+ AGENTS 反模式「不引入新水合触发点」双约束。scroll-driven caniuse 73%（Safari 18.4+），老 Safari 用户零降级，不达「零运行时成本」目标，故选静态 token 收紧。
 
 
 ## 6. Accessibility
