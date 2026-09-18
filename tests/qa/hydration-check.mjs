@@ -47,7 +47,7 @@ const mutedFlag = await page.evaluate(() => window.localStorage.getItem('ttt.sou
 assert.equal(mutedFlag, '0', `expected '0' after unmute, got ${mutedFlag}`);
 
 await page.click('[data-testid="start-online"]');
-await page.waitForURL('**/play');
+await page.waitForURL('**/online');
 await page.waitForSelector('[data-testid="board"]');
 
 const firstStatus = await page.locator('[data-testid="status-text"]').textContent();

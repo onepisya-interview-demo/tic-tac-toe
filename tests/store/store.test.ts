@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // without timing-based abort paths.
 import { useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board, type GameStats } from '@/lib/game';
-import { SOLO_STATS_KEY, loadSoloStats } from '@/lib/solo-stats';
+import { OFFLINE_STATS_KEY, loadOfflineStats } from '@/lib/offline-stats';
 import { playSound } from '@/lib/sound';
 
 vi.mock('@/lib/sound', () => ({
@@ -82,7 +82,7 @@ function seedInternalStats(stats: GameStats): void {
   // reseeds from localStorage). Even simpler for tests: directly
   // invoke the startGame('offline') reseed after setting localStorage.
   // The internalStats cache becomes loadable from localStorage.
-  window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(stats));
+  window.localStorage.setItem(OFFLINE_STATS_KEY, JSON.stringify(stats));
   useGameStore.getState().startGame('offline');
   useGameStore.setState({ mode: 'online' });
 }
@@ -359,8 +359,8 @@ describe('lib/store (zustand game store)', () => {
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
     expect(calls).toHaveLength(0);
-    // No localStorage write either — 无名守卫拦截了 persistSoloStats.
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    // No localStorage write either — 无名守卫拦截了 persistOfflineStats.
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
     restore();
   });
 
@@ -381,7 +381,7 @@ describe('lib/store (zustand game store)', () => {
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
     expect(calls).toHaveLength(0);
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
     restore();
   });
 });
@@ -390,9 +390,9 @@ describe('lib/store (zustand game store)', () => {
 // Offline is the mirror image of the online contract: ZERO network writes
 // (W1 ships online as a TODO; offline is the active branch), outcomes
 // accumulate locally via the pure recordOutcome rule, and the row
-// persists to localStorage (lib/solo-stats.ts) so accumulation survives
+// persists to localStorage (lib/offline-stats.ts) so accumulation survives
 // reloads. AC A4: 无名不写 localStorage — `playerName === null` 时 store
-// 直接跳过 persistSoloStats, 守卫拦截前步。
+// 直接跳过 persistOfflineStats, 守卫拦截前步。
 
 describe('lib/store offline mode (local accumulation + localStorage)', () => {
   afterEach(() => {
@@ -431,7 +431,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
 
   it('startGame("offline") seeds the internal cache from the localStorage baseline (reload semantics)', () => {
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 }),
     );
     useGameStore.getState().startGame('offline');
@@ -455,7 +455,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     expect(s.winner).toBe('X');
     const expected = { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 };
     expect(s.__getInternalForTests()).toEqual(expected);
-    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(expected);
+    expect(JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!)).toEqual(expected);
     restore();
   });
 
@@ -471,7 +471,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     expect(calls).toHaveLength(0);
     const expected = { totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 };
     expect(useGameStore.getState().__getInternalForTests()).toEqual(expected);
-    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(expected);
+    expect(JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!)).toEqual(expected);
     restore();
   });
 
@@ -503,29 +503,29 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     restore();
   });
 
-  it('loadSoloStats degrades to emptyStats on invalid JSON, wrong shape, or missing key', () => {
-    window.localStorage.setItem(SOLO_STATS_KEY, 'not json');
-    expect(loadSoloStats()).toEqual(emptyStats());
+  it('loadOfflineStats degrades to emptyStats on invalid JSON, wrong shape, or missing key', () => {
+    window.localStorage.setItem(OFFLINE_STATS_KEY, 'not json');
+    expect(loadOfflineStats()).toEqual(emptyStats());
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 'x', xWins: 0, oWins: 0, draws: 0, currentStreak: 0 }),
     );
-    expect(loadSoloStats()).toEqual(emptyStats());
-    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify({ totalGames: 1, xWins: 1 }));
-    expect(loadSoloStats()).toEqual(emptyStats());
-    window.localStorage.removeItem(SOLO_STATS_KEY);
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
+    window.localStorage.setItem(OFFLINE_STATS_KEY, JSON.stringify({ totalGames: 1, xWins: 1 }));
+    expect(loadOfflineStats()).toEqual(emptyStats());
+    window.localStorage.removeItem(OFFLINE_STATS_KEY);
+    expect(loadOfflineStats()).toEqual(emptyStats());
   });
 
   it('resetOfflineStats clears the key + internal cache', () => {
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }),
     );
     useGameStore.getState().startGame('offline');
     expect(useGameStore.getState().__getInternalForTests().totalGames).toBe(3);
     useGameStore.getState().resetOfflineStats();
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
   });
 
@@ -541,50 +541,50 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     });
     await useGameStore.getState().makeMove(8);
     expect(calls).toHaveLength(0);
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).not.toBeNull();
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).not.toBeNull();
     restore();
   });
 
-  it('loadSoloStats rejects extra fields (strict whitelist, including __proto__/constructor)', () => {
+  it('loadOfflineStats rejects extra fields (strict whitelist, including __proto__/constructor)', () => {
     // Extra string field: current isGameStats accepts this — must reject.
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1, extra: 'foo' }),
     );
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
 
     // Extra numeric field
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1, bonus: 7 }),
     );
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
 
     // __proto__ as own data property (JSON.parse does NOT trigger the
     // prototype setter; it is just an extra key). The strict whitelist
     // must reject it as a contract gap regardless of attack surface.
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1,"__proto__":{"polluted":true}}',
     );
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
 
     // constructor as own data property
     window.localStorage.setItem(
-      SOLO_STATS_KEY,
+      OFFLINE_STATS_KEY,
       '{"totalGames":1,"xWins":1,"oWins":0,"draws":0,"currentStreak":1,"constructor":{"polluted":true}}',
     );
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
 
     // Missing key (already covered by the base test, but listed for clarity).
-    window.localStorage.removeItem(SOLO_STATS_KEY);
-    expect(loadSoloStats()).toEqual(emptyStats());
+    window.localStorage.removeItem(OFFLINE_STATS_KEY);
+    expect(loadOfflineStats()).toEqual(emptyStats());
   });
 
   it('resetOfflineStats is a no-op when mode is not "offline" (defensive guard)', () => {
     // Seed localStorage with non-empty data. mode is 'online' after resetStore.
     const baseline = { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 };
-    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
+    window.localStorage.setItem(OFFLINE_STATS_KEY, JSON.stringify(baseline));
     // Reseed internal cache via offline startGame so it has the baseline.
     useGameStore.getState().startGame('offline');
     expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
@@ -592,7 +592,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     // Switch to online; resetOfflineStats must be a no-op.
     useGameStore.setState({ mode: 'online' });
     useGameStore.getState().resetOfflineStats();
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toEqual(JSON.stringify(baseline));
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toEqual(JSON.stringify(baseline));
     // Internal cache unchanged.
     expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
   });
@@ -600,7 +600,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
   it('cross-mode (a): offline fall-through then startGame("online") reseeds internalStats from localStorage baseline', () => {
     // Seed localStorage with a non-zero baseline.
     const baseline = { totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 };
-    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
+    window.localStorage.setItem(OFFLINE_STATS_KEY, JSON.stringify(baseline));
     useGameStore.getState().startGame('offline');
     expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
 
@@ -627,7 +627,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('Quota exceeded', 'QuotaExceededError');
     });
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
 
     useGameStore.getState().setPlayerName('alice');
     useGameStore.getState().startGame('offline');
@@ -650,7 +650,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
       currentStreak: 1,
     });
     expect(setItemSpy).toHaveBeenCalled();
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
 
     // Tear down the spy first so the reload read is not mocked-throw.
     setItemSpy.mockRestore();
@@ -658,7 +658,7 @@ describe('lib/store offline mode (local accumulation + localStorage)', () => {
     // Simulate reload: since setItem never succeeded, the persisted
     // baseline is empty — the next startGame('offline') reseeds from
     // emptyStats, not the in-memory post-throw value.
-    expect(loadSoloStats()).toEqual(emptyStats());
+    expect(loadOfflineStats()).toEqual(emptyStats());
   });
 });
 
@@ -682,7 +682,7 @@ describe('lib/store pure-local (W1: online branch is a TODO, no network for offl
     await useGameStore.getState().makeMove(2);
     expect(useGameStore.getState().phase).toBe('won');
     expect(calls, 'no fetch should be made for offline win').toHaveLength(0);
-    const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
+    const stats = JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!);
     expect(stats.totalGames).toBe(1);
     restore();
   });
@@ -699,7 +699,7 @@ describe('lib/store pure-local (W1: online branch is a TODO, no network for offl
     }
     expect(useGameStore.getState().phase).toBe('drawn');
     expect(calls, 'no fetch should be made for offline draw').toHaveLength(0);
-    const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
+    const stats = JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!);
     expect(stats.draws).toBe(1);
     expect(stats.totalGames).toBe(1);
     restore();
@@ -725,7 +725,7 @@ describe('lib/store pure-local (W1: online branch is a TODO, no network for offl
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
     expect(calls, 'offline: no fetches across two named games').toHaveLength(0);
-    const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
+    const stats = JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!);
     expect(stats.totalGames).toBe(2);
     expect(stats.xWins + stats.oWins).toBe(2);
     expect(stats.draws).toBe(0);

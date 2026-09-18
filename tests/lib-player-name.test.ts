@@ -8,7 +8,7 @@ import {
 } from '@/lib/player-name';
 
 // isPlayerName is the validator both client and server depend on; the
-// server-side whitelist lives at app/api/solo-stats/route.ts. Both must
+// server-side whitelist lives at app/api/offline-stats/route.ts. Both must
 // reject the same inputs (or a "save" the client accepts becomes a 422
 // on POST), and accept the same inputs. The cases below mirror the
 // route's normalizeName() shape so a future drift in either direction

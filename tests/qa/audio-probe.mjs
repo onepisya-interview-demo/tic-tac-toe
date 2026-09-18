@@ -18,10 +18,10 @@ await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0');
 
-// 2. Navigate to /play (this reloads the page, so install the probe
+// 2. Navigate to /online (this reloads the page, so install the probe
 //    AFTER navigation — the mute flag is in localStorage so it persists).
 await page.click('[data-testid="start-online"]');
-await page.waitForURL('**/play');
+await page.waitForURL('**/online');
 await page.waitForSelector('[data-testid="board"]');
 await page.waitForTimeout(200);
 

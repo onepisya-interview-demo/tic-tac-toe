@@ -2,17 +2,17 @@
 //
 // Why disabled: /solo no longer renders the 「同步」 button or
 // SyncConfirmDialog (W2 纯净化 wave). All probe steps depend on
-// data-testid="solo-sync" and "sync-confirm-dialog", which have
-// been removed from the /solo surface. POST /api/solo-stats/sync
+// data-testid="offline-sync" and "sync-confirm-dialog", which have
+// been removed from the /offline surface. POST /api/offline-stats/sync
 // is preserved at the endpoint layer (StartGameButton is still the
 // sole caller pending W3) but the UI surface to drive a merge
-// from /solo is gone.
+// from /offline is gone.
 //
 // Coverage migration plan (W3 final): StartGameButton's intercept
 // is gone (Decision D1 retired it). The home-return SyncConfirmDialog
 // is mounted by HomeDialogMount on the home page itself, triggered
 // when pendingSyncCount() > declinedSentinel (see SessionStorage
-// ttt.solo.sync-declined.v1). The "merge + clear" sequence is
+// ttt.offline.sync-declined.v1). The "merge + clear" sequence is
 // exercised by home-return-qa.mjs; this probe is retired alongside
 // the StartGameButton intercept path.
 //
@@ -27,7 +27,7 @@ await ensureDir(EVIDENCE);
 await writeQaLog(EVIDENCE, {
   test: "merge-sync-qa",
   status: "DISABLED",
-  reason: "W2 retired /solo sync affordances — see header comment",
+  reason: "W2 retired /offline sync affordances — see header comment",
   findings: [],
 });
 console.log("merge-sync-qa DISABLED (W2 纯净化 + W3 home-return-qa 承接 — 头部注释见上)");

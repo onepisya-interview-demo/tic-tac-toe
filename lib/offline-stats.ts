@@ -1,4 +1,4 @@
-// Solo-mode stats persistence on top of browser localStorage.
+// Offline-mode stats persistence on top of browser localStorage.
 // Modeled after lib/sound.ts (browser-persisted preference in its own
 // module): kept out of store.ts so the store engine stays about game
 // lifecycle + API sync, and so consumers that only need the persisted
@@ -9,8 +9,8 @@
 
 import { emptyStats, type GameStats } from './game';
 
-/** localStorage key for solo-mode stats. Versioned for future shape changes. */
-export const SOLO_STATS_KEY = 'ttt.solo.stats.v1';
+/** localStorage key for offline-mode stats. Versioned for future shape changes. */
+export const OFFLINE_STATS_KEY = 'ttt.offline.stats.v1';
 
 function isGameStats(value: unknown): value is GameStats {
   if (typeof value !== 'object' || value === null) return false;
@@ -38,10 +38,10 @@ function isGameStats(value: unknown): value is GameStats {
  * and corruption-safe: missing key, invalid JSON, or a value whose
  * shape doesn't match GameStats all degrade to emptyStats().
  */
-export function loadSoloStats(): GameStats {
+export function loadOfflineStats(): GameStats {
   if (typeof window === 'undefined') return emptyStats();
   try {
-    const raw = window.localStorage.getItem(SOLO_STATS_KEY);
+    const raw = window.localStorage.getItem(OFFLINE_STATS_KEY);
     if (raw === null) return emptyStats();
     const parsed: unknown = JSON.parse(raw);
     return isGameStats(parsed) ? parsed : emptyStats();
@@ -55,30 +55,30 @@ export function loadSoloStats(): GameStats {
  * swallowed: the store's internal cache stays correct in memory, only
  * cross-reload persistence is lost.
  */
-export function persistSoloStats(stats: GameStats): void {
+export function persistOfflineStats(stats: GameStats): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(stats));
+    window.localStorage.setItem(OFFLINE_STATS_KEY, JSON.stringify(stats));
   } catch {
     // Degrade to in-memory persistence (same contract as sound.ts).
   }
 }
 
-/** Remove the persisted solo row. Failure is swallowed for symmetry. */
-export function clearSoloStats(): void {
+/** Remove the persisted offline row. Failure is swallowed for symmetry. */
+export function clearOfflineStats(): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.removeItem(SOLO_STATS_KEY);
+    window.localStorage.removeItem(OFFLINE_STATS_KEY);
   } catch {
     // Nothing to recover — the key may simply not exist.
   }
 }
 
 /**
- * @deprecated W4 F1 fix: superseded by SOLO_LAST_MERGED_LOCAL_KEY.
+ * @deprecated W4 F1 fix: superseded by OFFLINE_LAST_MERGED_LOCAL_KEY.
  * The old sentinel stored the server’s absolute totalGames, which produced a
  * catch-up window where the dialog text and the actual /sync payload
- * diverged. See SOLO_LAST_MERGED_LOCAL_KEY below; new callers must use it.
+ * diverged. See OFFLINE_LAST_MERGED_LOCAL_KEY below; new callers must use it.
  * Kept for backward-compat reads (older localStorage values are simply
  * ignored by the new pendingSyncCount) and for the test surface that
  * still asserts the old helpers exist.
@@ -89,13 +89,13 @@ export function clearSoloStats(): void {
  * always matches server — manual sync must NOT double-count”
  * contract (ulw-solo-sync-rebuild.md B-T4 step 2 precondition).
  */
-export const SOLO_SYNCED_SERVER_KEY = 'ttt.solo.server.synced.v1';
+export const OFFLINE_SYNCED_SERVER_KEY = 'ttt.offline.server.synced.v1';
 
 /** Read the most-recent server-confirmed totalGames. SSR-safe. */
 export function loadSyncedServerTotal(): number {
   if (typeof window === 'undefined') return 0;
   try {
-    const raw = window.localStorage.getItem(SOLO_SYNCED_SERVER_KEY);
+    const raw = window.localStorage.getItem(OFFLINE_SYNCED_SERVER_KEY);
     if (raw === null) return 0;
     const n = Number(raw);
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -108,7 +108,7 @@ export function loadSyncedServerTotal(): number {
 export function persistSyncedServerTotal(totalGames: number): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(SOLO_SYNCED_SERVER_KEY, String(totalGames));
+    window.localStorage.setItem(OFFLINE_SYNCED_SERVER_KEY, String(totalGames));
   } catch {
     // Degrade to in-memory only.
   }
@@ -117,12 +117,12 @@ export function persistSyncedServerTotal(totalGames: number): void {
 /**
  * Baseline sentinel: the local totalGames value AT the most recent
  * successful merge (W4 F1 fix).  Captured right after
- * `clearSoloStats()` runs — the post-clear local is emptyStats()
+ * `clearOfflineStats()` runs — the post-clear local is emptyStats()
  * with totalGames=0, so the canonical post-merge value is `0`.
  * `pendingSyncCount()` now reads THIS sentinel instead of
- * `SOLO_SYNCED_SERVER_KEY` so the dialog text “本机 N 局” matches the
+ * `OFFLINE_SYNCED_SERVER_KEY` so the dialog text “本机 N 局” matches the
  * data that `postSoloSync` actually sends (the entire current
- * `loadSoloStats()` snapshot, not a server-relative diff).
+ * `loadOfflineStats()` snapshot, not a server-relative diff).
  *
  * Why not keep the old sentinel: after a merge the server’s absolute
  * totalGames was used as the baseline, so any local games played
@@ -135,13 +135,13 @@ export function persistSyncedServerTotal(totalGames: number): void {
  * `per-field server accumulation + local clear` invariant
  * (server never double-counts) is unchanged.
  */
-export const SOLO_LAST_MERGED_LOCAL_KEY = 'ttt.solo.last-merged-local.v1';
+export const OFFLINE_LAST_MERGED_LOCAL_KEY = 'ttt.offline.last-merged-local.v1';
 
 /** Read the most-recent post-merge local totalGames (0 on first load). SSR-safe. */
 export function loadLastMergedLocal(): number {
   if (typeof window === 'undefined') return 0;
   try {
-    const raw = window.localStorage.getItem(SOLO_LAST_MERGED_LOCAL_KEY);
+    const raw = window.localStorage.getItem(OFFLINE_LAST_MERGED_LOCAL_KEY);
     if (raw === null) return 0;
     const n = Number(raw);
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -154,7 +154,7 @@ export function loadLastMergedLocal(): number {
 export function persistLastMergedLocal(totalGames: number): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(SOLO_LAST_MERGED_LOCAL_KEY, String(totalGames));
+    window.localStorage.setItem(OFFLINE_LAST_MERGED_LOCAL_KEY, String(totalGames));
   } catch {
     // Degrade to in-memory only.
   }
@@ -169,7 +169,7 @@ export function persistLastMergedLocal(totalGames: number): void {
 export function clearLastMergedLocal(): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.removeItem(SOLO_LAST_MERGED_LOCAL_KEY);
+    window.localStorage.removeItem(OFFLINE_LAST_MERGED_LOCAL_KEY);
   } catch {
     // Nothing to recover.
   }
@@ -178,7 +178,7 @@ export function clearLastMergedLocal(): void {
 export function clearSyncedServerTotal(): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.removeItem(SOLO_SYNCED_SERVER_KEY);
+    window.localStorage.removeItem(OFFLINE_SYNCED_SERVER_KEY);
   } catch {
     // Nothing to recover.
   }
@@ -200,7 +200,7 @@ export function clearSyncedServerTotal(): void {
  * `pending === local` and the text matches the request.
  */
 export function pendingSyncCount(): number {
-  const local = loadSoloStats();
+  const local = loadOfflineStats();
   const baseline = loadLastMergedLocal();
   return Math.max(0, local.totalGames - baseline);
 }

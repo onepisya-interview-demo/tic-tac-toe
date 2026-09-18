@@ -69,7 +69,7 @@ export function PlayerNameForm() {
   //  1. SSR / first paint: render the label so the layout is stable.
   //  2. After mount: read playerName from the store. If the store is
   //     empty BUT localStorage already has a name (typical of a
-  //     /solo → / soft-navigation round-trip where the store never
+  // /offline → / soft-navigation round-trip where the store never
   //     re-hydrated), mirror it back into the store so OnlineStatsCard
   //     can fire its fetch on the home-return path. This is the
   //     W3 contract that the online card renders as soon as the

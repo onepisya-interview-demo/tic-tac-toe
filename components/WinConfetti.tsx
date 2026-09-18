@@ -5,10 +5,10 @@ import { useGameStore } from '@/lib/store';
 import { burstConfetti } from '@/lib/confetti';
 
 /**
- * Win-state celebration layer for the /solo page. The header status-bar
+ * Win-state celebration layer for the /offline page. The header status-bar
  * already announces the outcome ("X 获胜" / "平局") inline, so the board
  * area stays uncluttered: this component renders nothing except the
- * burst-confetti canvas mount target when the solo game settles on a
+ * burst-confetti canvas mount target when the offline game settles on a
  * win. Drawn games get no extra DOM — the status-bar announcement is
  * enough.
  *
@@ -30,16 +30,16 @@ import { burstConfetti } from '@/lib/confetti';
  * this file's scope.
  *
  * Restart path: when phase returns to 'idle' / 'playing' (via the
- * Restart button on /solo, or after restart() on a draw the user
+ * Restart button on /offline, or after restart() on a draw the user
  * manually dismisses), the ref resets so the next win fires a new
- * burst. The contract matches solo-mode-qa's restart + driveTopRowWin
+ * burst. The contract matches offline-mode-qa's restart + driveTopRowWin
  * sequence.
  *
  * canvas-confetti attaches its own <canvas> to document.body so this
  * stable layer exposes the mounted celebration to QA / DOM tooling via
  * [data-testid="confetti"] without intercepting input.
  */
-export function SoloConfetti() {
+export function WinConfetti() {
   const phase = useGameStore((s) => s.phase);
   const celebratedRef = useRef(false);
 

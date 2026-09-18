@@ -62,7 +62,7 @@ export default async function HomePage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-testid="home-cta-row">
         <StartGameButton
-          href="/solo"
+          href="/offline"
           label="单机练习 · 离线可玩 · 本地记账"
           mode="offline"
           variant="secondary"
@@ -70,7 +70,7 @@ export default async function HomePage() {
           requireName={false}
         />
         <StartGameButton
-          href="/play"
+          href="/online"
           label="在线对战 · 战绩实时云端"
           mode="online"
           variant="primary"

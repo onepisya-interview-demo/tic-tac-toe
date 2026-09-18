@@ -1,27 +1,27 @@
-// solo-mode-qa.mjs — Integration probe for the solo practice mode
+// offline-mode-qa.mjs — Integration probe for the solo practice mode
 // (ulw-solo-mode-split-view-transitions C4). One real Chromium +
 // production build. Proves the solo contract end to end:
 //   1. Home renders the dual CTA (start-online + start-offline).
-//   2. A full solo game (forced X-first top-row win) issues ZERO write
+//   2. A full offline game (forced X-first top-row win) issues ZERO write
 //      requests (POST /api/stats/outcome, PUT/DELETE /api/stats) and
 //      never navigates to /result — the ResultBanner mounts inline.
-//   3. The outcome lands in localStorage 'ttt.solo.stats.v1'
-//      (xWins=1) and survives a reload via SoloStatsPanel.
+//   3. The outcome lands in localStorage 'ttt.offline.stats.v1'
+//      (xWins=1) and survives a reload via OfflineStatsPanel.
 //   4. The local clear button empties the localStorage row instantly
 //      (panel follows) while the ranked (server) ledger is untouched.
 //   5. After the win, the page auto-switches from board to stats view
 //      within ≤2s (Ulw W3 result-paginated; view-toggle aria-pressed
-//      flips to true, [data-testid="solo-stats"] appears). The
+//      flips to true, [data-testid="offline-stats"] appears). The
 //      confetti mount target stays stable across the transition
 //      (Bug B). The stats view exposes 「再来一局」
-//      (data-testid="play-again-solo") which returns to the board
+//      (data-testid="play-again-offline") which returns to the board
 //      with phase=idle for a new game (V3 supersedes the original
 //      "stats view has no restart button" assertion — the new
 //      affordance replaces it, see plan .omo/plans/ulw-ux-refresh-pass
 //      §3 W3).
 //
 // Usage:
-//   node tests/qa/solo-mode-qa.mjs          (needs pnpm build && pnpm start)
+//   node tests/qa/offline-mode-qa.mjs          (needs pnpm build && pnpm start)
 //
 // Note: driveTopRowWin makes the FIRST player win the top row, so the
 // probe reloads /solo until the status bar announces 轮到 X — that makes
@@ -35,8 +35,8 @@ import { driveTopRowWin } from "./lib/win-drive.mjs";
 import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 
 const BASE = BASE_URL;
-const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/solo-mode-qa";
-const SOLO_KEY = "ttt.solo.stats.v1";
+const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/offline-mode-qa";
+const OFFLINE_KEY = "ttt.offline.stats.v1";
 const findings = [];
 
 async function step(name, fn) {
@@ -76,14 +76,14 @@ async function deleteStats(page) {
   assert.equal(status, 200, `DELETE expected 200, got ${status}`);
 }
 
-async function readSoloStats(page) {
-  const raw = await page.evaluate((key) => window.localStorage.getItem(key), SOLO_KEY);
+async function readOfflineStats(page) {
+  const raw = await page.evaluate((key) => window.localStorage.getItem(key), OFFLINE_KEY);
   return raw === null ? null : JSON.parse(raw);
 }
 
 async function panelValues(page) {
   return page.evaluate(() => {
-    const panel = document.querySelector('[data-testid="solo-stats"]');
+    const panel = document.querySelector('[data-testid="offline-stats"]');
     if (!panel) return null;
     return Array.from(panel.querySelectorAll('[data-testid="stat-value"]')).map((n) =>
       n.getAttribute("data-value"),
@@ -93,15 +93,15 @@ async function panelValues(page) {
 
 // Reload /solo until the randomized first player is X (max 12 tries;
 // P(still O-first after 12) < 0.03%). Status bar reads 轮到 X / 轮到 O.
-async function openSoloAsXFirst(page) {
+async function openOfflineAsXFirst(page) {
   for (let attempt = 1; attempt <= 12; attempt += 1) {
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="status-text"]');
     const text = await page.textContent('[data-testid="status-text"]');
     if (text.includes("X")) return;
     await page.reload({ waitUntil: "networkidle" });
   }
-  throw new Error("could not get an X-first solo game within 12 attempts");
+  throw new Error("could not get an X-first offline game within 12 attempts");
 }
 
 await ensureDir(EVIDENCE);
@@ -110,7 +110,7 @@ const shoot = shootTo(EVIDENCE);
 const { browser, ctx, page } = await launchQA();
 
 // Write-request counter (the solo contract: zero of these during solo).
-let soloWriteCount = 0;
+let offlineWriteCount = 0;
 page.on("request", (req) => {
   const url = req.url();
   const method = req.method();
@@ -118,7 +118,7 @@ page.on("request", (req) => {
     (method === "POST" && url.endsWith("/api/stats/outcome")) ||
     (method === "PUT" && url.endsWith("/api/stats")) ||
     (method === "DELETE" && url.endsWith("/api/stats"));
-  if (isWrite) soloWriteCount += 1;
+  if (isWrite) offlineWriteCount += 1;
 });
 
 try {
@@ -127,16 +127,16 @@ try {
     await page.waitForSelector('[data-testid="start-online"]');
     await page.waitForSelector('[data-testid="start-offline"]');
     // The testid sits on the <a> (Link) itself; the anchor must
-    // carry href=/solo. (Previously sat on a child Button before
+    // carry href=/offline. (Previously sat on a child Button before
     // W1 added the intercept-handler refactor — selector updated.)
-    const soloHref = await page.getAttribute('[data-testid="start-offline"]', "href");
-    assert.equal(soloHref, "/solo", `expected start-offline link href=/solo, got ${soloHref}`);
+    const offlineHref = await page.getAttribute('[data-testid="start-offline"]', "href");
+    assert.equal(offlineHref, "/offline", `expected start-offline link href=/offline, got ${offlineHref}`);
     await Promise.all([
-      page.waitForURL("**/solo", { timeout: 6000 }),
+      page.waitForURL("**/offline", { timeout: 6000 }),
       page.click('[data-testid="start-offline"]'),
     ]);
     await page.waitForSelector('[data-testid="board"]');
-    assert.ok(page.url().endsWith("/solo"), `expected to land on /solo, got ${page.url()}`);
+    assert.ok(page.url().endsWith("/offline"), `expected to land on /offline, got ${page.url()}`);
   });
 
   await step("02 baseline: server reachable (no per-name row expected)", async () => {
@@ -156,8 +156,8 @@ try {
     assert.ok(r < 500, `expected non-5xx server response, got ${r}`);
   });
 
-  await step("03 solo win: zero write requests, inline banner, localStorage xWins=1", async () => {
-    // Seed the player name before driving the solo win — the W2
+  await step("03 offline win: zero write requests, inline banner, localStorage xWins=1", async () => {
+    // Seed the player name before driving the offline win — the W2
     // pure-local contract (`store.ts:makeMove` isAnonymous guard)
     // skips localStorage writes for anonymous offline play, so a
     // name is required to exercise the offline accumulation path.
@@ -166,10 +166,10 @@ try {
     // roundtrip is covered by home-return-qa.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "solo-mode-qa-user");
+      window.localStorage.setItem("ttt.player.name.v1", "offline-mode-qa-user");
     });
-    soloWriteCount = 0;
-    await openSoloAsXFirst(page);
+    offlineWriteCount = 0;
+    await openOfflineAsXFirst(page);
     await driveTopRowWin(page);
 
     // Outcome is announced by the header status-bar (no inline result
@@ -184,37 +184,37 @@ try {
     );
     const statusText = await page.textContent('[data-testid="status-text"]');
     assert.match(statusText ?? '', /X 获胜/, `expected X 获胜 in status, got "${statusText}"`);
-    assert.ok(page.url().endsWith("/solo"), `solo must not navigate, got ${page.url()}`);
-    // Confetti celebration still fires on win — SoloConfetti component
+    assert.ok(page.url().endsWith("/offline"), `offline must not navigate, got ${page.url()}`);
+    // Confetti celebration still fires on win — WinConfetti component
     // mounts the testid="confetti" span (no ResultBanner text).
     await page.waitForSelector('[data-testid="confetti"]', { timeout: 2000 });
     await page.waitForTimeout(500); // settle window for any rogue write
 
     assert.equal(
-      soloWriteCount,
+      offlineWriteCount,
       0,
-      `solo issued ${soloWriteCount} write request(s); expected 0`,
+      `offline issued ${offlineWriteCount} write request(s); expected 0`,
     );
 
-    const solo = await readSoloStats(page);
-    assert.ok(solo, `expected ${SOLO_KEY} to exist after a solo win`);
-    assert.equal(solo.xWins, 1, `expected xWins=1 in ${SOLO_KEY}, got ${solo.xWins}`);
-    assert.equal(solo.totalGames, 1, `expected totalGames=1, got ${solo.totalGames}`);
-    await shoot(page, "solo-win-inline-banner.png");
+    const offline = await readOfflineStats(page);
+    assert.ok(offline, `expected ${OFFLINE_KEY} to exist after a offline win`);
+    assert.equal(offline.xWins, 1, `expected xWins=1 in ${OFFLINE_KEY}, got ${offline.xWins}`);
+    assert.equal(offline.totalGames, 1, `expected totalGames=1, got ${offline.totalGames}`);
+    await shoot(page, "offline-win-inline-banner.png");
   });
 
-  await step("04 reload: SoloStatsPanel hydrates the persisted row", async () => {
+  await step("04 reload: OfflineStatsPanel hydrates the persisted row", async () => {
     await page.reload({ waitUntil: "networkidle" });
-    // SoloStatsPanel lives behind the /solo view-toggle (board↔stats).
+    // OfflineStatsPanel lives behind the /offline view-toggle (board↔stats).
     // Default mount is board view; switch to stats to read the persisted row.
     await page.waitForSelector('[data-testid="view-toggle"]');
     await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForSelector('[data-testid="offline-stats"]');
     await page.waitForTimeout(220); // settle ViewTransition + post-mount hydration
     // Panel re-reads in a post-mount effect; poll until hydrated.
     await page.waitForFunction(
       () => {
-        const panel = document.querySelector('[data-testid="solo-stats"]');
+        const panel = document.querySelector('[data-testid="offline-stats"]');
         if (!panel) return false;
         const first = panel.querySelector('[data-testid="stat-value"]');
         return first && first.getAttribute("data-value") === "1";
@@ -226,31 +226,31 @@ try {
     assert.deepEqual(
       values,
       ["1", "1", "0", "0", "X 连胜 1"],
-      `expected persisted solo row after reload, got ${JSON.stringify(values)}`,
+      `expected persisted offline row after reload, got ${JSON.stringify(values)}`,
     );
-    await shoot(page, "solo-reload-panel.png");
+    await shoot(page, "offline-reload-panel.png");
   });
 
   await step("05 local clear: localStorage emptied, panel follows, no reload needed", async () => {
-    await page.click('[data-testid="reset-solo-stats"]');
+    await page.click('[data-testid="reset-offline-stats"]');
     await page.waitForFunction(
       (key) => window.localStorage.getItem(key) === null,
-      SOLO_KEY,
+      OFFLINE_KEY,
       { timeout: 4000 },
     );
-    const solo = await readSoloStats(page);
-    assert.equal(solo, null, `expected ${SOLO_KEY} removed, got ${JSON.stringify(solo)}`);
+    const offline = await readOfflineStats(page);
+    assert.equal(offline, null, `expected ${OFFLINE_KEY} removed, got ${JSON.stringify(offline)}`);
     const values = await panelValues(page);
     assert.deepEqual(
       values,
       ["0", "0", "0", "0", "—"],
       `expected panel to show zeros after local clear, got ${JSON.stringify(values)}`,
     );
-    await shoot(page, "solo-cleared.png");
+    await shoot(page, "offline-cleared.png");
   });
 
-  await step("06 no per-name row mutated by the solo session", async () => {
-    // W1 retired the /api/stats chain. The solo session only
+  await step("06 no per-name row mutated by the offline session", async () => {
+    // W1 retired the /api/stats chain. The offline session only
     // wrote to localStorage (assertion above). This step pins the
     // inverse: the server-side per-name row for the seeded name
     // either does not exist (404 → stats: null) or is unchanged
@@ -259,7 +259,7 @@ try {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-online"]');
     const stats = await page.evaluate(async (base) => {
-      const r = await fetch(`${base}/api/players/solo-mode-qa-user/stats`, { cache: "no-store" });
+      const r = await fetch(`${base}/api/players/offline-mode-qa-user/stats`, { cache: "no-store" });
       if (r.status === 404) return null;
       return await r.json();
     }, BASE);
@@ -267,19 +267,19 @@ try {
       assert.equal(
         stats.stats.totalGames,
         0,
-        `per-name row changed during solo session: ${JSON.stringify(stats)}`,
+        `per-name row changed during offline session: ${JSON.stringify(stats)}`,
       );
     }
-    await shoot(page, "home-after-solo.png");
+    await shoot(page, "home-after-offline.png");
   });
 
 
   // === W-A: Bug C width stability (ulw-solo-sync-rebuild W-A, V2) ===
-  // Drive a fresh solo win and measure view-toggle button width at
+  // Drive a fresh offline win and measure view-toggle button width at
   // each phase transition. Acceptance V2: max-min < 2px (pre-fix: 16px
   // jump when StatusBar pulse dot disappears on win).
   await step("07 view-toggle button width is stable across phase transitions", async () => {
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="view-toggle"]');
     const widths = [];
     // playing-empty (StatusBar pulse dot present, text = 轮到 X|O)
@@ -319,14 +319,14 @@ try {
   await step("08 auto-switch board→stats after win + confetti恒 1 (Bug B + W3 A6)", async () => {
     // We're still on the board view right after step 07's win. The
     // auto-switch timer (1200ms) should have either already fired or
-    // be in-flight; wait for solo-stats to appear within the A6 budget.
-    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+    // be in-flight; wait for offline-stats to appear within the A6 budget.
+    await page.waitForSelector('[data-testid="offline-stats"]', { timeout: 2000 });
     // view-toggle aria-pressed must be true on the stats view (the
     // toggle button drives the aria state in GameShell).
     const pressed = await page.getAttribute('[data-testid="view-toggle"]', "aria-pressed");
     assert.equal(pressed, "true", `expected view-toggle aria-pressed=true after auto-switch, got ${pressed}`);
-    // URL must NOT change — solo never navigates to /result.
-    assert.ok(page.url().endsWith("/solo"), `URL must stay on /solo after auto-switch, got ${page.url()}`);
+    // URL must NOT change — offline never navigates to /result.
+    assert.ok(page.url().endsWith("/offline"), `URL must stay on /offline after auto-switch, got ${page.url()}`);
     // Confetti span still mounted exactly once on the stats view (Bug
     // B stability — no remount, no second burst).
     const onStats = await page.evaluate(() =>
@@ -347,7 +347,7 @@ try {
 
   // === W3: A7 dual-view entry (replaces V3 statsRestart===0) + Bug C height (V2) ===
   // The board view keeps its 重新开局 button (data-testid="restart"); the
-  // stats view exposes 再来一局 (data-testid="play-again-solo") which
+  // stats view exposes 再来一局 (data-testid="play-again-offline") which
   // restarts the game (phase=idle) AND switches back to the board view.
   // The legacy V3 assertion 「stats view has NO restart button」 is
   // SUPERSEDED — the new affordance replaces it (see plan
@@ -355,37 +355,37 @@ try {
   // stability (V2) assertion still holds across the larger stats-view
   // action row (the Card itself pins minH="28rem" in app/solo/page.tsx).
   await step("09 dual-view entry + card height stable (W3 A7 + V2)", async () => {
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="view-toggle"]');
-    // board view: restart present, no play-again-solo (no win yet).
+    // board view: restart present, no play-again-offline (no win yet).
     const boardRestart = await page.locator('[data-testid="restart"]').count();
-    const boardPlayAgain = await page.locator('[data-testid="play-again-solo"]').count();
+    const boardPlayAgain = await page.locator('[data-testid="play-again-offline"]').count();
     const boardH = await page.evaluate(() => {
       const main = document.querySelector("main.page-shell");
       const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
       return card?.getBoundingClientRect().height ?? 0;
     });
     assert.equal(boardRestart, 1, `expected 重新开局 on board view, got ${boardRestart}`);
-    assert.equal(boardPlayAgain, 0, `expected NO play-again-solo on idle board, got ${boardPlayAgain}`);
+    assert.equal(boardPlayAgain, 0, `expected NO play-again-offline on idle board, got ${boardPlayAgain}`);
     // Drive a top-row win so the page auto-switches to stats, then
     // assert the play-again affordance exists in the result surface.
     await driveTopRowWin(page, { clickGapMs: 50 });
-    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
-    await page.waitForSelector('[data-testid="play-again-solo"]', { timeout: 1500 });
+    await page.waitForSelector('[data-testid="offline-stats"]', { timeout: 2000 });
+    await page.waitForSelector('[data-testid="play-again-offline"]', { timeout: 1500 });
     const statsRestart = await page.locator('[data-testid="restart"]').count();
-    const statsPlayAgain = await page.locator('[data-testid="play-again-solo"]').count();
-    const statsBackHome = await page.locator('[data-testid="back-home-solo"]').count();
+    const statsPlayAgain = await page.locator('[data-testid="play-again-offline"]').count();
+    const statsBackHome = await page.locator('[data-testid="back-home-offline"]').count();
     const statsH = await page.evaluate(() => {
       const main = document.querySelector("main.page-shell");
       const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
       return card?.getBoundingClientRect().height ?? 0;
     });
     assert.equal(statsRestart, 0, `expected NO 重新开局 on stats view (W3 A7), got ${statsRestart}`);
-    assert.equal(statsPlayAgain, 1, `expected play-again-solo on stats view (W3 A7), got ${statsPlayAgain}`);
-    assert.equal(statsBackHome, 1, `expected back-home-solo on stats view, got ${statsBackHome}`);
+    assert.equal(statsPlayAgain, 1, `expected play-again-offline on stats view (W3 A7), got ${statsPlayAgain}`);
+    assert.equal(statsBackHome, 1, `expected back-home-offline on stats view, got ${statsBackHome}`);
     // Click 再来一局 — must return to board view with a fresh game
     // (board testid present, status text is 轮到 / 准备开始).
-    await page.click('[data-testid="play-again-solo"]');
+    await page.click('[data-testid="play-again-offline"]');
     await page.waitForSelector('[data-testid="board"]', { timeout: 2000 });
     const statusText = await page.textContent('[data-testid="status-text"]');
     assert.match(
@@ -420,7 +420,7 @@ try {
   await browser.close();
 }
 
-await writeQaLog(EVIDENCE, { base: BASE, soloKey: SOLO_KEY, findings });
+await writeQaLog(EVIDENCE, { base: BASE, offlineKey: OFFLINE_KEY, findings });
 
 const pass = findings.filter((f) => f.status === "PASS").length;
 const fail = findings.filter((f) => f.status === "FAIL").length;

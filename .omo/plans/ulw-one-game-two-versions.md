@@ -31,8 +31,8 @@
 - **词汇表核证**：schema.org GamePlayMode 枚举 = SinglePlayer/MultiPlayer/CoOp，表达**参与人数**维度；版本区分是**连接性**维度——两维正交，故 single 歧义、online/offline 正确。PlayAction（agent+object+participant）即「线下两人同乐」的标准语义。
 - URL：`/solo`→`/offline`、`/play`→`/online`、`/result` 保留。testid：`start-offline`/`start-online`、`offline-stats`/`offline-stats-grid`/`reset-offline-stats`。
 - store mode：`'online'|'offline'`（差异仅记账路径）；删 `lastWriteAt`/StatsHydrator/旧 api 函数。
-- localStorage `ttt.solo.*`→`ttt.offline.*`（三 key，旧 key 弃用不迁移，README 注明）。
-- 组件：SoloStatsPanel→OfflineStatsPanel、SoloConfetti→WinConfetti（行为命名）、solo/page→offline/page、solo-net→game-net。
+- localStorage `ttt.offline.*`→`ttt.offline.*`（三 key，旧 key 弃用不迁移，README 注明）。
+- 组件：OfflineStatsPanel→OfflineStatsPanel、WinConfetti→WinConfetti（行为命名）、solo/page→offline/page、solo-net→game-net。
 - 探针：solo-*-qa→offline-*-qa、pure-local-qa→offline-qa。
 - **展示页 JSON-LD**（W3 落地，schema.org 实证）：`@type:["VideoGame","WebApplication"]` + `playMode:MultiPlayer` + `numberOfPlayers(min1,max2)` + `applicationCategory:Game` + `gamePlatform:"Web Browser"` + `operatingSystem:"Any"` + `offers(price 0)`——Next.js metadata/结构化数据即面试展示点。
 
@@ -83,6 +83,6 @@
 
 - ❌ solo/ranked 词汇保留（与用户意图错位；schema.org 两维正交已核证，online/offline 正名）
 - ❌ GraphQL 即刻引入（仅 service/传输分离契约成文 + README 预留节）
-- ❌ 旧 localStorage key 迁移（`ttt.solo.*` 弃用不迁移，README 注明）
+- ❌ 旧 localStorage key 迁移（`ttt.offline.*` 弃用不迁移，README 注明）
 - ❌ 专设同步页路由（既有合并弹框契约延续）
 - ❌ 匿名线上对局记账（online 无名入口拦截，不导航不记账）

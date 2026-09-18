@@ -69,12 +69,12 @@ afterEach(() => {
 describe('components/StartGameButton (W3 landing CTAs)', () => {
   it('renders href, label, variant and the caller testid', () => {
     render(
-      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-offline" />,
+      <StartGameButton href="/offline" label="单机练习" mode="offline" variant="secondary" testid="start-offline" />,
     );
     // W3 testid lands on the <a> directly (W1 contract preserved).
     const link = screen.getByTestId('start-offline');
     expect(link.tagName).toBe('A');
-    expect(link).toHaveAttribute('href', '/solo');
+    expect(link).toHaveAttribute('href', '/offline');
     expect(link).toHaveClass('flex-1');
     expect(link).toHaveTextContent('单机练习');
   });
@@ -82,10 +82,10 @@ describe('components/StartGameButton (W3 landing CTAs)', () => {
   it('offline CTA passes through without a name (pure-local contract preserved)', async () => {
     const user = userEvent.setup();
     render(
-      <StartGameButton href="/solo" label="单机练习 · 离线可玩" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
+      <StartGameButton href="/offline" label="单机练习 · 离线可玩" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
     );
     await user.click(screen.getByTestId('start-offline'));
-    expect(routerPush).toHaveBeenCalledWith('/solo');
+    expect(routerPush).toHaveBeenCalledWith('/offline');
     const s = useGameStore.getState();
     expect(s.mode).toBe('offline');
     expect(s.phase).toBe('playing');
@@ -95,10 +95,10 @@ describe('components/StartGameButton (W3 landing CTAs)', () => {
     const user = userEvent.setup();
     useGameStore.setState({ playerName: 'alice' });
     render(
-      <StartGameButton href="/play" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
+      <StartGameButton href="/online" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
     );
     await user.click(screen.getByTestId('start-online'));
-    expect(routerPush).toHaveBeenCalledWith('/play');
+    expect(routerPush).toHaveBeenCalledWith('/online');
     const s = useGameStore.getState();
     expect(s.mode).toBe('online');
     expect(s.phase).toBe('playing');
@@ -114,7 +114,7 @@ describe('components/StartGameButton (W3 landing CTAs)', () => {
     }) as typeof window.dispatchEvent;
     try {
       render(
-        <StartGameButton href="/play" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
+        <StartGameButton href="/online" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
       );
       await user.click(screen.getByTestId('start-online'));
       expect(routerPush).not.toHaveBeenCalled();
@@ -141,10 +141,10 @@ describe('components/StartGameButton (W3 landing CTAs)', () => {
     }) as typeof window.dispatchEvent;
     try {
       render(
-        <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
+        <StartGameButton href="/offline" label="单机练习" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
       );
       await user.click(screen.getByTestId('start-offline'));
-      expect(routerPush).toHaveBeenCalledWith('/solo');
+      expect(routerPush).toHaveBeenCalledWith('/offline');
       const required = dispatchSpy.mock.calls
         .map((c) => c[0] as Event)
         .filter((e) => e.type === 'ttt:player-name-required');

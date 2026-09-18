@@ -318,7 +318,7 @@ html, body {
   }
 
   /* In-page view swap (task T3, plan: ulw-ux-mobile-sync) — React 19
-     <ViewTransition update="view-swap"> fired by /solo's view toggle.
+     <ViewTransition update="view-swap"> fired by /offline's view toggle.
      Bidirectional crossfade (opacity) plus a 6px translateY for the
      incoming content. 180ms ease-out per DESIGN.md §5 motion contract
      — same easing curve as the page transition, GPU-only (transform +

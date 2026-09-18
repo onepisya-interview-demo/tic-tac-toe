@@ -53,8 +53,8 @@ import { emptyStats, recordOutcome, type GameStats } from './game';
  *   `lastWriteAt` 全链路退役：ranked 公共单行（id=1, name=NULL）的全行族
  *   读 / 写 / 累加 / 重置 接口（`loadStats` / `saveStats` / `recordAndSave`
  *   / `resetStats` + `STATS_ROW_ID`）整体删除。
- * - 入口改走 per-name：所有读 / 写 / 累加都按 `name` 维度（`loadSoloRecord`
- *   / `upsertSoloRecord` / `recordOutcomeForName` / `mergeSoloRecord` /
+ * - 入口改走 per-name：所有读 / 写 / 累加都按 `name` 维度（`loadRecordByName`
+ *   / `upsertRecordByName` / `recordOutcomeForName` / `mergeRecordByName` /
  *   `registerOrLoginName`）。
  */
 
@@ -175,7 +175,7 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
   // Single per-name rows under `name TEXT UNIQUE` since
-  // ulw-name-login-one-truth merged the ranked shared row out (W1
+  // ulw-name-login-one-truth merged the online shared row out (W1
   // ulw-one-game-two-versions retires the /api/stats chain entirely).
   await cachedClient.execute(`
     CREATE TABLE IF NOT EXISTS game_stats (
@@ -231,7 +231,7 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
     }
   }
   if (columnProbe.rows.length === 0 || !hasUniqueOnName) {
-    // W1 retires the ranked shared row (id=1, name=NULL) along with
+    // W1 retires the online shared row (id=1, name=NULL) along with
     // /api/stats. The reconcile branch is therefore a structural rebuild
     // — only per-name rows (name IS NOT NULL) carry forward. When the
     // legacy schema lacks the `name` column entirely, the carry-forward
@@ -259,7 +259,7 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
         // created as NULL under the new schema; SQLite allows multiple
         // NULLs under TEXT UNIQUE). When the legacy schema had a `name`
         // column, only per-name rows (name IS NOT NULL) carry forward;
-        // W1 retires the ranked shared row (id=1, name=NULL).
+        // W1 retires the online shared row (id=1, name=NULL).
         carryForwardSql,
         `DROP TABLE game_stats`,
         `ALTER TABLE game_stats_new RENAME TO game_stats`,
@@ -280,7 +280,7 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
  * absent so callers (the /api/players/{name}/stats GET handler) can
  * branch on "fresh name" without sentinel values.
  */
-export async function loadSoloRecord(name: string): Promise<GameStats | null> {
+export async function loadRecordByName(name: string): Promise<GameStats | null> {
   const db = await getDb();
   const existing = await db
     .select()
@@ -298,7 +298,7 @@ export async function loadSoloRecord(name: string): Promise<GameStats | null> {
 }
 
 /** Write a per-player record (insert-or-update by name). */
-export async function upsertSoloRecord(
+export async function upsertRecordByName(
   name: string,
   stats: GameStats,
 ): Promise<void> {
@@ -368,13 +368,13 @@ export function accumulateMergeStats(
  * caller (POST /api/players/{name}/stats:merge) can adopt the server’s
  * authoritative answer without an extra GET.
  */
-export async function mergeSoloRecord(
+export async function mergeRecordByName(
   name: string,
   clientStats: GameStats,
 ): Promise<GameStats> {
-  const server = (await loadSoloRecord(name)) ?? emptyStats();
+  const server = (await loadRecordByName(name)) ?? emptyStats();
   const next = accumulateMergeStats(server, clientStats);
-  await upsertSoloRecord(name, next);
+  await upsertRecordByName(name, next);
   return next;
 }
 
@@ -404,12 +404,12 @@ export async function recordOutcomeForName(
   name: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<RecordOutcomeResult> {
-  const current = await loadSoloRecord(name);
+  const current = await loadRecordByName(name);
   if (current === null) {
     return { ok: false, reason: 'not-found' };
   }
   const next = recordOutcome(current, outcome);
-  await upsertSoloRecord(name, next);
+  await upsertRecordByName(name, next);
   return { ok: true, stats: next };
 }
 
@@ -422,11 +422,11 @@ export async function recordOutcomeForName(
  * cross-instance last-write-wins is documented in the multi-user-stats
  * future-work note and out of scope here.
  */
-export async function ensureSoloRecord(name: string): Promise<GameStats> {
-  const existing = await loadSoloRecord(name);
+export async function ensureRecordByName(name: string): Promise<GameStats> {
+  const existing = await loadRecordByName(name);
   if (existing) return existing;
   const zero = emptyStats();
-  await upsertSoloRecord(name, zero);
+  await upsertRecordByName(name, zero);
   return zero;
 }
 
@@ -452,15 +452,15 @@ export async function ensureSoloRecord(name: string): Promise<GameStats> {
 export async function registerOrLoginName(
   name: string,
 ): Promise<{ stats: GameStats; existed: boolean }> {
-  const existing = await loadSoloRecord(name);
+  const existing = await loadRecordByName(name);
   if (existing) return { stats: existing, existed: true };
   const zero = emptyStats();
   try {
-    await upsertSoloRecord(name, zero);
+    await upsertRecordByName(name, zero);
     return { stats: zero, existed: false };
   } catch (err) {
     // Concurrent writer inserted first: re-read surfaces their row.
-    const after = await loadSoloRecord(name);
+    const after = await loadRecordByName(name);
     if (after) return { stats: after, existed: true };
     throw err;
   }

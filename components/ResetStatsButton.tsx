@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
  *   synchronous, purely local store action (clears the localStorage row
  *   + internal cache). No network, no router.refresh (nothing server-
  *   side changed; the panel re-renders via onCleared). data-testid is
- *   "reset-solo-stats", its own QA contract.
+ *   "reset-offline-stats", its own QA contract.
  *
  * W1 retired the `scope='server'` branch along with the /api/stats
  * chain: the ranked public ledger (id=1, name=NULL) no longer exists
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/Button';
  * per-name reset on the OnlineStatsCard itself.
  *
  * `onCleared` fires after the local clear settles so data owners
- * (e.g. SoloStatsPanel) can re-read their source.
+ * (e.g. OfflineStatsPanel) can re-read their source.
  */
 type Props = {
   scope?: 'local';
@@ -44,7 +44,7 @@ export function ResetStatsButton({ scope = 'local', onCleared, className }: Prop
       variant="ghost"
       onClick={handleClick}
       className={className}
-      data-testid="reset-solo-stats"
+      data-testid="reset-offline-stats"
       aria-label="清空单机战绩"
     >
       清空战绩

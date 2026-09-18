@@ -4,11 +4,11 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { isPlayerName } from '@/lib/player-name';
 import { postSession, postMerge } from '@/lib/game-net';
-import { loadSoloStats } from '@/lib/solo-stats';
+import { loadOfflineStats } from '@/lib/offline-stats';
 import type { GameStats } from '@/lib/game';
 
 const NAME_MAX = 24;
-export const SYNC_DECLINED_KEY = 'ttt.solo.sync-declined.v1';
+export const SYNC_DECLINED_KEY = 'ttt.offline.sync-declined.v1';
 
 /**
  * Home-return sync dialog (ulw-name-login-one-truth W3 contract).
@@ -149,7 +149,7 @@ export function SyncConfirmDialog({
       }
       throw new Error('登录失败，请稍后重试（战绩仍在本地）');
     }
-    const localSnapshot = loadSoloStats();
+    const localSnapshot = loadOfflineStats();
     const r = await postMerge(trimmed, localSnapshot);
     if (!r.ok) {
       throw new Error(
@@ -170,7 +170,7 @@ export function SyncConfirmDialog({
     try {
       // W4 F1 fix: the merged row is no longer forwarded to the
       // caller — HomeDialogMount writes a fixed baseline (0) right
-      // after clearSoloStats(). We still await the sequence so the
+      // after clearOfflineStats(). We still await the sequence so the
       // loading / error / disabled-button contract is preserved.
       await runMergeSequence();
       if (onConfirm) await onConfirm(trimmed);
@@ -338,7 +338,7 @@ export function writeDeclinedPending(pending: number): void {
 
 /**
  * Clear the declined sentinel after a successful merge. Mirrors
- * `clearSoloStats()` / `persistSyncedServerTotal` symmetry — once
+ * `clearOfflineStats()` / `persistSyncedServerTotal` symmetry — once
  * the merge succeeds, the next visit has pending = 0 and the dialog
  * wouldn't re-open anyway, but clearing the sentinel makes the
  * next-play loop's behaviour deterministic.

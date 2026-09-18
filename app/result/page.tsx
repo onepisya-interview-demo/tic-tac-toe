@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
-import { loadSoloRecord } from '@/lib/db';
+import { loadRecordByName } from '@/lib/db';
 import { normalizePlayerName } from '@/lib/player-name';
 import { type GameStats } from '@/lib/game';
 
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * W3 (ulw-one-game-two-versions A5) /result page rendering.
  *
  * Server Component (default). Reads `?name=` from the URL and
- * fetches the per-name row from lib/db.ts:loadSoloRecord at
+ * fetches the per-name row from lib/db.ts:loadRecordByName at
  * request time. The page is real-time (no client cache; the
  * upstream write goes through POST
  * /api/players/{name}/stats/outcomes which the server applies
@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
  *
  * ResultActions used to be a 'use client' component that called
  * store.startGame(); W3 retires that — the play-again link is
- * a plain <Link href="/play">; the navigator's startGame fires
+ * a plain <Link href="/online">; the navigator's startGame fires
  * when /play mounts (PlayController + startGame('online')). The
  * W1 reset chain is gone (the /api/stats retirement). The page
  * therefore ships as a true RSC — only SoundToggle (app/layout.tsx
@@ -88,13 +88,13 @@ export default async function ResultPage({
     );
   }
 
-  // Branches 2 + 3: loadSoloRecord returns null when no row, full
+  // Branches 2 + 3: loadRecordByName returns null when no row, full
   // GameStats when present. Service-layer pure function; transport
   // mapping is the responsibility of any 4xx problem+json wrapper.
   let stats: GameStats | null;
   let loadError: string | null = null;
   try {
-    stats = await loadSoloRecord(name);
+    stats = await loadRecordByName(name);
   } catch {
     stats = null;
     loadError = '加载失败，请稍后再试。';
@@ -138,7 +138,7 @@ export default async function ResultPage({
         )}
 
         <div className="flex flex-col gap-3" data-testid="result-actions">
-          <Link href="/play" className="w-full" data-testid="play-again">
+          <Link href="/online" className="w-full" data-testid="play-again">
             <Button variant="primary" className="w-full">
               再来一局
             </Button>

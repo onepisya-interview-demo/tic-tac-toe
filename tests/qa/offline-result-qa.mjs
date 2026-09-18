@@ -1,18 +1,18 @@
-// solo-result-qa.mjs — W3 result-paginated experience probe
+// offline-result-qa.mjs — W3 result-paginated experience probe
 // (ulw-ux-refresh-pass §3 W3 + §5 A6/A7). One real Chromium + production
 // build (BASE_URL=http://localhost:3101). Probes the full solo-result
 // flow end to end:
 //
 //   A6 win → auto-switch from board→stats within ≤2s; URL stays
-//      /solo; view-toggle aria-pressed=true; solo-stats visible;
+//      /solo; view-toggle aria-pressed=true; offline-stats visible;
 //      confetti still present across the transition; 再来一局 returns
 //      to board view with phase=idle (fresh game).
 //   A6 draw → same auto-switch path after the 0.6s delay.
-//   A7 dual-view entry — board has 重新开局; stats has play-again-solo.
+//   A7 dual-view entry — board has 重新开局; stats has play-again-offline.
 //   URL invariant — never leaves /solo.
 //
 // Usage:
-//   node tests/qa/solo-result-qa.mjs          (needs pnpm build && pnpm start on :3101)
+//   node tests/qa/offline-result-qa.mjs          (needs pnpm build && pnpm start on :3101)
 //   env: BASE_URL (default http://localhost:3000), EVIDENCE_DIR,
 //        QA_VIDEO=1 enables Playwright recordVideo (.omo/evidence/ulw/...).
 
@@ -23,8 +23,8 @@ import { driveTopRowWin, driveDraw } from './lib/win-drive.mjs';
 import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
 
 const BASE = BASE_URL;
-const EVIDENCE = process.env.EVIDENCE_DIR ?? '.omx/evidence/solo-result-qa';
-const SOLO_KEY = 'ttt.solo.stats.v1';
+const EVIDENCE = process.env.EVIDENCE_DIR ?? '.omx/evidence/offline-result-qa';
+const OFFLINE_KEY = 'ttt.offline.stats.v1';
 const findings = [];
 
 async function step(name, fn) {
@@ -43,51 +43,33 @@ async function step(name, fn) {
   }
 }
 
-async function getStats(page) {
-  return page.evaluate(async () => {
-    const r = await fetch('/api/stats', { cache: 'no-store' });
-    return r.json();
-  });
-}
-
-async function deleteStats(page) {
-  if (!page.url().startsWith(BASE)) {
-    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  }
-  const status = await page.evaluate(async () => {
-    const r = await fetch('/api/stats', { method: 'DELETE', cache: 'no-store' });
-    return r.status;
-  });
-  assert.equal(status, 200, `DELETE expected 200, got ${status}`);
-}
-
-async function readSoloStats(page) {
-  const raw = await page.evaluate((key) => window.localStorage.getItem(key), SOLO_KEY);
+async function readOfflineStats(page) {
+  const raw = await page.evaluate((key) => window.localStorage.getItem(key), OFFLINE_KEY);
   return raw === null ? null : JSON.parse(raw);
 }
 
-async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
+async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
     await page.waitForSelector('[data-testid="status-text"]');
     const text = await page.textContent('[data-testid="status-text"]');
     if (text.includes('X')) return;
     await page.reload({ waitUntil: 'networkidle' });
   }
-  throw new Error('could not get an X-first solo game within 12 attempts');
+  throw new Error('could not get an X-first offline game within 12 attempts');
 }
 
-async function clearSoloLocal(page) {
-  await page.evaluate((key) => window.localStorage.removeItem(key), SOLO_KEY);
+async function clearOfflineLocal(page) {
+  await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_KEY);
 }
 
 await ensureDir(EVIDENCE);
 const shoot = shootTo(EVIDENCE);
 
-const { browser, ctx, page } = await launchQA({ probeName: 'solo-result-qa' });
+const { browser, ctx, page } = await launchQA({ probeName: 'offline-result-qa' });
 
 // Write-request counter (the W2 pure-local contract: zero during solo).
-let soloWriteCount = 0;
+let offlineWriteCount = 0;
 page.on('request', (req) => {
   const url = req.url();
   const method = req.method();
@@ -98,35 +80,46 @@ page.on('request', (req) => {
     (method === 'POST' && url.endsWith('/api/sessions')) ||
     (method === 'POST' && /\/api\/players\/[^/]+\/stats\/outcomes/.test(url)) ||
     (method === 'POST' && /\/api\/players\/[^/]+\/stats\/merge/.test(url));
-  if (isWrite) soloWriteCount += 1;
+  if (isWrite) offlineWriteCount += 1;
 });
 
 try {
-  await step('00 baseline: ranked ledger reset + localStorage cleared', async () => {
-    await deleteStats(page);
+  await step('00 baseline: localStorage cleared (W1 retired the /api/stats ledger)', async () => {
+    // W1 retired the /api/stats chain along with the ranked public
+    // ledger (id=1, name=NULL). The probe only needs a clean
+    // localStorage baseline to verify the offline pure-local contract.
     await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-    await clearSoloLocal(page);
+    await clearOfflineLocal(page);
     await page.reload({ waitUntil: 'networkidle' });
-    const ranked = await getStats(page);
-    assert.equal(ranked.totalGames, 0, `expected clean ranked ledger, got ${ranked.totalGames}`);
   });
 
   // ────────────────────────────────────────────────────────────────
-  // A6 win → auto-switch + confetti恒 1 + URL=/solo invariant
+  // A6 win → auto-switch + confetti恒 1 + URL=/offline invariant
+  // W1 (ulw-one-game-two-versions) added the 无名不记 guard: anonymous
+  // offline games do NOT accumulate to localStorage. The probe now
+  // seeds a player name before driving the offline win so the row
+  // actually populates (pre-W1 the test ran anonymously).
   // ────────────────────────────────────────────────────────────────
   await step('01 A6 win: auto-switch to stats view within ≤2s', async () => {
-    soloWriteCount = 0;
-    await reloadSoloUntilXFirst(page);
+    // Seed a player name (the W1 contract gates offline accumulation
+    // on playerName !== null). Use the offline-result-qa user to
+    // avoid collision with other probes' server-side rows.
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => {
+      window.localStorage.setItem('ttt.player.name.v1', 'offline-result-qa-user');
+    });
+    offlineWriteCount = 0;
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
     // Wait for auto-switch (1.2s timer in app/solo/page.tsx). A6 budget
-    // is 2s; we poll on solo-stats testid which only exists on the
+    // is 2s; we poll on offline-stats testid which only exists on the
     // stats view (board view has [data-testid="board"]).
     const t0 = Date.now();
-    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+    await page.waitForSelector('[data-testid="offline-stats"]', { timeout: 2000 });
     const dt = Date.now() - t0;
     findings.push({ name: 'auto-switch-latency-ms', ms: dt });
-    // URL invariant: must stay on /solo (A6 — solo never navigates to /result).
-    assert.ok(page.url().endsWith('/solo'), `URL must stay /solo after auto-switch, got ${page.url()}`);
+    // URL invariant: must stay on /offline (A6 — offline never navigates to /result).
+    assert.ok(page.url().endsWith('/offline'), `URL must stay /offline after auto-switch, got ${page.url()}`);
     // view-toggle aria-pressed must be true (stats view active).
     const pressed = await page.getAttribute('[data-testid="view-toggle"]', 'aria-pressed');
     assert.equal(pressed, 'true', `expected view-toggle aria-pressed=true, got ${pressed}`);
@@ -137,14 +130,14 @@ try {
     );
     assert.equal(confettiCount, 1, `expected confetti count 1 on stats, got ${confettiCount}`);
     // Result actions exposed inside the panel (A7).
-    await page.waitForSelector('[data-testid="play-again-solo"]', { timeout: 1000 });
-    await page.waitForSelector('[data-testid="back-home-solo"]', { timeout: 1000 });
+    await page.waitForSelector('[data-testid="play-again-offline"]', { timeout: 1000 });
+    await page.waitForSelector('[data-testid="back-home-offline"]', { timeout: 1000 });
     // Zero write requests during the win (W2 pure-local contract).
-    assert.equal(soloWriteCount, 0, `expected zero write requests during solo win, got ${soloWriteCount}`);
+    assert.equal(offlineWriteCount, 0, `expected zero write requests during offline win, got ${offlineWriteCount}`);
     // localStorage accumulated correctly.
-    const solo = await readSoloStats(page);
-    assert.ok(solo, `expected ${SOLO_KEY} to exist after solo win`);
-    assert.equal(solo.xWins, 1, `expected xWins=1, got ${solo?.xWins}`);
+    const offline = await readOfflineStats(page);
+    assert.ok(offline, `expected ${OFFLINE_KEY} to exist after offline win`);
+    assert.equal(offline.xWins, 1, `expected xWins=1, got ${offline?.xWins}`);
     // ViewTransition crossfade (~260ms) settle so the screenshot
     // captures the stats view fully rendered, not the mid-fade board.
     await page.waitForTimeout(400);
@@ -155,7 +148,7 @@ try {
   // A6 click play-again → board view phase=idle (fresh game)
   // ────────────────────────────────────────────────────────────────
   await step('02 A6 play-again: returns to board view with phase=idle', async () => {
-    await page.click('[data-testid="play-again-solo"]');
+    await page.click('[data-testid="play-again-offline"]');
     await page.waitForSelector('[data-testid="board"]', { timeout: 2000 });
     // view-toggle aria-pressed must flip back to false (board active).
     const pressed = await page.getAttribute('[data-testid="view-toggle"]', 'aria-pressed');
@@ -167,14 +160,14 @@ try {
       /轮到|准备开始/,
       `expected fresh-game status text, got "${statusText}"`,
     );
-    // play-again-solo disappears (only renders when phase triggers
+    // play-again-offline disappears (only renders when phase triggers
     // auto-switch); restart button reappears on board view.
-    const playAgain = await page.locator('[data-testid="play-again-solo"]').count();
+    const playAgain = await page.locator('[data-testid="play-again-offline"]').count();
     const restart = await page.locator('[data-testid="restart"]').count();
     assert.equal(playAgain, 0, `expected NO play-again on idle board, got ${playAgain}`);
     assert.equal(restart, 1, `expected 重新开局 back on board, got ${restart}`);
     // URL still /solo.
-    assert.ok(page.url().endsWith('/solo'), `URL must stay /solo after play-again, got ${page.url()}`);
+    assert.ok(page.url().endsWith('/offline'), `URL must stay /offline after play-again, got ${page.url()}`);
     await page.waitForTimeout(400); // settle crossfade into board view
     await shoot(page, '02-board-after-play-again.png');
   });
@@ -184,16 +177,16 @@ try {
   // works again (the timer must not get stuck after restart).
   // ────────────────────────────────────────────────────────────────
   await step('03 A6 repeatability: second win auto-switches again', async () => {
-    soloWriteCount = 0;
+    offlineWriteCount = 0;
     // Force X-first so the assertion on xWins is deterministic. After
     // the first game's random first-player draw we already know X won;
-    // reloadSoloUntilXFirst collapses the second game's randomization
+    // reloadOfflineUntilXFirst collapses the second game's randomization
     // to the same X-first state, so driveTopRowWin deterministically
     // adds another X win to localStorage.
-    await reloadSoloUntilXFirst(page);
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
-    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
-    assert.ok(page.url().endsWith('/solo'), `URL must stay /solo after second win, got ${page.url()}`);
+    await page.waitForSelector('[data-testid="offline-stats"]', { timeout: 2000 });
+    assert.ok(page.url().endsWith('/offline'), `URL must stay /offline after second win, got ${page.url()}`);
     const confettiCount = await page.evaluate(() =>
       document.querySelectorAll('[data-testid="confetti"]').length,
     );
@@ -202,9 +195,9 @@ try {
     // fresh burst but the testid span is still singular because we are
     // on the stats view, same DOM tree as before).
     assert.equal(confettiCount, 1, `expected confetti count 1 on second win, got ${confettiCount}`);
-    assert.equal(soloWriteCount, 0, `expected zero writes during second solo win, got ${soloWriteCount}`);
-    const solo = await readSoloStats(page);
-    assert.equal(solo?.xWins, 2, `expected xWins=2 after second win, got ${solo?.xWins}`);
+    assert.equal(offlineWriteCount, 0, `expected zero writes during second offline win, got ${offlineWriteCount}`);
+    const offline = await readOfflineStats(page);
+    assert.equal(offline?.xWins, 2, `expected xWins=2 after second win, got ${offline?.xWins}`);
     await page.waitForTimeout(400); // settle crossfade into stats view
     await shoot(page, '03-second-win-stats.png');
   });
@@ -217,7 +210,7 @@ try {
   // ────────────────────────────────────────────────────────────────
   await step('04 A6 draw: auto-switch to stats view after shake settle', async () => {
     // Restart back to board first.
-    await page.click('[data-testid="play-again-solo"]');
+    await page.click('[data-testid="play-again-offline"]');
     await page.waitForSelector('[data-testid="board"]', { timeout: 2000 });
     // Drive a draw — driveDraw is a known draw sequence that plays all
     // 9 cells without producing a win (each row/col/diag stays split).
@@ -231,42 +224,41 @@ try {
     );
     // Auto-switch after DRAW_AUTO_SWITCH_MS (600ms). Budget 1.5s.
     const t0 = Date.now();
-    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 1500 });
+    await page.waitForSelector('[data-testid="offline-stats"]', { timeout: 1500 });
     const dt = Date.now() - t0;
     findings.push({ name: 'draw-auto-switch-latency-ms', ms: dt });
-    assert.ok(page.url().endsWith('/solo'), `URL must stay /solo after draw, got ${page.url()}`);
+    assert.ok(page.url().endsWith('/offline'), `URL must stay /offline after draw, got ${page.url()}`);
     // Confetti must NOT be present on a draw — burst is win-only.
     const confettiCount = await page.evaluate(() =>
       document.querySelectorAll('[data-testid="confetti"]').length,
     );
     assert.equal(confettiCount, 0, `expected NO confetti on draw, got ${confettiCount}`);
     // Stats view still exposes the play-again affordance.
-    await page.waitForSelector('[data-testid="play-again-solo"]', { timeout: 1000 });
+    await page.waitForSelector('[data-testid="play-again-offline"]', { timeout: 1000 });
     // localStorage records the draw.
-    const solo = await readSoloStats(page);
-    assert.ok(solo, `expected ${SOLO_KEY} to exist after draw`);
-    assert.ok((solo?.draws ?? 0) >= 1, `expected draws>=1, got ${solo?.draws}`);
+    const offline = await readOfflineStats(page);
+    assert.ok(offline, `expected ${OFFLINE_KEY} to exist after draw`);
+    assert.ok((offline?.draws ?? 0) >= 1, `expected draws>=1, got ${offline?.draws}`);
     await page.waitForTimeout(400); // settle crossfade into stats view
     await shoot(page, '04-draw-stats.png');
   });
 
   // ────────────────────────────────────────────────────────────────
-  // A6 ranked ledger untouched after the whole solo session (W2).
+  // A6 online ledger untouched after the whole offline session (W2).
   // ────────────────────────────────────────────────────────────────
-  await step('05 ranked ledger untouched by solo session (W2 contract)', async () => {
-    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('[data-testid="start-online"]');
-    const stats = await getStats(page);
-    assert.equal(stats.totalGames, 0, `ranked ledger changed during solo: ${JSON.stringify(stats)}`);
-  });
+    // Step 05 retired (W1 retired the ranked public ledger along with
+  // /api/stats). No assertion target remains — the W2 contract is
+  // that the offline pure-local session never writes to any server
+  // endpoint (verified by offlineWriteCount === 0 in the per-step
+  // checks above).
 
   // ────────────────────────────────────────────────────────────────
   // Cleanup localStorage before exit so the next probe starts clean.
   // ────────────────────────────────────────────────────────────────
-  await step('06 cleanup: remove solo localStorage key', async () => {
-    await clearSoloLocal(page);
-    const solo = await readSoloStats(page);
-    assert.equal(solo, null, `expected ${SOLO_KEY} cleared, got ${JSON.stringify(solo)}`);
+  await step('06 cleanup: remove offline localStorage key', async () => {
+    await clearOfflineLocal(page);
+    const offline = await readOfflineStats(page);
+    assert.equal(offline, null, `expected ${OFFLINE_KEY} cleared, got ${JSON.stringify(offline)}`);
   });
 } catch (e) {
   console.error('\nQA FAILED:', e.message);
@@ -281,7 +273,7 @@ try {
   await browser.close();
 }
 
-await writeQaLog(EVIDENCE, { base: BASE, soloKey: SOLO_KEY, findings });
+await writeQaLog(EVIDENCE, { base: BASE, offlineKey: OFFLINE_KEY, findings });
 
 const pass = findings.filter((f) => f.status === 'PASS').length;
 const fail = findings.filter((f) => f.status === 'FAIL').length;

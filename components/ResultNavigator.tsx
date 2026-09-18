@@ -9,11 +9,11 @@ type Props = {
    * W3 (ulw-one-game-two-versions A5) phase-driven navigation:
    * only online mode pushes /result on game end. Offline mode
    * keeps its existing in-page /solo auto-switch flow (W1 contract
-   * from 860a4dc, /solo never navigates to /result — see
-   * tests/qa/solo-mode-qa.mjs step "URL must NOT change").
+   * from 860a4dc, /offline never navigates to /result — see
+   * tests/qa/offline-mode-qa.mjs step "URL must NOT change").
    *
    * The navigator renders nothing — it is a pure side-effect
-   * component mounted next to the Board on /play so the navigation
+   * component mounted next to the Board on /online so the navigation
    * fires only after the store settles the win/draw.
    */
   mode: 'online' | 'offline';

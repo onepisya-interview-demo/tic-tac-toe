@@ -22,7 +22,7 @@ type Props = {
  *   mount via `<PlayController>` — W3 will rename /play → /online and
  *   W4 will rename /solo → /offline (per ulw-one-game-two-versions §1).
  * - Removed the `lastWriteAt` → router.replace('/result') effect: the
- *   ranked ledger (and its lastWriteAt stamp) is gone. /result becomes
+ *   online ledger (and its lastWriteAt stamp) is gone. /result becomes
  *   a per-name RSC reading the server row in W3.
  * - Auto-start contract preserved: idle OR mode-mismatch → restart() +
  *   startGame(mode). /offline still reseeds from localStorage via

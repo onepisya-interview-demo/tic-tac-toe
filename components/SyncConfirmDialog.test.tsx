@@ -150,7 +150,7 @@ describe('components/SyncConfirmDialog', () => {
     // name. The merged row is still returned by runMergeSequence
     // internally for symmetry / future callers, but the contract
     // HomeDialogMount consumes is name-only (the baseline sentinel
-    // it writes is always 0, derived from clearSoloStats()).
+    // it writes is always 0, derived from clearOfflineStats()).
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(

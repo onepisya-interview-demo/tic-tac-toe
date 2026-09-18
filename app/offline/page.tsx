@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { GameShell } from '@/components/GameShell';
 import { PlayController } from '@/components/PlayController';
 import { RestartButton } from '@/components/RestartButton';
-import { SoloConfetti } from '@/components/SoloConfetti';
-import { SoloStatsPanel } from '@/components/SoloStatsPanel';
+import { WinConfetti } from '@/components/WinConfetti';
+import { OfflineStatsPanel } from '@/components/OfflineStatsPanel';
 import { useGameStore } from '@/lib/store';
 
-type SoloView = 'board' | 'stats';
+type OfflineView = 'board' | 'stats';
 
 /**
  * Auto-switch delay (ms) from `phase→'won'` to view swap. Tuned so the
@@ -42,26 +42,26 @@ const DRAW_AUTO_SWITCH_MS = 600;
  *     text inside it is still role=status + aria-live=polite so the
  *     announcement contract is preserved.
  *   - Card body renders one of two views — Board (with inline
- *     SoloStatsPanel), wrapped in a ViewTransition keyed by the
+ *     OfflineStatsPanel), wrapped in a ViewTransition keyed by the
  *     current view. The `useTransition` wrapper is what activates the
  *     in-page update animation (React 19 <ViewTransition> only fires
  *     for transitions, not raw setState).
- *   - <SoloConfetti /> is hoisted to the Page level (outside both the
+ *   - <WinConfetti /> is hoisted to the Page level (outside both the
  *     outer <ViewTransition enter="page"> and the inner
  *     <ViewTransition key={view}>). It renders the win celebration
  *     testid target ONCE per game; toggling board↔stats does not
  *     remount it, so the burst does not replay (Bug B fix in
- *     components/SoloConfetti.tsx).
+ *     components/WinConfetti.tsx).
  *   - The Card receives `minH="28rem"` and
- *     `viewTransitionName="solo-card"` so the browser takes a single
+ *     `viewTransitionName="offline-card"` so the browser takes a single
  *     group snapshot of the OLD and NEW children and morphs them in
  *     place at a fixed height (Bug C height fix + rvt decision 3).
  *     The 28rem token matches the larger of the Board (~22rem) and
- *     SoloStatsPanel (~24rem) heights with comfortable breathing room
+ *     OfflineStatsPanel (~24rem) heights with comfortable breathing room
  *     so the grid-stack layout doesn't pack against the card edge.
  *   - Restart button is conditionally rendered for the 'board' view
  *     only — on the 'stats' view, the dedicated 「再来一局」 button
- *     inside SoloStatsPanel (rendered via the `actions` prop) is the
+ *     inside OfflineStatsPanel (rendered via the `actions` prop) is the
  *     equivalent restart affordance (Ulw W3 result-paginated
  *     experience; see plan .omo/plans/ulw-ux-refresh-pass.md §3 W3
  *     and §5 A6/A7).
@@ -82,16 +82,16 @@ const DRAW_AUTO_SWITCH_MS = 600;
  * effect cleanup cancels the pending timer if the phase changes again
  * (e.g. user clicks 重新开局 → phase becomes 'idle') so a stale
  * switch never fires after a manual restart. Solo never navigates to
- * /result (W1: ranked ledger retired; result navigation is W3 territory per ulw-one-game-two-versions §3 W3).
+ * /result (W1: online ledger retired; result navigation is W3 territory per ulw-one-game-two-versions §3 W3).
  */
-export default function SoloPage() {
-  const [view, setView] = useState<SoloView>('board');
+export default function OfflinePage() {
+  const [view, setView] = useState<OfflineView>('board');
   const [, startTransition] = useTransition();
   const phase = useGameStore((s) => s.phase);
   const restart = useGameStore((s) => s.restart);
 
   const toggleView = () => {
-    const next: SoloView = view === 'board' ? 'stats' : 'board';
+    const next: OfflineView = view === 'board' ? 'stats' : 'board';
     startTransition(() => setView(next));
   };
 
@@ -122,7 +122,7 @@ export default function SoloPage() {
   };
 
   // Board-view footer actions: 返回首页 + 重新开局. The stats view
-  // renders its own action row inside SoloStatsPanel (below the
+  // renders its own action row inside OfflineStatsPanel (below the
   // StatsGrid / ResetStatsButton) so we never duplicate the 返回首页
   // link on the same page surface.
   const actions = view === 'board' ? (
@@ -136,7 +136,7 @@ export default function SoloPage() {
     </>
   ) : null;
 
-  // Stats-view actions row: passed into SoloStatsPanel so the
+  // Stats-view actions row: passed into OfflineStatsPanel so the
   // "再来一局" + "返回首页" buttons sit at the bottom of the same card
   // the user is reviewing data on. playAgain calls store.restart()
   // then setView('board'); the effect cleanup for phase→'idle' then
@@ -147,7 +147,7 @@ export default function SoloPage() {
       <Button
         variant="primary"
         onClick={playAgain}
-        data-testid="play-again-solo"
+        data-testid="play-again-offline"
         className="w-full"
       >
         再来一局
@@ -156,7 +156,7 @@ export default function SoloPage() {
         <Button
           variant="secondary"
           className="w-full"
-          data-testid="back-home-solo"
+          data-testid="back-home-offline"
         >
           返回首页
         </Button>
@@ -171,7 +171,7 @@ export default function SoloPage() {
         viewToggle={{ pressed: view === 'stats', onToggle: toggleView }}
         actions={actions}
         cardMinH="28rem"
-        cardViewTransitionName="solo-card"
+        cardViewTransitionName="offline-card"
       >
         <ViewTransition key={view} update="view-swap" default="none">
           {view === 'board' ? (
@@ -179,18 +179,18 @@ export default function SoloPage() {
               <Board />
             </PlayController>
           ) : (
-            <SoloStatsPanel actions={statsActions} />
+            <OfflineStatsPanel actions={statsActions} />
           )}
         </ViewTransition>
       </GameShell>
-      {/* SoloConfetti is intentionally outside <GameShell> and outside the
+      {/* WinConfetti is intentionally outside <GameShell> and outside the
           inner <ViewTransition key={view}>: hoisting keeps the burst
           mount target stable across board↔stats toggles so the
           celebration fires exactly once per win (Bug B). The
           z-index-50 fixed overlay still covers the Card area on either
           view. The aria-hidden / pointer-events-none on the inner span
           keep it decorative — input is not intercepted on either view. */}
-      <SoloConfetti />
+      <WinConfetti />
     </ViewTransition>
   );
 }

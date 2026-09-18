@@ -15,10 +15,10 @@ import {
   type Player,
 } from './game';
 import {
-  clearSoloStats,
-  loadSoloStats,
-  persistSoloStats,
-} from './solo-stats';
+  clearOfflineStats,
+  loadOfflineStats,
+  persistOfflineStats,
+} from './offline-stats';
 import { postOutcome } from './game-net';
 import {
   clearPlayerName as clearPlayerNameLocal,
@@ -37,7 +37,7 @@ export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
  *   **无名不记**、W3 合并弹框是唯一网络写）。
  *
  * 差异仅记账路径：online 走 service，offline 走 localStorage
- * (`lib/solo-stats.ts`)。两者都遵守「无名不记」守卫：无名时根本不发
+ * (`lib/offline-stats.ts`)。两者都遵守「无名不记」守卫：无名时根本不发
  * 请求、不写本地账本（A4 前置）。
  */
 export type GameMode = 'online' | 'offline';
@@ -203,7 +203,7 @@ export const useGameStore = create<GameStore>((set) => ({
     if (resolvedMode === 'offline') {
       // Reload semantics: an offline session resumes from the browser-
       // persisted baseline so accumulation survives page reloads.
-      internalStats = loadSoloStats();
+      internalStats = loadOfflineStats();
       // Rehydrate the player name from localStorage when the store
       // booted without one (SSR first frame, fresh page navigation).
       if (!useGameStore.getState().playerName) {
@@ -261,7 +261,7 @@ export const useGameStore = create<GameStore>((set) => ({
       if (s.mode === 'offline') {
         // Offline: 100% 本地累加 + localStorage 持久化。零网络写。
         internalStats = recordOutcome(internalStats, win.player);
-        persistSoloStats(internalStats);
+        persistOfflineStats(internalStats);
         return;
       }
       // Online: W2 — wire to lib/game-net.ts:postOutcome →
@@ -289,7 +289,7 @@ export const useGameStore = create<GameStore>((set) => ({
       }
       if (s.mode === 'offline') {
         internalStats = recordOutcome(internalStats, 'draw');
-        persistSoloStats(internalStats);
+        persistOfflineStats(internalStats);
         return;
       }
       // Online: W2 — same seam as the win branch.
@@ -318,13 +318,13 @@ export const useGameStore = create<GameStore>((set) => ({
   resetOfflineStats: () => {
     // Defensive guard: resetOfflineStats is offline-mode-only. The sole
     // current caller is components/ResetStatsButton (scope='local',
-    // rendered only by SoloStatsPanel → app/solo/page.tsx), so this
+    // rendered only by OfflineStatsPanel → app/solo/page.tsx), so this
     // branch is unreachable in production today. It is added so a
     // future caller that forgets to gate on mode cannot silently wipe
     // the online internal cache (which will become a server-row
     // mirror in W2) with emptyStats().
     if (useGameStore.getState().mode !== 'offline') return;
-    clearSoloStats();
+    clearOfflineStats();
     internalStats = emptyStats();
   },
 

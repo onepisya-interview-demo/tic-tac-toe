@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadSoloRecord, mergeSoloRecord } from '@/lib/db';
+import { loadRecordByName, mergeRecordByName } from '@/lib/db';
 import { normalizePlayerName } from '@/lib/player-name';
 import { problemResponse } from '@/lib/api-problem';
 import { type GameStats } from '@/lib/game';
@@ -65,7 +65,7 @@ export async function POST(
     return problemResponse(422, 'invalid-request-shape');
   }
   try {
-    const existing = await loadSoloRecord(name);
+    const existing = await loadRecordByName(name);
     if (!existing) {
       // 409 防静默建档 — caller must run /api/sessions first.
       return problemResponse(
@@ -74,7 +74,7 @@ export async function POST(
         `No row for name "${name}". Register or log in before merging.`,
       );
     }
-    const stats = await mergeSoloRecord(name, body.stats);
+    const stats = await mergeRecordByName(name, body.stats);
     return NextResponse.json({ stats });
   } catch {
     return problemResponse(500, 'db-unavailable');

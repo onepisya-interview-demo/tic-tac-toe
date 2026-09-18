@@ -28,7 +28,7 @@ export default function PlayPage() {
       </PlayController>
       {/* W3 (ulw-one-game-two-versions A5): online mode pushes
           /result?name=... on win/draw; offline mode keeps the
-          existing in-page auto-switch flow on /solo. Mounting
+          existing in-page auto-switch flow on /offline. Mounting
           the navigator inside /play keeps the prop simple (we
           always pass mode='online' here) and lets the navigator
           ride along with the store lifecycle. */}

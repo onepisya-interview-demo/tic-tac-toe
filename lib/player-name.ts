@@ -1,14 +1,14 @@
 // Player-name persistence on top of browser localStorage.
-// Modeled after lib/solo-stats.ts (browser-persisted preference in its
+// Modeled after lib/offline-stats.ts (browser-persisted preference in its
 // own module): kept out of store.ts so the store engine stays about game
 // lifecycle + API sync, and so consumers that only need the persisted
-// baseline (e.g. SoloStatsPanel name resolution) don't have to import
+// baseline (e.g. OfflineStatsPanel name resolution) don't have to import
 // the whole store. All reads/writes are guarded and fail soft — private
 // browsing mode and quota errors degrade to "no name set" instead of
 // throwing mid-render.
 //
 // The whitelist below MUST mirror the server-side validator in
-// app/api/solo-stats/route.ts (trim → 1–24 chars → no control chars) so
+// app/api/offline-stats/route.ts (trim → 1–24 chars → no control chars) so
 // a POST the API would accept can also be saved, and a save the API
 // would reject can never be POSTed. Drift between the two breaks the
 // "save a name, play, see the same row on another device" loop.
@@ -24,7 +24,7 @@ const NAME_MIN = 1;
 
 /**
  * Whitelist check. Mirrors the server-side validator in
- * app/api/solo-stats/route.ts. Returns true iff `value` (after trim)
+ * app/api/offline-stats/route.ts. Returns true iff `value` (after trim)
  * has length in [NAME_MIN, NAME_MAX] and contains no character below
  * U+0020 / equal to U+007F (DEL) / in the C1 control range.
  */
@@ -48,7 +48,7 @@ export function isPlayerName(value: unknown): value is string {
  * passes `isPlayerName`; returns null otherwise. All four route
  * handlers under app/api/ import this so the whitelist cannot
  * drift between endpoints — the prior W3 setup duplicated the
- * rule inside `app/api/solo-stats/route.ts` and `app/api/solo-stats/sync/route.ts`,
+ * rule inside `app/api/offline-stats/route.ts` and `app/api/offline-stats/sync/route.ts`,
  * which AGENTS.md §本项目反模式 already flagged as the single
  * drift point to remove.
  *
@@ -106,7 +106,7 @@ export function clearPlayerName(): void {
 }
 
 /**
- * Sole shape known to lib/store.ts and lib/solo-stats.ts. Re-exported
+ * Sole shape known to lib/store.ts and lib/offline-stats.ts. Re-exported
  * here so consumers of player-name don't have to reach into game.ts
  * when they want to type a panel state.
  */

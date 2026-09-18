@@ -128,7 +128,7 @@ try {
       };
     });
     const samples = [];
-    for (const url of [`${BASE}/`, `${BASE}/play`]) {
+    for (const url of [`${BASE}/`, `${BASE}/online`]) {
       await page.goto(url, { waitUntil: "networkidle" });
       await page.waitForTimeout(500);
       const collected = await page.evaluate(() => ({
@@ -162,7 +162,7 @@ try {
       // Force a refetch of representative static assets; if the SW
       // were caching them they would land in the cache by now.
       await fetch("/").catch(() => {});
-      await fetch("/play").catch(() => {});
+      await fetch("/online").catch(() => {});
     });
     await page.waitForTimeout(500);
     const cacheDump = await page.evaluate(async () => {
@@ -279,7 +279,7 @@ try {
       // Reload /play so the page performs a full font preload +
       // @font-face request cycle; the response listener catches the
       // preload response specifically.
-      await page.goto(`${BASE}/play`, { waitUntil: "networkidle" });
+      await page.goto(`${BASE}/online`, { waitUntil: "networkidle" });
       await page.waitForTimeout(500);
     } finally {
       page.off("response", onResp);

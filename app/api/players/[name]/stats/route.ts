@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadSoloRecord } from '@/lib/db';
+import { loadRecordByName } from '@/lib/db';
 import { normalizePlayerName } from '@/lib/player-name';
 import { problemResponse } from '@/lib/api-problem';
 
@@ -28,7 +28,7 @@ export async function GET(
     return problemResponse(422, 'invalid-player-name');
   }
   try {
-    const stats = await loadSoloRecord(name);
+    const stats = await loadRecordByName(name);
     if (stats === null) {
       return problemResponse(404, 'stats-not-found', `No row for name "${name}".`);
     }

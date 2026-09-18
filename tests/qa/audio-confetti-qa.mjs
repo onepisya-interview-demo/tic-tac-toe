@@ -56,7 +56,7 @@ try {
   let winningPlayer = null;
   await step('start a game and drive whoever-is-first to a top-row win', async () => {
     await page.click('[data-testid="start-online"]');
-    await page.waitForURL('**/play');
+    await page.waitForURL('**/online');
     await page.waitForSelector('[data-testid="board"]');
     await page.waitForTimeout(300);
 

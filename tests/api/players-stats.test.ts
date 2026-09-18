@@ -21,30 +21,30 @@ const loadSoloRecordMock = vi.fn();
 const mergeSoloRecordMock = vi.fn();
 const recordOutcomeForNameMock = vi.fn();
 vi.doMock('@/lib/db', () => ({
-  loadSoloRecord: loadSoloRecordMock,
-  mergeSoloRecord: mergeSoloRecordMock,
+  loadRecordByName: loadSoloRecordMock,
+  mergeRecordByName: mergeSoloRecordMock,
   recordOutcomeForName: recordOutcomeForNameMock,
 }));
 
 const loadStatsRoute = async () => {
   vi.resetModules();
   vi.doMock('@/lib/db', () => ({
-    loadSoloRecord: loadSoloRecordMock,
+    loadRecordByName: loadSoloRecordMock,
   }));
   return import('@/app/api/players/[name]/stats/route');
 };
 const loadMergeRoute = async () => {
   vi.resetModules();
   vi.doMock('@/lib/db', () => ({
-    loadSoloRecord: loadSoloRecordMock,
-    mergeSoloRecord: mergeSoloRecordMock,
+    loadRecordByName: loadSoloRecordMock,
+    mergeRecordByName: mergeSoloRecordMock,
   }));
   return import('@/app/api/players/[name]/stats/merge/route');
 };
 const loadOutcomesRoute = async () => {
   vi.resetModules();
   vi.doMock('@/lib/db', () => ({
-    loadSoloRecord: loadSoloRecordMock,
+    loadRecordByName: loadSoloRecordMock,
     recordOutcomeForName: recordOutcomeForNameMock,
   }));
   return import('@/app/api/players/[name]/stats/outcomes/route');
@@ -145,7 +145,7 @@ describe('app/api/players/[name]/stats/route — GET', () => {
       });
     });
 
-    it('returns 500 problem+json (db-unavailable) when loadSoloRecord throws', async () => {
+    it('returns 500 problem+json (db-unavailable) when loadRecordByName throws', async () => {
       loadSoloRecordMock.mockRejectedValue(new Error('boom'));
       const { GET } = await loadStatsRoute();
       const res = await GET(
@@ -233,7 +233,7 @@ describe('app/api/players/[name]/stats/merge/route — POST', () => {
   });
 
   describe('merge behaviour', () => {
-    it('returns 200 { stats } after mergeSoloRecord folds client totals into server row', async () => {
+    it('returns 200 { stats } after mergeRecordByName folds client totals into server row', async () => {
       loadSoloRecordMock.mockResolvedValue({
         totalGames: 2, xWins: 1, oWins: 0, draws: 1, currentStreak: 1,
       });
@@ -277,12 +277,12 @@ describe('app/api/players/[name]/stats/merge/route — POST', () => {
       );
       const body = await expectProblemJson(res, 409, 'player-session-required');
       expect(body.detail).toContain('ghost');
-      // The 409 short-circuits before mergeSoloRecord runs — forged
+      // The 409 short-circuits before mergeRecordByName runs — forged
       // merge requests cannot trigger an upsert behind the user's back.
       expect(mergeSoloRecordMock).not.toHaveBeenCalled();
     });
 
-    it('returns 500 problem+json (db-unavailable) when mergeSoloRecord throws', async () => {
+    it('returns 500 problem+json (db-unavailable) when mergeRecordByName throws', async () => {
       loadSoloRecordMock.mockResolvedValue({
         totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0,
       });

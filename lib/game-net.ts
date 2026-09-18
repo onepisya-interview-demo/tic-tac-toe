@@ -17,7 +17,7 @@
 //
 // 8 s AbortController mirrors lib/store.ts:NETWORK_TIMEOUT_MS so a
 // Turso HTTP hang never freezes the UI for 30 s (B-2 reset observed
-// on the ranked ledger). The store action `apiRecordOutcome` is
+// on the online ledger). The store action `apiRecordOutcome` is
 // the sole consumer of `postOutcome`; the home-return dialog is the
 // sole consumer of `postMerge` + `postSession` (run as a
 // register-then-merge sequence); the OnlineStatsCard is the sole
@@ -116,7 +116,7 @@ export async function fetchPlayerStats(
 /**
  * POST /api/players/{name}/stats/merge { stats } → { stats: GameStats }.
  * Server folds client totals into the per-name row via per-field
- * addition (lib/db.ts:mergeSoloRecord). 409 problem+json when the
+ * addition (lib/db.ts:mergeRecordByName). 409 problem+json when the
  * row is absent (caller must run /api/sessions first); the
  * SyncConfirmDialog's `runMergeSequence` translates 409 into a
  * user-facing "需要先登录该账号" message.

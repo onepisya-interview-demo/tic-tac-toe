@@ -12,7 +12,7 @@
 //       the stats table itself within budget).
 //   A7  every route's .page-shell element has the same getBoundingClientRect
 //       .width as the first route (home) — within 1px slack.
-//   sticky  the GameShell <header> on /solo is `position: sticky; top: 0`;
+//   sticky  the GameShell <header> on /offline is `position: sticky; top: 0`;
 //       if the page actually scrolls, the header's getBoundingClientRect().top
 //       remains at 0px after scrolling.
 //
@@ -84,40 +84,40 @@ async function main() {
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
   await Promise.all([
-    page.waitForURL(`${BASE}/play`),
+    page.waitForURL(`${BASE}/online`),
     page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
   await shoot(page, '02-play.png');
-  report.stages.push({ stage: 'play', path: '/play', ...await snapshot(page) });
+  report.stages.push({ stage: 'play', path: '/online', ...await snapshot(page) });
 
   // 3. /solo board view
-  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
-  await shoot(page, '03-solo-board.png');
-  report.stages.push({ stage: 'solo-board', path: '/solo', ...await snapshot(page) });
+  await shoot(page, '03-offline-board.png');
+  report.stages.push({ stage: 'offline-board', path: '/offline', ...await snapshot(page) });
 
   // 4. /solo stats view (click view-toggle to flip into stats)
   await page.click('[data-testid="view-toggle"]');
-  await page.waitForSelector('[data-testid="solo-stats"]');
+  await page.waitForSelector('[data-testid="offline-stats"]');
   await page.waitForTimeout(220);
-  await shoot(page, '04-solo-stats.png');
-  report.stages.push({ stage: 'solo-stats', path: '/solo', ...await snapshot(page) });
+  await shoot(page, '04-offline-stats.png');
+  report.stages.push({ stage: 'offline-stats', path: '/offline', ...await snapshot(page) });
 
   // 5. /result — drive a ranked win (top-row); records actual overshoot
   // as INFO rather than failing on it. W3 /result is a per-name
-  // RSC reading the row from lib/db.ts:loadSoloRecord; navigation
+  // RSC reading the row from lib/db.ts:loadRecordByName; navigation
   // carries ?name=<player> (ResultNavigator pushes it).
   //
   // We navigate via the home start-online CTA so the page click
   // carries the store-bound playerName forward (the W3 online
-  // entry gate requires it; doing a fresh page.goto to /play
+  // entry gate requires it; doing a fresh page.goto to /online
   // would lose the Zustand playerName hydration).
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.click('[data-testid="start-online"]');
-  await page.waitForURL(`${BASE}/play`);
+  await page.waitForURL(`${BASE}/online`);
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
   await page.waitForURL(/\/result\?/);
@@ -131,7 +131,7 @@ async function main() {
   // scroll does nothing. Force overflow by injecting extra content into
   // the page (per-iteration cleanup so the rest of the probe is not
   // affected), then scroll and check the header sticks at the top.
-  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
   const sticky = await page.evaluate(async () => {

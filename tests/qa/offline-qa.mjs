@@ -22,8 +22,8 @@ import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/pure-local-qa";
 const PLAYER_KEY = "ttt.player.name.v1";
-const LOCAL_SOLO_KEY = "ttt.solo.stats.v1";
-const SYNCED_KEY = "ttt.solo.last-merged-local.v1";
+const LOCAL_OFFLINE_KEY = "ttt.offline.stats.v1";
+const OFFLINE_MERGED_KEY = "ttt.offline.last-merged-local.v1";
 const findings = [];
 
 // Unique-per-run names (plan §1.3 F3): pure-local-qa re-runs leave
@@ -48,22 +48,22 @@ async function step(name, fn) {
   }
 }
 
-async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
+async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="status-text"]');
     const text = await page.textContent('[data-testid="status-text"]');
     if (text.includes("X")) return;
     await page.reload({ waitUntil: "networkidle" });
   }
-  throw new Error("could not get an X-first solo game within 12 attempts");
+  throw new Error("could not get an X-first offline game within 12 attempts");
 }
 
 await ensureDir(EVIDENCE);
 const shoot = shootTo(EVIDENCE);
 
 // W2 RESTful surface: writes to /api/sessions + /api/players/{name}/stats/*
-// are the only network writes that should fire on /solo. Read traffic
+// are the only network writes that should fire on /offline. Read traffic
 // (GET /api/players/{name}/stats via the online card) is allowed by
 // the W1 contract; only writes must be 0 for the pure-local /solo flow.
 function isWriteToApi(method, url) {
@@ -92,13 +92,13 @@ try {
   // ─────────────────────────────────────────────────────────────────
   // A1: 断网 + 具名玩 3 局 → localStorage 战绩累计 3 且 /api/ 写请求 = 0
   // ─────────────────────────────────────────────────────────────────
-  await step("A1-named-solo-three-games-zero-writes", async () => {
+  await step("A1-named-offline-three-games-zero-writes", async () => {
     // Seed player name on the home page.
     const NAME_A1 = `purelocal-a1-${RUN_SUFFIX}`;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="player-name-input"]');
     await page.fill('[data-testid="player-name-input"]', NAME_A1);
@@ -107,13 +107,13 @@ try {
     // the only allowed write before the offline phase).
     await page.waitForTimeout(800);
 
-    // Navigate to /solo BEFORE installing the write-blocker. The
+    // Navigate to /offline BEFORE installing the write-blocker. The
     // blocker intercepts every /api/* POST/PUT/DELETE and aborts it,
     // so any hypothetical auto-POST (which pure-local should NOT
     // issue) would be visible as a writeCalls entry. localStorage
     // reads/writes and RSC navigations are unaffected.
     writeCalls.length = 0;
-    await reloadSoloUntilXFirst(page);
+    await reloadOfflineUntilXFirst(page);
     await page.route("**/api/**", async (route) => {
       const req = route.request();
       if (req.method() === "POST" || req.method() === "PUT" || req.method() === "DELETE") {
@@ -134,7 +134,7 @@ try {
     await page.waitForTimeout(220);
 
     // Game 2: restart and replay.
-    await reloadSoloUntilXFirst(page);
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => /X 获胜|平局/.test(
@@ -145,7 +145,7 @@ try {
     await page.waitForTimeout(220);
 
     // Game 3.
-    await reloadSoloUntilXFirst(page);
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => /X 获胜|平局/.test(
@@ -156,8 +156,8 @@ try {
     await page.waitForTimeout(220);
 
     // Assert localStorage accumulated 3 games.
-    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_SOLO_KEY);
-    assert.ok(raw, `expected ${LOCAL_SOLO_KEY} to exist after 3 games`);
+    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_OFFLINE_KEY);
+    assert.ok(raw, `expected ${LOCAL_OFFLINE_KEY} to exist after 3 games`);
     const stats = JSON.parse(raw);
     assert.equal(stats.totalGames, 3, `localStorage totalGames must be 3, got ${stats.totalGames}`);
     assert.equal(stats.xWins + stats.oWins + stats.draws, 3, "xWins+oWins+draws must equal 3");
@@ -166,7 +166,7 @@ try {
     assert.equal(
       writeCalls.length,
       0,
-      `offline named-solo games must NOT issue any /api/* writes; saw ${writeCalls.length}: ${JSON.stringify(writeCalls)}`,
+      `offline named-offline games must NOT issue any /api/* writes; saw ${writeCalls.length}: ${JSON.stringify(writeCalls)}`,
     );
 
     await shoot(page, "A1-three-games-offline.png");
@@ -204,14 +204,14 @@ try {
       `保留本地 must be zero network writes; saw ${writes.length}: ${JSON.stringify(writes)}`,
     );
     // Local must still hold the 3 games.
-    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_SOLO_KEY);
+    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_OFFLINE_KEY);
     assert.ok(raw && JSON.parse(raw).totalGames === 3, "local must be preserved after 保留本地");
     // sessionStorage sentinel records the declined pending.
-    const declined = await page.evaluate(() => window.sessionStorage.getItem("ttt.solo.sync-declined.v1"));
+    const declined = await page.evaluate(() => window.sessionStorage.getItem("ttt.offline.sync-declined.v1"));
     assert.equal(declined, "3", `sessionStorage declined sentinel must be 3 (got ${declined})`);
-    // Manually navigate to /play to assert the navigation path still works.
+    // Manually navigate to /online to assert the navigation path still works.
     await page.click('[data-testid="start-online"]');
-    await page.waitForURL("**/play", { timeout: 4000 });
+    await page.waitForURL("**/online", { timeout: 4000 });
     await shoot(page, "A2a-after-reject-on-play.png");
   });
 
@@ -224,8 +224,8 @@ try {
     // Clear any prior state from A1 — A1 used a different name.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="player-name-input"]');
     await page.fill('[data-testid="player-name-input"]', NAME_A2);
@@ -234,11 +234,11 @@ try {
     // Clear A2a's declined sentinel so A2b's pending > declined triggers
     // a fresh dialog open (W3 contract: sentinel survives a hard
     // reload, but a fresh name + fresh pending should re-open).
-    await page.evaluate(() => window.sessionStorage.removeItem("ttt.solo.sync-declined.v1"));
+    await page.evaluate(() => window.sessionStorage.removeItem("ttt.offline.sync-declined.v1"));
 
     // Seed local with 3 games (so pending = 3).
     await page.evaluate(([key, value]) => window.localStorage.setItem(key, value), [
-      LOCAL_SOLO_KEY,
+      LOCAL_OFFLINE_KEY,
       JSON.stringify({ totalGames: 3, xWins: 3, oWins: 0, draws: 0, currentStreak: 3 }),
     ]);
 
@@ -267,7 +267,7 @@ try {
     );
     await page.waitForTimeout(400);
     await page.click('[data-testid="start-online"]');
-    await page.waitForURL("**/play", { timeout: 8000 });
+    await page.waitForURL("**/online", { timeout: 8000 });
     await page.waitForTimeout(400);
 
     // The merge writes a single POST /sync (and possibly a PUT if the
@@ -284,7 +284,7 @@ try {
     );
 
     // Local must be cleared.
-    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_SOLO_KEY);
+    const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_OFFLINE_KEY);
     assert.equal(raw, null, "local must be cleared after 合并并清空");
 
     // Server row must be the per-field sum (server=0 + local=3 = 3).
@@ -301,11 +301,22 @@ try {
   // A3: pending=0 首页点「开始对战」 → 无弹框直行
   // ─────────────────────────────────────────────────────────────────
   await step("A3-pending-zero-no-dialog-direct-nav", async () => {
-    // Clean state: no name, no local, no sentinel.
+    // Clean state: no name, no local, no sentinel. W3 contract: a
+    // logged-in user with pending=0 must NOT see the merge dialog
+    // (HomeDialogMount mounts but its gate filters out pending <=
+    // sentinel); clicking start-online must navigate directly. The
+    // probe seeds a player name because the W3 requireName gate
+    // blocks anonymous clicks from navigating (separate assertion in
+    // one-identity-qa.mjs step b).
+    const NAME_A3 = `purelocal-a3-${RUN_SUFFIX}`;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: PLAYER_KEY, n: NAME_A3 },
+    );
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-online"]');
 
@@ -314,7 +325,7 @@ try {
     // Wait briefly — the navigation must fire before any dialog can
     // appear. If the intercept were buggy, the dialog would mount
     // within ~50ms of the click.
-    await page.waitForURL("**/play", { timeout: 4000 });
+    await page.waitForURL("**/online", { timeout: 4000 });
     await page.waitForTimeout(220);
 
     const dialogOpen = await page.evaluate(
@@ -337,7 +348,7 @@ try {
   // ─────────────────────────────────────────────────────────────────
   // A4 (W2 纯净化): preset playerName in localStorage + mount /solo →
   // 全程 /api/ 请求计数 = 0，断言 stale testid 不再渲染
-  //   - solo-sync / sync-confirm-dialog / PlayerNameForm 必须不在 /solo
+  //   - solo-sync / sync-confirm-dialog / PlayerNameForm 必须不在 /offline
   //   - 清空 localStorage 后刷新仍零请求（持久化不触发 GET）
   // ─────────────────────────────────────────────────────────────────
   await step("A4-named-mount-zero-network-no-stale-testid", async () => {
@@ -346,24 +357,24 @@ try {
     // to render.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
-    await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
     await page.evaluate(
       ({ key, value }) => window.localStorage.setItem(key, value),
       { key: PLAYER_KEY, value: NAME_A4 },
     );
     await page.evaluate(
       ({ key, value }) => window.localStorage.setItem(key, value),
-      { key: LOCAL_SOLO_KEY, value: JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }) },
+      { key: LOCAL_OFFLINE_KEY, value: JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }) },
     );
     await page.reload({ waitUntil: "networkidle" });
 
-    // Reset request counter, navigate to /solo, mount the stats view.
+    // Reset request counter, navigate to /offline, mount the stats view.
     writeCalls.length = 0;
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="view-toggle"]');
     await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForSelector('[data-testid="offline-stats"]');
     // Allow any hypothetical hydration effect to fire.
     await page.waitForTimeout(500);
 
@@ -372,44 +383,44 @@ try {
     assert.equal(
       apiWrites.length,
       0,
-      `preset name + /solo mount must NOT issue any /api/* request; saw ${apiWrites.length}: ${JSON.stringify(apiWrites)}`,
+      `preset name + /offline mount must NOT issue any /api/* request; saw ${apiWrites.length}: ${JSON.stringify(apiWrites)}`,
     );
 
-    // Stale W1 testid nodes must be absent from the /solo surface.
+    // Stale W1 testid nodes must be absent from the /offline surface.
     const stale = await page.evaluate(() => ({
-      syncButton: !!document.querySelector('[data-testid="solo-sync"]'),
+      syncButton: !!document.querySelector('[data-testid="offline-sync"]'),
       syncDialog: !!document.querySelector('[data-testid="sync-confirm-dialog"]'),
-      mergeNote: !!document.querySelector('[data-testid="solo-stats-merge-note"]'),
-      statsError: !!document.querySelector('[data-testid="solo-stats-error"]'),
+      mergeNote: !!document.querySelector('[data-testid="offline-stats-merge-note"]'),
+      statsError: !!document.querySelector('[data-testid="offline-stats-error"]'),
       playerNameForm: !!document.querySelector('[data-testid="player-name-section"]'),
     }));
-    assert.equal(stale.syncButton, false, "solo-sync button must be absent on /solo (W2 纯净化)");
-    assert.equal(stale.syncDialog, false, "sync-confirm-dialog must be absent on /solo (W2 纯净化)");
-    assert.equal(stale.mergeNote, false, "solo-stats-merge-note must be absent on /solo (W2 纯净化)");
-    assert.equal(stale.statsError, false, "solo-stats-error must be absent on /solo (W2 纯净化)");
-    assert.equal(stale.playerNameForm, false, "PlayerNameForm must NOT render on /solo (W2 纯净化)");
+    assert.equal(stale.syncButton, false, "offline-sync button must be absent on /offline (W2 纯净化)");
+    assert.equal(stale.syncDialog, false, "sync-confirm-dialog must be absent on /offline (W2 纯净化)");
+    assert.equal(stale.mergeNote, false, "offline-stats-merge-note must be absent on /offline (W2 纯净化)");
+    assert.equal(stale.statsError, false, "offline-stats-error must be absent on /offline (W2 纯净化)");
+    assert.equal(stale.playerNameForm, false, "PlayerNameForm must NOT render on /offline (W2 纯净化)");
 
     // Heading should still be the anonymous 「单机战绩」 (no name suffix).
-    const heading = await page.textContent('[data-testid="solo-stats-heading"]');
+    const heading = await page.textContent('[data-testid="offline-stats-heading"]');
     assert.equal(
       heading?.trim(),
       "单机战绩",
-      `heading must be the anonymous 「单机战绩」 (no name suffix on /solo); got ${heading}`,
+      `heading must be the anonymous 「单机战绩」 (no name suffix on /offline); got ${heading}`,
     );
 
     // After clearing localStorage and reloading, the panel must still
     // have issued zero network requests.
-    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
     writeCalls.length = 0;
     await page.reload({ waitUntil: "networkidle" });
     await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForSelector('[data-testid="offline-stats"]');
     await page.waitForTimeout(500);
     const apiAfterClear = writeCalls.filter((c) => c.url.includes("/api/"));
     assert.equal(
       apiAfterClear.length,
       0,
-      `after clearing localStorage, /solo reload must NOT issue /api/*; saw ${apiAfterClear.length}: ${JSON.stringify(apiAfterClear)}`,
+      `after clearing localStorage, /offline reload must NOT issue /api/*; saw ${apiAfterClear.length}: ${JSON.stringify(apiAfterClear)}`,
     );
 
     await shoot(page, "A4-named-zero-network.png");

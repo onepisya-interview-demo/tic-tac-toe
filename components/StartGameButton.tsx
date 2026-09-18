@@ -6,7 +6,7 @@ import { useGameStore, type GameMode } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 type Props = {
-  /** Navigation target: /play for online, /solo for offline. */
+  /** Navigation target: /online for online, /offline for offline. */
   href: string;
   /** Visible CTA label. */
   label: string;
@@ -47,7 +47,7 @@ type Props = {
  *   Empty playerName + click → no nav, dispatch a
  *   `ttt:player-name-required` event so the PlayerNameForm (or its
  *   parent) can focus the input. With a name → startGame('online')
- *   → router.push('/play').
+ *   → router.push('/online').
  * - Offline CTA passes `requireName={false}` so W2's "无身份可玩
  *   solo" contract stays intact.
  *

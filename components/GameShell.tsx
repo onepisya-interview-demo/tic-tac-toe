@@ -23,7 +23,7 @@ type Props = {
   /** Optional view toggle for the header center slot. When provided, the
    *  StatusBarClient gets wrapped in a real <button> with aria-pressed and
    *  data-testid="view-toggle" so the central area becomes a clickable
-   *  board↔stats switch on /solo. The toggle never carries an h1 (rule:
+   *  board↔stats switch on /offline. The toggle never carries an h1 (rule:
    *  exactly one h1 per page); status-bar / status-text testids and
    *  aria-live="polite" stay intact inside the button so the announcement
    *  contract is preserved. When omitted, the slot renders the plain
@@ -39,9 +39,9 @@ type Props = {
   cardMinH?: string;
   /**
    * Optional `view-transition-name` passed through to the Card. Pass a
-   * stable token (e.g. `'solo-card'`) to make the OLD/NEW snapshots
+   * stable token (e.g. `'offline-card'`) to make the OLD/NEW snapshots
    * morph in place instead of crossfading separately. /solo passes
-   * `'solo-card'`; /play and /result leave it undefined (no morph).
+   * `'offline-card'`; /play and /result leave it undefined (no morph).
    */
   cardViewTransitionName?: string;
 };
@@ -76,7 +76,7 @@ type Props = {
  *   max only across the four phase messages.
  *
  * Card body uses an optional `view-transition-name` (passed by the
- * /solo page as `'solo-card'`) so the board↔stats swap morphs in
+ * /solo page as `'offline-card'`) so the board↔stats swap morphs in
  * place; the Card itself also has a min-h that matches the larger of
  * the two views so the row's vertical position never jumps either.
  *

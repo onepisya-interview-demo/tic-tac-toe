@@ -10,12 +10,12 @@ import {
 } from '@/components/SyncConfirmDialog';
 import { useGameStore } from '@/lib/store';
 import {
-  SOLO_LAST_MERGED_LOCAL_KEY,
-  SOLO_STATS_KEY,
-  clearSoloStats,
+  OFFLINE_LAST_MERGED_LOCAL_KEY,
+  OFFLINE_STATS_KEY,
+  clearOfflineStats,
   pendingSyncCount,
   persistLastMergedLocal,
-} from '@/lib/solo-stats';
+} from '@/lib/offline-stats';
 
 /**
  * Home-return sync dialog mount
@@ -24,24 +24,24 @@ import {
  * The home page renders this client component once. Its mount effect
  * decides whether to open the SyncConfirmDialog based on:
  *   pending = max(0, local.totalGames - lastMergedLocal)
- *   declined = sessionStorage[ttt.solo.sync-declined.v1]
+ *   declined = sessionStorage[ttt.offline.sync-declined.v1]
  *   → open when pending > declined (D3 决策 + A3 验收)
  *
  * W4 F1: the `lastMergedLocal` baseline is 0 right after a successful
- * merge (clearSoloStats() already ran), so `pending === local`. The
+ * merge (clearOfflineStats() already ran), so `pending === local`. The
  * dialog text "本机 N 局" therefore always matches the snapshot
  * that postSoloSync will actually send. (Pre-F1 the sentinel stored
  * the server's absolute totalGames, leaving a catch-up window where
  * pending < local and the text under-reported the payload — see
- * V4 MINOR-F1 and lib/solo-stats.ts:SOLO_LAST_MERGED_LOCAL_KEY.)
+ * V4 MINOR-F1 and lib/offline-stats.ts:OFFLINE_LAST_MERGED_LOCAL_KEY.)
  *
  * Trigger coverage (A3 / B-T4):
  *  - Initial mount after a soft-navigation return to `/` (Next App
  *    Router re-runs the effect when pathname changes back to '/').
  *  - Hard reload on `/` (initial mount fires).
  *  - Tab refocus / bfcache restore via `focus` + `visibilitychange`.
- *  - `ttt:solo-stats-changed` custom event (dispatched after every
- *    solo game settles, so a long-running session that never leaves
+ *  - `ttt:offline-stats-changed` custom event (dispatched after every
+ *    offline game settles, so a long-running session that never leaves
  *    home still re-evaluates — defence in depth).
  *
  * On confirm success: clear local + write syncedServerTotal to the
@@ -74,11 +74,11 @@ export function HomeDialogMount() {
     evaluate();
     window.addEventListener('focus', evaluate);
     document.addEventListener('visibilitychange', evaluate);
-    window.addEventListener('ttt:solo-stats-changed', evaluate);
+    window.addEventListener('ttt:offline-stats-changed', evaluate);
     const onStorage = (e: StorageEvent): void => {
       if (
-        e.key === SOLO_STATS_KEY ||
-        e.key === SOLO_LAST_MERGED_LOCAL_KEY
+        e.key === OFFLINE_STATS_KEY ||
+        e.key === OFFLINE_LAST_MERGED_LOCAL_KEY
       ) {
         evaluate();
       }
@@ -87,7 +87,7 @@ export function HomeDialogMount() {
     return () => {
       window.removeEventListener('focus', evaluate);
       document.removeEventListener('visibilitychange', evaluate);
-      window.removeEventListener('ttt:solo-stats-changed', evaluate);
+      window.removeEventListener('ttt:offline-stats-changed', evaluate);
       window.removeEventListener('storage', onStorage);
     };
   }, [pathname]);
@@ -105,7 +105,7 @@ export function HomeDialogMount() {
     // SyncConfirmDialog has already completed the postPlayerSession +
     // postSoloSync sequence and forwarded the server-merged row.
     // The F1 baseline model (W4) sets the post-merge local baseline
-    // to 0, the canonical value right after clearSoloStats() runs.
+    // to 0, the canonical value right after clearOfflineStats() runs.
     // pendingSyncCount() now reads this baseline, so the next
     // home-return has pending = local - 0 = local — the dialog
     // text "本机 N 局" always matches the data the next merge
@@ -113,7 +113,7 @@ export function HomeDialogMount() {
     // absolute totalGames, leaving a catch-up window where the
     // text under-reported the payload — see V4 MINOR-F1.)
     persistLastMergedLocal(0);
-    clearSoloStats();
+    clearOfflineStats();
     clearDeclinedPending();
     setOpen(false);
     // If the user just used the dialog to register a new identity
@@ -127,7 +127,7 @@ export function HomeDialogMount() {
     // (onConfirm after runMergeSequence resolves) reaches here — the
     // reject path never invokes handleConfirm. Safe by construction.
     window.dispatchEvent(
-      new CustomEvent('ttt:solo-stats-changed', { detail: { source: 'merge' } }),
+      new CustomEvent('ttt:offline-stats-changed', { detail: { source: 'merge' } }),
     );
   }
 

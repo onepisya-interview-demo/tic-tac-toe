@@ -10,7 +10,7 @@
 // contract pinned by the existing snapshot() helper.
 //
 // The /solo stage now drives the view-toggle (board↔stats) introduced by
-// the W-UI wave 1 (ulw-ux-mobile-sync T3): SoloStatsPanel renders only
+// the W-UI wave 1 (ulw-ux-mobile-sync T3): OfflineStatsPanel renders only
 // when the toggle is in the stats position, so visual-qa must click
 // [data-testid="view-toggle"] before reading the stats surface.
 
@@ -115,7 +115,7 @@ async function desktopPass(page, shoot, log) {
 
   // ---- 2. Click 开始游戏 → /play ----
   await Promise.all([
-    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
     page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
@@ -151,7 +151,7 @@ async function desktopPass(page, shoot, log) {
 
   // ---- 6. Play again flow ----
   await Promise.all([
-    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
     page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
@@ -161,27 +161,27 @@ async function desktopPass(page, shoot, log) {
   log.push({ stage: 'play-again', shot: replayShot, snapshot: replaySnap });
 
   // ---- 7. /solo route — board view (default) + stats view (after toggle) ----
-  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
-  const soloBoardShot = await shoot(page, '06a-solo-board.png');
-  const soloBoardSnap = await snapshot(page);
-  log.push({ stage: 'solo-board', shot: soloBoardShot, snapshot: soloBoardSnap });
+  const offlineBoardShot = await shoot(page, '06a-offline-board.png');
+  const offlineBoardSnap = await snapshot(page);
+  log.push({ stage: 'offline-board', shot: offlineBoardShot, snapshot: offlineBoardSnap });
 
   // Click view-toggle to swap to stats view (T3 in-page swap).
   await page.click('[data-testid="view-toggle"]');
-  await page.waitForSelector('[data-testid="solo-stats"]');
+  await page.waitForSelector('[data-testid="offline-stats"]');
   await page.waitForTimeout(220);
-  const soloStatsShot = await shoot(page, '06b-solo-stats.png');
-  const soloStatsSnap = await snapshot(page);
-  log.push({ stage: 'solo-stats', shot: soloStatsShot, snapshot: soloStatsSnap });
+  const offlineStatsShot = await shoot(page, '06b-offline-stats.png');
+  const offlineStatsSnap = await snapshot(page);
+  log.push({ stage: 'offline-stats', shot: offlineStatsShot, snapshot: offlineStatsSnap });
 }
 
 async function mobilePass(page, shoot, log) {
   // All four canonical routes at 375×667 (iPhone SE first-gen reference).
   // Per-stage contract: scrollWidth === clientWidth (no horizontal overflow).
   // Each stage opens the same browser tab sequentially (single context) to
-  // share localStorage state where useful (e.g. home reset before /solo).
+  // share localStorage state where useful (e.g. home reset before /offline).
   const stages = [];
 
   // Home: reset stats first so we capture a clean empty-state home.
@@ -195,7 +195,7 @@ async function mobilePass(page, shoot, log) {
 
   // /play
   await Promise.all([
-    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
     page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
@@ -205,28 +205,28 @@ async function mobilePass(page, shoot, log) {
   stages.push({ stage: 'm-play', overflow: playOverflow });
 
   // /solo — capture both views (board default + stats after toggle).
-  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
-  await shoot(page, 'm3a-solo-board.png');
-  const soloBoardOverflow = await mobileOverflow(page);
-  stages.push({ stage: 'm-solo-board', overflow: soloBoardOverflow });
+  await shoot(page, 'm3a-offline-board.png');
+  const offlineBoardOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-offline-board', overflow: offlineBoardOverflow });
 
   // Click view-toggle → stats view.
   await page.click('[data-testid="view-toggle"]');
-  await page.waitForSelector('[data-testid="solo-stats"]');
+  await page.waitForSelector('[data-testid="offline-stats"]');
   await page.waitForTimeout(220);
-  await shoot(page, 'm3b-solo-stats.png');
-  const soloStatsOverflow = await mobileOverflow(page);
-  stages.push({ stage: 'm-solo-stats', overflow: soloStatsOverflow });
+  await shoot(page, 'm3b-offline-stats.png');
+  const offlineStatsOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-offline-stats', overflow: offlineStatsOverflow });
 
-  // /result — drive a ranked win on /play then navigate. The previous
-  // step left us on /solo (stats view) which has no start-online button,
+  // /result — drive a ranked win on /online then navigate. The previous
+  // step left us on /offline (stats view) which has no start-online button,
   // so go via home (carry the store-bound playerName) rather than
   // direct goto (would lose the Zustand hydration).
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.click('[data-testid="start-online"]');
-  await page.waitForURL(`${BASE}/play`, { timeout: 5000 });
+  await page.waitForURL(`${BASE}/online`, { timeout: 5000 });
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
   await page.waitForURL(/\/result\?/, { timeout: 5000 });

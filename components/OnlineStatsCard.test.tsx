@@ -50,7 +50,7 @@ describe('components/OnlineStatsCard', () => {
     expect(url).toBe('/api/players/alice/stats');
     expect(screen.getByTestId('online-stats-grid')).toBeInTheDocument();
     // Response stays in component state — localStorage never touched.
-    expect(window.localStorage.getItem('ttt.solo.stats.v1')).toBeNull();
+    expect(window.localStorage.getItem('ttt.offline.stats.v1')).toBeNull();
   });
 
   it('server returns {stats:null} → 「该名字尚无战绩记录」提示', async () => {
@@ -75,6 +75,6 @@ describe('components/OnlineStatsCard', () => {
     const err = await screen.findByTestId('online-stats-error');
     expect(err).toBeInTheDocument();
     expect(err.getAttribute('role')).toBe('alert');
-    expect(window.localStorage.getItem('ttt.solo.stats.v1')).toBeNull();
+    expect(window.localStorage.getItem('ttt.offline.stats.v1')).toBeNull();
   });
 });

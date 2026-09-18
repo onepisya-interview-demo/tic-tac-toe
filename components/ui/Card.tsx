@@ -5,14 +5,14 @@ type Props = HTMLAttributes<HTMLDivElement> & {
   /**
    * `min-height` token applied to the Card root. Use when the Card
    * swaps between two children of differing intrinsic heights (e.g.
-   * /solo's Board ↔ SoloStatsPanel) and you want the surrounding row
+   * /solo's Board ↔ OfflineStatsPanel) and you want the surrounding row
    * to stay put while the content crossfades. Accepts any CSS length
    * (e.g. `'28rem'`, `'360px'`); left undefined = no min-height.
    */
   minH?: string;
   /**
    * `view-transition-name` applied to the Card root. Pass a stable
-   * token (e.g. `'solo-card'`) so the browser groups the OLD and NEW
+   * token (e.g. `'offline-card'`) so the browser groups the OLD and NEW
    * snapshots of the Card into a single morph instead of swapping
    * them separately. Required on both ends of an in-place content
    * swap; left undefined = no morph (legacy crossfade). The matching
@@ -30,7 +30,7 @@ type Props = HTMLAttributes<HTMLDivElement> & {
  *
  * `viewTransitionName` is intentionally NOT in HTMLAttributes so the
  * API stays self-documenting: it exists to make the `view-transition`
- * platform API work for the /solo board↔stats swap without leaking
+ * platform API work for the /offline board↔stats swap without leaking
  * into other Card uses (home stats cards never animate). Inline style
  * is the safest carrier — React forwards it to the DOM and the
  * browser accepts `view-transition-name` as a regular CSS property

@@ -12,8 +12,8 @@
 //   A7 跨设备只读恢复:
 //      a) A 设备 sync 3 局 → fresh context (B 设备) 输同 name →
 //         线上战绩卡显示 3 局 (Step 7)
-//      b) B 的 ttt.solo.* keys 全程为空 (Step 7)
-//      c) B 玩 solo 从 0 独立累计 (Step 8)
+//      b) B 的 ttt.offline.* keys 全程为空 (Step 7)
+//      c) B 玩 offline 从 0 独立累计 (Step 8)
 //
 // Usage:
 //   node tests/qa/home-return-qa.mjs          (needs pnpm build && pnpm start on :3101)
@@ -28,9 +28,9 @@ import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/home-return-qa";
 const PLAYER_KEY = "ttt.player.name.v1";
-const LOCAL_SOLO_KEY = "ttt.solo.stats.v1";
-const SYNCED_KEY = "ttt.solo.last-merged-local.v1";
-const DECLINED_KEY = "ttt.solo.sync-declined.v1";
+const LOCAL_OFFLINE_KEY = "ttt.offline.stats.v1";
+const OFFLINE_MERGED_KEY = "ttt.offline.last-merged-local.v1";
+const DECLINED_KEY = "ttt.offline.sync-declined.v1";
 const RUN_SUFFIX = String(Date.now() % 1000000).padStart(6, "0");
 const findings = [];
 
@@ -80,9 +80,9 @@ async function captureSessionStorage(page) {
   return await page.evaluate(() => ({ ...window.sessionStorage }));
 }
 
-async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
+async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
     // status-bar is always rendered; status-text only appears when the
     // active cell is in playing state. Wait for the bar first so we
     // know the client has hydrated.
@@ -94,20 +94,20 @@ async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
     if (text && text.includes("X")) return;
     await page.reload({ waitUntil: "networkidle" });
   }
-  throw new Error("could not get an X-first solo game within 12 attempts");
+  throw new Error("could not get an X-first offline game within 12 attempts");
 }
 
 // Server reset helper.
 // W1 retired /api/stats; W2 ships POST /api/sessions with no DELETE
 // counterpart. The hermetic test DB lives at /tmp/ulw-og2v/w3.db
 // (recreated once per run), so steps that need a clean baseline
-// use unique names via seedSoloRowViaApi. This helper is now a
+// use unique names via seedRecordRowViaApi. This helper is now a
 // no-op for symmetry with the rest of the W3 probe surface.
 async function resetServer(_page) {
   // intentionally empty — see comment above
 }
 
-async function seedSoloRowViaApi(ctx, name, stats) {
+async function seedRecordRowViaApi(ctx, name, stats) {
   // Register / login first to create the row, then fold via /merge.
   const session = await ctx.request.post(`${BASE}/api/sessions`, {
     data: { name },
@@ -141,22 +141,23 @@ await step("step 01 reset server + verify home landing renders", async () => {
   }
 });
 
-await step("step 02 solo → 回首页 + pending>0 → 弹框现 (A3 first branch)", async () => {
+await step("step 02 offline → 回首页 + pending>0 → 弹框现 (A3 first branch)", async () => {
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
     // Seed a name so the W2 pure-local 守卫 (store.ts:makeMove
     // isAnonymous branch) actually writes to localStorage on win.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    // Play 1 solo game via UI on /solo.
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    // Play 1 offline game via UI on /offline.
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
+    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
     const localBefore = await captureLocalStorage(page);
-    assert.equal(localBefore[LOCAL_SOLO_KEY] !== undefined, true, "local solo stats present");
+    assert.equal(localBefore[LOCAL_OFFLINE_KEY] !== undefined, true, "local offline stats present");
     // Click 返回首页 link.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     // The home-return dialog should now be visible.
@@ -180,10 +181,13 @@ await step("step 03 pending=0 首页直接起战不弹不拦 (A3 second branch)"
     // effect (post-hydration) rehydrates the store from localStorage,
     // which the StartGameButton's requireName gate reads.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-      window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
-    });
+    await page.evaluate(
+      (n) => {
+        window.localStorage.setItem("ttt.player.name.v1", n);
+        window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+      },
+      `hrqa-${RUN_SUFFIX}`,
+    );
     await page.reload({ waitUntil: "networkidle" });
     // Wait for the PlayerNameForm's post-hydration reverse hydration
     // to set the store. The folded testid confirms it landed.
@@ -201,7 +205,7 @@ await step("step 03 pending=0 首页直接起战不弹不拦 (A3 second branch)"
       "no dialog on clean home",
     );
     await Promise.all([
-      page.waitForURL(/\/play$/),
+      page.waitForURL(/\/online$/),
       page.click('[data-testid="start-online"]'),
     ]);
     await page.waitForSelector('[data-testid="status-bar"]');
@@ -218,18 +222,20 @@ await step("step 04 「保留本地」: 零网络写 + sessionStorage 标记写 
     // Seed a name so the W2 pure-local 守卫 actually writes to
     // localStorage on win.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
     // Seed 1 pending game.
 // Seed player name so W2 pure-local 守卫 writes localStorage.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
+    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
     // Track network writes from this point.
     const writesAfterSeed = [];
     page.on("request", (req) => {
@@ -266,7 +272,7 @@ await step("step 04 「保留本地」: 零网络写 + sessionStorage 标记写 
     );
     // localStorage solo stats unchanged.
     const local = await captureLocalStorage(page);
-    assert.equal(local[LOCAL_SOLO_KEY] !== undefined, true, "local stats preserved");
+    assert.equal(local[LOCAL_OFFLINE_KEY] !== undefined, true, "local stats preserved");
   } finally {
     await browser.close();
   }
@@ -278,12 +284,13 @@ await step("step 05 同会话 pending 无增量不重弹 (含刷新) (A3 fourth 
     await resetServer(page);
 // Seed player name so W2 pure-local 守卫 writes localStorage.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
+    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
@@ -318,12 +325,13 @@ await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fi
     // 1 game → declined sentinel = 1.
 // Seed player name so W2 pure-local 守卫 writes localStorage.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
+    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
@@ -333,10 +341,11 @@ await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fi
     // Play 1 more → pending=2 > declined=1 → re-opens.
 // Seed player name so W2 pure-local 守卫 writes localStorage.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForTimeout(200);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -352,14 +361,14 @@ await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fi
   }
 });
 
-await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显示 3 局 + solo key 全程为空 (A7)", async () => {
+await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显示 3 局 + offline key 全程为空 (A7)", async () => {
   // A 设备 seed: register name + sync 3 games.
   const browserA = await launchBrowser();
   try {
     const ctxA = await browserA.newContext();
     const pageA = await ctxA.newPage();
     await resetServer(pageA);
-    await seedSoloRowViaApi(ctxA, `hrqa-${RUN_SUFFIX}-b`, {
+    await seedRecordRowViaApi(ctxA, `hrqa-${RUN_SUFFIX}-b`, {
       totalGames: 3,
       xWins: 2,
       oWins: 0,
@@ -380,10 +389,10 @@ await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显�
     const pageB = await ctxB.newPage();
     // Navigate to / first so window.localStorage is accessible
     // (about:blank throws SecurityError). Then sanity-check the fresh
-    // context has no name / solo keys before any UI interaction.
+    // context has no name / offline keys before any UI interaction.
     await pageB.goto(`${BASE}/`, { waitUntil: "networkidle" });
     const localStart = await captureLocalStorage(pageB);
-    assert.equal(localStart[LOCAL_SOLO_KEY], undefined, "no local solo key on fresh context");
+    assert.equal(localStart[LOCAL_OFFLINE_KEY], undefined, "no local offline key on fresh context");
     assert.equal(localStart[PLAYER_KEY], undefined, "no name key on fresh context");
     // Type + save the name via the PlayerNameForm. The form posts to
     // /api/sessions which returns existed:true (登录).
@@ -409,15 +418,15 @@ await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显�
     // even after viewing the online card.
     const localAfter = await captureLocalStorage(pageB);
     assert.equal(
-      localAfter[LOCAL_SOLO_KEY],
+      localAfter[LOCAL_OFFLINE_KEY],
       undefined,
-      `A2: localStorage ${LOCAL_SOLO_KEY} must remain undefined after viewing online card (got ${localAfter[LOCAL_SOLO_KEY]})`,
+      `A2: localStorage ${LOCAL_OFFLINE_KEY} must remain undefined after viewing online card (got ${localAfter[LOCAL_OFFLINE_KEY]})`,
     );
-    // And no solo-sentinel either.
+    // And no offline-sentinel either.
     assert.equal(
-      localAfter[SYNCED_KEY],
+      localAfter[OFFLINE_MERGED_KEY],
       undefined,
-      `A2: localStorage ${SYNCED_KEY} must remain undefined (got ${localAfter[SYNCED_KEY]})`,
+      `A2: localStorage ${OFFLINE_MERGED_KEY} must remain undefined (got ${localAfter[OFFLINE_MERGED_KEY]})`,
     );
     // name key WAS written (this is the identity region contract).
     assert.equal(
@@ -431,7 +440,7 @@ await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显�
   }
 });
 
-await step("step 08 fresh context B 玩 solo 从 0 独立累计 (A7 continuation)", async () => {
+await step("step 08 fresh context B 玩 offline 从 0 独立累计 (A7 continuation)", async () => {
   const browser = await launchBrowser();
   try {
     const ctx = await browser.newContext();
@@ -443,18 +452,18 @@ await step("step 08 fresh context B 玩 solo 从 0 独立累计 (A7 continuation
     await page.waitForSelector('[data-testid="online-stats-grid"]', {
       timeout: 4000,
     });
-    // Play 1 solo game — local starts at 0. PlayerNameForm's
+    // Play 1 offline game — local starts at 0. PlayerNameForm's
     // submit handler wrote `hrqa-${RUN_SUFFIX}-b` to localStorage
     // above; nothing else needed.
-    await reloadSoloUntilXFirst(page);
+    await reloadOfflineUntilXFirst(page);
     const localBefore = await captureLocalStorage(page);
-    const before = localBefore[LOCAL_SOLO_KEY] ? JSON.parse(localBefore[LOCAL_SOLO_KEY]) : null;
+    const before = localBefore[LOCAL_OFFLINE_KEY] ? JSON.parse(localBefore[LOCAL_OFFLINE_KEY]) : null;
     assert.ok(!before || before.totalGames === 0, `local starts at 0 (got ${JSON.stringify(before)})`);
     await driveTopRowWin(page);
     await page.waitForTimeout(200);
     const localAfter = await captureLocalStorage(page);
-    const after = JSON.parse(localAfter[LOCAL_SOLO_KEY]);
-    assert.equal(after.totalGames, 1, "B solo accumulates locally from 0");
+    const after = JSON.parse(localAfter[LOCAL_OFFLINE_KEY]);
+    assert.equal(after.totalGames, 1, "B offline accumulates locally from 0");
     // Online card still says 3 (server untouched by local-only play).
     // Wait for the dialog to open first (it WILL open — pending=1).
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -462,7 +471,7 @@ await step("step 08 fresh context B 玩 solo 从 0 独立累计 (A7 continuation
       timeout: 8000,
     });
     // PlayerNameForm re-hydrates from localStorage on mount, so the
-    // online card renders the same 3-game row even after the /solo
+    // online card renders the same 3-game row even after the /offline
     // round-trip. Wait for the grid to attach (top-layer modal does
     // not remove it from the DOM).
     await page.waitForSelector('[data-testid="online-stats-grid"]', {
@@ -501,18 +510,19 @@ await step("step 09 (W2) logged-in user merge → online card updates ≤2s via 
       "data-value",
     );
     assert.equal(initialOnline, "0", `online card initial = 0 (got ${initialOnline})`);
-    // Play 1 solo game locally.
+    // Play 1 offline game locally.
 // Seed player name so W2 pure-local 守卫 writes localStorage.
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
-    });
-    await reloadSoloUntilXFirst(page);
+    await page.evaluate(
+      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
+      `hrqa-${RUN_SUFFIX}`,
+    );
+    await reloadOfflineUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
         try {
-          const v = window.localStorage.getItem("ttt.solo.stats.v1");
+          const v = window.localStorage.getItem("ttt.offline.stats.v1");
           return v ? JSON.parse(v).totalGames >= 1 : false;
         } catch {
           return false;
@@ -552,9 +562,9 @@ await step("step 09 (W2) logged-in user merge → online card updates ≤2s via 
     // A2 red-line: merge cleared local; no localStorage pollution.
     const localAfter = await captureLocalStorage(page);
     assert.equal(
-      localAfter[LOCAL_SOLO_KEY],
+      localAfter[LOCAL_OFFLINE_KEY],
       undefined,
-      `A2: ${LOCAL_SOLO_KEY} cleared after merge (got ${localAfter[LOCAL_SOLO_KEY]})`,
+      `A2: ${LOCAL_OFFLINE_KEY} cleared after merge (got ${localAfter[LOCAL_OFFLINE_KEY]})`,
     );
     await ctx.close();
   } finally {
@@ -626,7 +636,7 @@ await step("step 11 (W3) reset button + public ledger retired — verify clean h
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // W1 retired /api/stats; W4 moved ResetStatsButton to /solo
+    // W1 retired /api/stats; W4 moved ResetStatsButton to /offline
     // (scope='local'). The home page therefore carries neither.
     // Pin the W3 contract: the reset button testid is NOT on /.
     const resetCount = await page.locator('[data-testid="reset-stats"]').count();

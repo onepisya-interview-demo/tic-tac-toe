@@ -149,7 +149,7 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
     await step(`${name}: drive a win into /result`, async () => {
       await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
       await page.click('[data-testid="start-online"]');
-      await page.waitForURL('**/play');
+      await page.waitForURL('**/online');
       await page.waitForSelector('[data-testid="board"]');
       await page.waitForTimeout(300);
       await driveTopRowWin(page);
@@ -191,7 +191,7 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
       const headline = page.locator('[data-testid="result-headline"]');
       await headline.waitFor({ state: 'visible' });
       await page.click('[data-testid="play-again"]', { timeout: 2000 });
-      await page.waitForURL('**/play', { timeout: 3000 });
+      await page.waitForURL('**/online', { timeout: 3000 });
       await page.screenshot({ path: `${OUT}/${name}-02-after-ui-click.png` });
     });
   } finally {
@@ -202,12 +202,12 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
 
 // ---------------------------------------------------------------------------
 // Bug B / V1 (ulw-solo-sync-rebuild W-A) + W3 (ulw-ux-refresh-pass §3):
-// on /solo, both the manual view-toggle (board↔stats) AND the W3
+// on /offline, both the manual view-toggle (board↔stats) AND the W3
 // auto-switch (phase→won ⇒ setView('stats') after 1.2s) must keep
 // [data-testid="confetti"] mounted exactly once — the burst fires once
 // per win, never replayed by view changes.
 //
-// Run shape: desktop viewport, drive top-row win on /solo, wait for
+// Run shape: desktop viewport, drive top-row win on /offline, wait for
 // the W3 auto-switch to land on stats, then manually toggle back to
 // board, assert confetti count == 1 at each observation point. The
 // count being 1 throughout (NOT 1→0→1 like the pre-fix behaviour, and
@@ -222,8 +222,8 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
     try { window.OffscreenCanvasRenderingContext2D = undefined; } catch {}
   });
   try {
-    await step('solo-bugb: drive top-row win on /solo, observe confetti', async () => {
-      await p2.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
+    await step('offline-bugb: drive top-row win on /offline, observe confetti', async () => {
+      await p2.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
       await driveTopRowWin(p2);
       await p2.waitForFunction(
         () => /获胜/.test(
@@ -238,15 +238,15 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
         count: document.querySelectorAll('[data-testid="confetti"]').length,
       }));
       assert.equal(before.count, 1, `expected confetti count 1 after win, got ${before.count}`);
-      findings.push({ name: 'solo-bugb-initial', status: 'INFO', ...before });
+      findings.push({ name: 'offline-bugb-initial', status: 'INFO', ...before });
     });
 
-    await step('solo-bugb: W3 auto-switch lands on stats within ≤2s, confetti stays at 1', async () => {
+    await step('offline-bugb: W3 auto-switch lands on stats within ≤2s, confetti stays at 1', async () => {
       // The phase→won trigger in app/solo/page.tsx schedules
       // startTransition(setView('stats')) after WIN_AUTO_SWITCH_MS
       // (1200ms). Wait for the stats view to mount; confetti count must
       // still be 1 (Bug B + W3: stable mount target across auto-switch).
-      await p2.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+      await p2.waitForSelector('[data-testid="offline-stats"]', { timeout: 2000 });
       await p2.waitForTimeout(150);
       const onStats = await p2.evaluate(() => ({
         count: document.querySelectorAll('[data-testid="confetti"]').length,
@@ -256,10 +256,10 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
       // mount on toggle-back firing burstConfetti() again. Post-W3
       // this also proves the auto-switch never replays the burst.
       assert.equal(onStats.count, 1, `expected confetti count 1 on stats (no unmount), got ${onStats.count}`);
-      findings.push({ name: 'solo-bugb-onstats', status: 'INFO', ...onStats });
+      findings.push({ name: 'offline-bugb-onstats', status: 'INFO', ...onStats });
     });
 
-    await step('solo-bugb: toggle stats→board, confetti count stays at 1', async () => {
+    await step('offline-bugb: toggle stats→board, confetti count stays at 1', async () => {
       await p2.click('[data-testid="view-toggle"]');
       await p2.waitForSelector('[data-testid="board"]');
       await p2.waitForTimeout(200);
@@ -267,7 +267,7 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
         count: document.querySelectorAll('[data-testid="confetti"]').length,
       }));
       assert.equal(after.count, 1, `expected confetti count 1 after toggle-back, got ${after.count}`);
-      findings.push({ name: 'solo-bugb-aftertoggle', status: 'INFO', ...after });
+      findings.push({ name: 'offline-bugb-aftertoggle', status: 'INFO', ...after });
     });
   } finally {
     await c2.close();

@@ -62,7 +62,7 @@ async function driveContext(ctx, label) {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.click('[data-testid="start-online"]');
-  await page.waitForURL("**/play");
+  await page.waitForURL("**/online");
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
   await page.waitForURL("**/result", { timeout: 6000 });
@@ -116,7 +116,7 @@ try {
       await p2.goto(`${BASE}/`, { waitUntil: "networkidle" });
       // Second win: click play-again on /result, drive another top-row win
       await page.click('[data-testid="play-again"]');
-      await page.waitForURL("**/play");
+      await page.waitForURL("**/online");
       await page.waitForSelector('[data-testid="board"]');
       await driveTopRowWin(page);
       await page.waitForURL("**/result", { timeout: 6000 });

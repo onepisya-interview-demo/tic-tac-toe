@@ -53,7 +53,7 @@ const SCENARIOS = [
     name: 'play-blank',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
     },
   },
@@ -61,7 +61,7 @@ const SCENARIOS = [
     name: 'play-mid-game',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       // X plays 0, O plays 3
       await page.click('[data-testid="cell-0"]');
@@ -75,7 +75,7 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       // Drive a clean top-row win: first player takes 0, 1, 2.
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       // MINOR-F1 (reports/review/V3.md): the strict win-glow snapshot is
       // invalid the instant PlayController's router.replace('/result')
@@ -118,7 +118,7 @@ const SCENARIOS = [
     name: 'result-after-win',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       await driveTopRowWin(page, { clickGapMs: 100 });
       await page.waitForURL(`${BASE}/result`, { timeout: 3000 });
@@ -129,7 +129,7 @@ const SCENARIOS = [
     name: 'mobile-play',
     viewport: { width: 375, height: 667 }, // iPhone SE
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
     },
   },
@@ -147,7 +147,7 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       await page.click('[data-testid="cell-0"]');
       await page.waitForTimeout(200);
