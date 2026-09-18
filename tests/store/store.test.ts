@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { NETWORK_TIMEOUT_MS, useGameStore } from '@/lib/store';
+// NETWORK_TIMEOUT_MS was used by the ranked makeMove / resetAll abort
+// tests retired in W1 (ulw-one-game-two-versions). The constant is
+// still exported by lib/store.ts for the W2 online branch to consume;
+// W1 tests assert the new contracts (no network for online stub, etc.)
+// without timing-based abort paths.
+import { useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board, type GameStats } from '@/lib/game';
 import { SOLO_STATS_KEY, loadSoloStats } from '@/lib/solo-stats';
 import { playSound } from '@/lib/sound';
@@ -36,10 +41,10 @@ function mockFetch(responses: Array<{
 /**
  * Mock fetch that simulates what AbortController.abort() looks like to
  * the store: the fetch promise rejects with DOMException('aborted',
- * 'TimeoutError'). The store's apiRecordOutcome / apiDeleteStats catch
- * that and surface { ok: false, reason: 'aborted' }, so callers like
- * makeMove / resetAll keep the same invariant — local UI state stays
- * correct — without an 8 s wait per case.
+ * 'TimeoutError'). The store's API helpers catch that and surface
+ * { ok: false, reason: 'aborted' }, so callers like makeMove keep the
+ * same invariant — local UI state stays correct — without an 8 s wait
+ * per case.
  *
  * This is a real-timer test (per commit 7 lore Directive): no fake
  * timers, no setTimeout gymnastics. We mock the fetch outcome that
@@ -59,25 +64,34 @@ function mockFetchWithAbort(): { calls: FetchCall[]; restore: () => void } {
 function resetStore(): void {
   useGameStore.setState({
     phase: 'idle',
-    mode: 'ranked',
+    mode: 'online',
     board: createEmptyBoard(),
     currentPlayer: null,
     winner: null,
     winLine: null,
-    lastWriteAt: null,
     playerName: null,
   });
   useGameStore.getState().__resetInternalForTests();
 }
 
 function seedInternalStats(stats: GameStats): void {
-  useGameStore.getState().setInitialStats(stats);
+  // W1 retired setInitialStats (StatsHydrator is gone). For tests
+  // that need a pre-seeded internalStats cache, mirror the startGame
+  // reseed path by switching to offline mode and back. Simpler: call
+  // startGame('offline') after seeding localStorage (offline branch
+  // reseeds from localStorage). Even simpler for tests: directly
+  // invoke the startGame('offline') reseed after setting localStorage.
+  // The internalStats cache becomes loadable from localStorage.
+  window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(stats));
+  useGameStore.getState().startGame('offline');
+  useGameStore.setState({ mode: 'online' });
 }
 
 describe('lib/store (zustand game store)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.mocked(playSound).mockClear();
+    window.localStorage.clear();
     resetStore();
   });
 
@@ -96,21 +110,11 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
-  it('setInitialStats seeds the cache; the winning move POSTs only the outcome', () => {
-    seedInternalStats({
-      totalGames: 5,
-      xWins: 3,
-      oWins: 1,
-      draws: 1,
-      currentStreak: 2,
-    });
-    // Internal cache is closure-private and no longer serialized into the
-    // request (the server owns the accumulation); the winning move POSTs
-    // only the outcome, and the server's { stats } answer would refresh
-    // the cache. Seeded values must NOT leak into the payload.
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 6, xWins: 4, oWins: 1, draws: 1, currentStreak: 3 } } },
-    ]);
+  it('online win: anonymous user → ZERO network writes, internal cache untouched', async () => {
+    // AC A4 前置 — 无名不记守卫 (online 形态): 无名点开战局赢了不
+    // 发任何请求 (W1 network seam 是 TODO)。
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('online');
     const board: Board = [
       'X', null, null,
       null, 'X', null,
@@ -121,17 +125,39 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'X',
       board: board as unknown as Board,
     });
-    useGameStore.getState().makeMove(8);
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        expect(calls).toHaveLength(1);
-        expect(calls[0].url).toBe('/api/stats/outcome');
-        expect(calls[0].init?.method).toBe('POST');
-        expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-        restore();
-        resolve();
-      }, 10);
+    await useGameStore.getState().makeMove(8);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(calls).toHaveLength(0);
+    restore();
+  });
+
+  it('online win: named user → ZERO network writes (W1 online branch is a TODO seam)', async () => {
+    // W1 ships the online branch as a TODO stub that returns
+    // { ok: false, reason: 'not-found' } but does NOT issue a fetch.
+    // W2 wires the actual POST /api/players/{name}/stats/outcomes.
+    const { calls, restore } = mockFetch([
+      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
+    ]);
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('online');
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
     });
+    await useGameStore.getState().makeMove(8);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(s.winner).toBe('X');
+    // No fetch: online branch is a TODO stub in W1.
+    expect(calls).toHaveLength(0);
+    restore();
   });
 
   it('makeMove applies a move and toggles currentPlayer', () => {
@@ -196,59 +222,10 @@ describe('lib/store (zustand game store)', () => {
     expect(useGameStore.getState().board[0]).toBeNull();
   });
 
-  it('makeMove ending the game sets phase=won and POSTs the outcome', async () => {
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    // X at 0,4,8 wins diagonal.
-    const board: Board = [
-      'X', null, null,
-      null, 'X', null,
-      null, null, null,
-    ];
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: board as unknown as Board,
-    });
-    seedInternalStats(emptyStats());
-    useGameStore.getState().makeMove(8);
-    const s = useGameStore.getState();
-    expect(s.phase).toBe('won');
-    expect(s.winner).toBe('X');
-    expect(s.winLine).toEqual([0, 4, 8]);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(calls[0].init?.headers).toEqual({ 'content-type': 'application/json' });
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-    restore();
-  });
-
-  it('keeps a finished local result when the outcome POST fails', async () => {
-    const { restore } = mockFetch([{ status: 500, body: {} }]);
-    const board: Board = [
-      'X', null, null,
-      null, 'X', null,
-      null, null, null,
-    ];
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: board as unknown as Board,
-    });
-    seedInternalStats(emptyStats());
-    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    await new Promise((r) => setTimeout(r, 10));
-    const s = useGameStore.getState();
-    expect(s.phase).toBe('won');
-    restore();
-  });
-
   it('plays the two-layer win celebration exactly once', async () => {
     vi.useFakeTimers();
-    const { restore } = mockFetch([{ status: 200, body: { stats: emptyStats() } }]);
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('online');
     const board: Board = [
       'O', null, null,
       null, 'O', null,
@@ -259,21 +236,18 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'O',
       board: board as unknown as Board,
     });
-    seedInternalStats(emptyStats());
-    useGameStore.getState().makeMove(8);
+    await useGameStore.getState().makeMove(8);
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('win');
     await vi.advanceTimersByTimeAsync(360);
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('cheer');
     await vi.runOnlyPendingTimersAsync();
-    restore();
     vi.useRealTimers();
   });
 
-  it('makeMove that fills the board sets phase=drawn and POSTs outcome=draw', async () => {
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0 } } },
-    ]);
-    // Board with 8 filled; X to play 8 to draw. (Every win line has at least one O.)
+  it('makeMove that fills the board sets phase=drawn (named online, no network)', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('online');
     const board: Board = [
       'X', 'O', 'X',
       'X', 'O', 'O',
@@ -284,16 +258,11 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'X',
       board: board as unknown as Board,
     });
-    seedInternalStats(emptyStats());
-    useGameStore.getState().makeMove(8);
+    await useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('draw');
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'draw' });
+    expect(calls).toHaveLength(0);
     restore();
   });
 
@@ -326,96 +295,19 @@ describe('lib/store (zustand game store)', () => {
     const s = useGameStore.getState();
     expect(s.phase).toBe('idle');
     expect(s.winner).toBeNull();
-    // restart must not hit the network — stats are RSC-owned now
+    // restart must not hit the network — stats are local-only now.
     expect(calls).toHaveLength(0);
     restore();
   });
 
-  it('resetAll calls DELETE and zeroes the internal cache', async () => {
-    const zero = emptyStats();
-    const { calls, restore } = mockFetch([
-      { status: 200, body: zero },
-    ]);
-    seedInternalStats({
-      totalGames: 3,
-      xWins: 2,
-      oWins: 1,
-      draws: 0,
-      currentStreak: 1,
-    });
-    useGameStore.getState().resetAll();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats');
-    expect(calls[0].init?.method).toBe('DELETE');
-    // Next move reports only the outcome (server owns the accumulation;
-    // the post-DELETE baseline lives server-side now).
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: [
-        'X', null, null,
-        null, 'X', null,
-        null, null, null,
-      ] as unknown as Board,
-    });
-    const { calls: calls2, restore: restore2 } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    useGameStore.getState().makeMove(8);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls2).toHaveLength(1);
-    expect(calls2[0].url).toBe('/api/stats/outcome');
-    expect(calls2[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
-    restore();
-    restore2();
-  });
-
-  it('resetAll still updates internal cache to empty on network error', async () => {
-    const { calls, restore } = mockFetch([{ status: 500, body: {} }]);
-    seedInternalStats({
-      totalGames: 3,
-      xWins: 2,
-      oWins: 1,
-      draws: 0,
-      currentStreak: 1,
-    });
-    useGameStore.getState().resetAll();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    // resetAll falls back to emptyStats() internally; the next move still
-    // only reports the outcome — the fallback is no longer observable in
-    // the payload (server-authoritative).
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: [
-        'X', null, null,
-        null, 'X', null,
-        null, null, null,
-      ] as unknown as Board,
-    });
-    const { calls: calls2, restore: restore2 } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    useGameStore.getState().makeMove(8);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls2).toHaveLength(1);
-    expect(calls2[0].url).toBe('/api/stats/outcome');
-    expect(calls2[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
-    restore();
-    restore2();
-  });
-
-  // ── commit 7: AbortController.timeout abort cases ──
-  // Each case asserts that the store does NOT throw, the local UI
-  // state remains correct, and exactly one outbound PUT/DELETE was
-  // attempted (the abort fires AFTER fetch has been invoked).
-
-  it('makeMove win: outcome POST abort keeps local winner + does not throw', async () => {
+  it('makeMove abort: keeps phase=won, no throw (named online, W1 TODO seam)', async () => {
+    // The store's online branch (apiRecordOutcome stub) does not issue
+    // a fetch in W1; abort-based behavior lives in the offline / W2
+    // path. This test pins the W1 contract: a named online win must
+    // never throw, regardless of mock fetch state.
     const { calls, restore } = mockFetchWithAbort();
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('online');
     const board: Board = [
       'X', null, null,
       null, 'X', null,
@@ -426,30 +318,20 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'X',
       board: board as unknown as Board,
     });
-    seedInternalStats({
-      totalGames: 5,
-      xWins: 3,
-      oWins: 1,
-      draws: 1,
-      currentStreak: 2,
-    });
     expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    // Let the awaited PUT settle; if the catch path leaked a throw
-    // it would surface as an unhandled rejection.
     await new Promise((r) => setTimeout(r, 10));
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
-    expect(s.winner).toBe('X');
-    expect(s.winLine).toEqual([0, 4, 8]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    // W1: online branch is a TODO stub that returns immediately; no
+    // fetch is issued, so the abort mock is not called.
+    expect(calls).toHaveLength(0);
     restore();
   });
 
-  it('makeMove draw: outcome POST abort keeps local drawn phase + does not throw', async () => {
-    const { calls, restore } = mockFetchWithAbort();
+  it('makeMove draw: anonymous → no fetch, no localStorage write (无名守卫)', async () => {
+    // AC A4 前置 — offline 无名不写 localStorage.
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('offline');
     const board: Board = [
       'X', 'O', 'X',
       'X', 'O', 'O',
@@ -460,66 +342,18 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'X',
       board: board as unknown as Board,
     });
-    seedInternalStats({
-      totalGames: 4,
-      xWins: 2,
-      oWins: 1,
-      draws: 1,
-      currentStreak: -1,
-    });
-    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    await new Promise((r) => setTimeout(r, 10));
+    await useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'draw' });
+    expect(calls).toHaveLength(0);
+    // No localStorage write either — 无名守卫拦截了 persistSoloStats.
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
     restore();
   });
 
-  it('resetAll: DELETE abort falls back to emptyStats()', async () => {
-    const { calls, restore } = mockFetchWithAbort();
-    seedInternalStats({
-      totalGames: 3,
-      xWins: 2,
-      oWins: 1,
-      draws: 0,
-      currentStreak: 1,
-    });
-    expect(() => useGameStore.getState().resetAll()).not.toThrow();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].init?.method).toBe('DELETE');
-    // Internal cache should be emptyStats() — same fallback as the
-    // "resetAll still updates internal cache to empty on network error"
-    // test; the next move still only reports the outcome.
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: [
-        'X', null, null,
-        null, 'X', null,
-        null, null, null,
-      ] as unknown as Board,
-    });
-    const { calls: calls2, restore: restore2 } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    useGameStore.getState().makeMove(8);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls2).toHaveLength(1);
-    expect(calls2[0].url).toBe('/api/stats/outcome');
-    expect(calls2[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls2[0].init?.body))).toEqual({ outcome: 'X' });
-    restore();
-    restore2();
-  });
-
-  it('makeMove win: non-abort 200 still POSTs and stamps lastWriteAt (regression baseline)', async () => {
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
+  it('makeMove win: anonymous → no fetch, no localStorage write (无名守卫)', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('offline');
     const board: Board = [
       'X', null, null,
       null, 'X', null,
@@ -530,125 +364,24 @@ describe('lib/store (zustand game store)', () => {
       currentPlayer: 'X',
       board: board as unknown as Board,
     });
-    seedInternalStats(emptyStats());
-    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    await new Promise((r) => setTimeout(r, 10));
+    await useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
-    // lastWriteAt is the timestamp set by the makeMove win branch AFTER
-    // the await of apiPutStats resolves — i.e. it confirms the abort-
-    // aware store still completes the post-write stamp on the happy
-    // path. We don't compare to a `before` value because Date.now() can
-    // repeat within the same ms in jsdom, making the comparison brittle.
-    expect(s.lastWriteAt).not.toBeNull();
-    expect(typeof s.lastWriteAt).toBe('number');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    expect(calls).toHaveLength(0);
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
     restore();
-  });
-
-  // ── commit 3: server-authoritative outcome edge cases ──
-  // Each case asserts that a failing outcome POST does NOT throw, the
-  // local UI state stays correct, the internal cache is NOT bumped
-  // (ok:false skips the internalStats write — no public reader exists,
-  // so this is enforced by code path, not by a payload assertion),
-  // and lastWriteAt still ticks after the request settles.
-
-  it('makeMove win: 500 response does not throw, keeps phase=won, stamps lastWriteAt', async () => {
-    const { calls, restore } = mockFetch([{ status: 500, body: {} }]);
-    const board: Board = [
-      'X', null, null,
-      null, 'X', null,
-      null, null, null,
-    ];
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: board as unknown as Board,
-    });
-    seedInternalStats({
-      totalGames: 5,
-      xWins: 3,
-      oWins: 1,
-      draws: 1,
-      currentStreak: 2,
-    });
-    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    await new Promise((r) => setTimeout(r, 10));
-    const s = useGameStore.getState();
-    expect(s.phase).toBe('won');
-    expect(s.winner).toBe('X');
-    expect(s.lastWriteAt).not.toBeNull();
-    expect(typeof s.lastWriteAt).toBe('number');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-    restore();
-  });
-
-  it('makeMove win: never-resolving POST aborts via 8s timeout, keeps phase=won, stamps lastWriteAt', async () => {
-    vi.useFakeTimers();
-    const calls: FetchCall[] = [];
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-      const url = typeof input === 'string' ? input : (input as URL).toString();
-      calls.push({ url, init });
-      // Never resolves; rejects only when the store's own 8s
-      // AbortController fires — this exercises the REAL withTimeout
-      // timer path end to end, not just the catch mapping.
-      return new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => {
-          reject(new DOMException('aborted', 'TimeoutError'));
-        });
-      });
-    });
-    const board: Board = [
-      'X', null, null,
-      null, 'X', null,
-      null, null, null,
-    ];
-    useGameStore.setState({
-      phase: 'playing',
-      currentPlayer: 'X',
-      board: board as unknown as Board,
-    });
-    seedInternalStats({
-      totalGames: 5,
-      xWins: 3,
-      oWins: 1,
-      draws: 1,
-      currentStreak: 2,
-    });
-    expect(() => useGameStore.getState().makeMove(8)).not.toThrow();
-    expect(useGameStore.getState().phase).toBe('won');
-    // Fire the store's real AbortController timer; advanceTimersByTimeAsync
-    // also flushes the microtask chain so makeMove's promise settles.
-    await vi.advanceTimersByTimeAsync(NETWORK_TIMEOUT_MS);
-    const s = useGameStore.getState();
-    expect(s.phase).toBe('won');
-    expect(s.winner).toBe('X');
-    expect(s.lastWriteAt).not.toBeNull();
-    expect(typeof s.lastWriteAt).toBe('number');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-    fetchMock.mockRestore();
-    vi.useRealTimers();
   });
 });
 
-// ── solo mode: local accumulation + localStorage persistence ──
-// Solo is the mirror image of the ranked contract: ZERO network writes,
-// outcomes accumulate locally via the pure recordOutcome rule, and the
-// row persists to localStorage (lib/solo-stats.ts) so accumulation
-// survives reloads. lastWriteAt stays null — it means "a network write
-// settled", and solo never writes (this also keeps ranked navigation
-// subscribers silent on solo games).
+// ── offline mode: local accumulation + localStorage persistence ──
+// Offline is the mirror image of the online contract: ZERO network writes
+// (W1 ships online as a TODO; offline is the active branch), outcomes
+// accumulate locally via the pure recordOutcome rule, and the row
+// persists to localStorage (lib/solo-stats.ts) so accumulation survives
+// reloads. AC A4: 无名不写 localStorage — `playerName === null` 时 store
+// 直接跳过 persistSoloStats, 守卫拦截前步。
 
-describe('lib/store solo mode (local accumulation + localStorage)', () => {
+describe('lib/store offline mode (local accumulation + localStorage)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.mocked(playSound).mockClear();
@@ -656,7 +389,7 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     resetStore();
   });
 
-  function soloWinBoard(): Board {
+  function offlineWinBoard(): Board {
     return [
       'X', null, null,
       null, 'X', null,
@@ -664,31 +397,31 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     ] as unknown as Board;
   }
 
-  async function soloWin(): Promise<void> {
+  async function offlineWin(): Promise<void> {
     useGameStore.setState({
       phase: 'playing',
-      mode: 'solo',
+      mode: 'offline',
       currentPlayer: 'X',
-      board: soloWinBoard(),
+      board: offlineWinBoard(),
     });
     await useGameStore.getState().makeMove(8);
   }
 
-  it('mode starts as ranked; startGame() defaults to ranked; startGame("solo") switches', () => {
-    expect(useGameStore.getState().mode).toBe('ranked');
+  it('mode starts as online; startGame() defaults to online; startGame("offline") switches', () => {
+    expect(useGameStore.getState().mode).toBe('online');
     useGameStore.getState().startGame();
-    expect(useGameStore.getState().mode).toBe('ranked');
-    useGameStore.getState().startGame('solo');
-    expect(useGameStore.getState().mode).toBe('solo');
+    expect(useGameStore.getState().mode).toBe('online');
+    useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().mode).toBe('offline');
     expect(useGameStore.getState().phase).toBe('playing');
   });
 
-  it('startGame("solo") seeds the internal cache from the localStorage baseline (reload semantics)', () => {
+  it('startGame("offline") seeds the internal cache from the localStorage baseline (reload semantics)', () => {
     window.localStorage.setItem(
       SOLO_STATS_KEY,
       JSON.stringify({ totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 }),
     );
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     expect(useGameStore.getState().__getInternalForTests()).toEqual({
       totalGames: 7,
       xWins: 5,
@@ -698,29 +431,30 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     });
   });
 
-  it('solo win: ZERO network writes, no lastWriteAt stamp, local accumulation + persistence', async () => {
+  it('offline win (named): ZERO network writes; local accumulation + persistence', async () => {
     const { calls, restore } = mockFetch([]);
-    useGameStore.getState().startGame('solo');
-    await soloWin();
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('offline');
+    await offlineWin();
     expect(calls).toHaveLength(0);
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
     expect(s.winner).toBe('X');
-    expect(s.lastWriteAt).toBeNull();
     const expected = { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 };
     expect(s.__getInternalForTests()).toEqual(expected);
     expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(expected);
     restore();
   });
 
-  it('solo two-win streak accumulates xWins=2 streak=2 across a restart (localStorage round-trip)', async () => {
+  it('offline two-win streak accumulates xWins=2 streak=2 across a restart (localStorage round-trip)', async () => {
     const { calls, restore } = mockFetch([]);
-    useGameStore.getState().startGame('solo');
-    await soloWin();
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('offline');
+    await offlineWin();
     // Second session: startGame re-seeds from the persisted baseline,
     // then the win accumulates on top of it.
-    useGameStore.getState().startGame('solo');
-    await soloWin();
+    useGameStore.getState().startGame('offline');
+    await offlineWin();
     expect(calls).toHaveLength(0);
     const expected = { totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 };
     expect(useGameStore.getState().__getInternalForTests()).toEqual(expected);
@@ -728,12 +462,13 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     restore();
   });
 
-  it('solo draw: accumulates draws + resets streak locally, zero network', async () => {
+  it('offline draw (named): accumulates draws + resets streak locally, zero network', async () => {
     const { calls, restore } = mockFetch([]);
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('offline');
     useGameStore.setState({
       phase: 'playing',
-      mode: 'solo',
+      mode: 'offline',
       currentPlayer: 'X',
       board: [
         'X', 'O', 'X',
@@ -745,7 +480,6 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(calls).toHaveLength(0);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
-    expect(s.lastWriteAt).toBeNull();
     expect(s.__getInternalForTests()).toEqual({
       totalGames: 1,
       xWins: 0,
@@ -770,37 +504,31 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(loadSoloStats()).toEqual(emptyStats());
   });
 
-  it('resetSoloStats clears the key + internal cache and does NOT stamp lastWriteAt', () => {
-    useGameStore.setState({ lastWriteAt: 12345 });
+  it('resetOfflineStats clears the key + internal cache', () => {
     window.localStorage.setItem(
       SOLO_STATS_KEY,
       JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }),
     );
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     expect(useGameStore.getState().__getInternalForTests().totalGames).toBe(3);
-    useGameStore.getState().resetSoloStats();
+    useGameStore.getState().resetOfflineStats();
     expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
-    // No stamp: solo reset is local-only; the prior write timestamp stays.
-    expect(useGameStore.getState().lastWriteAt).toBe(12345);
   });
 
-  it('ranked path unchanged: wins still POST the outcome and never touch localStorage', async () => {
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    useGameStore.getState().startGame();
+  it('offline path: wins accumulate locally + never touch network, never POST outcome', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('offline');
     useGameStore.setState({
       phase: 'playing',
+      mode: 'offline',
       currentPlayer: 'X',
-      board: soloWinBoard(),
+      board: offlineWinBoard(),
     });
     await useGameStore.getState().makeMove(8);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
+    expect(calls).toHaveLength(0);
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).not.toBeNull();
     restore();
   });
 
@@ -840,84 +568,43 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(loadSoloStats()).toEqual(emptyStats());
   });
 
-  it('resetSoloStats is a no-op when mode is not "solo" (defensive guard)', () => {
-    // Seed localStorage with non-empty data and the internal cache with
-    // a (mock) server row. mode is 'ranked' after resetStore.
+  it('resetOfflineStats is a no-op when mode is not "offline" (defensive guard)', () => {
+    // Seed localStorage with non-empty data. mode is 'online' after resetStore.
     const baseline = { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 };
     window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
-    const serverRow = { totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 };
-    useGameStore.getState().setInitialStats(serverRow);
-    expect(useGameStore.getState().mode).toBe('ranked');
+    // Reseed internal cache via offline startGame so it has the baseline.
+    useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
 
-    // resetSoloStats called in ranked context must be a no-op — the
-    // server-row mirror must NOT be wiped by a stray solo-clear call.
-    useGameStore.getState().resetSoloStats();
-    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBe(JSON.stringify(baseline));
-    expect(useGameStore.getState().__getInternalForTests()).toEqual(serverRow);
+    // Switch to online; resetOfflineStats must be a no-op.
+    useGameStore.setState({ mode: 'online' });
+    useGameStore.getState().resetOfflineStats();
+    expect(window.localStorage.getItem(SOLO_STATS_KEY)).toEqual(JSON.stringify(baseline));
+    // Internal cache unchanged.
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
   });
 
-  it('cross-mode (a): solo fall-through then startGame("ranked")+makeMove takes ranked branch without touching localStorage', async () => {
-    // Solo fall-through: seed localStorage with a non-empty row.
-    useGameStore.getState().startGame('solo');
-    useGameStore.setState({
-      phase: 'playing',
-      mode: 'solo',
-      currentPlayer: 'X',
-      board: soloWinBoard(),
-    });
-    await useGameStore.getState().makeMove(8);
-    expect(useGameStore.getState().__getInternalForTests().totalGames).toBe(1);
-    const persisted = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
-    expect(persisted.totalGames).toBe(1);
-
-    // Switch to ranked; localStorage must NOT change as a side-effect of
-    // the mode switch (startGame('ranked') only reseeds from localStorage
-    // for solo mode). The next move must POST the outcome and the local
-    // row must remain the solo baseline.
-    const { calls, restore } = mockFetch([
-      { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
-    ]);
-    useGameStore.getState().startGame('ranked');
-    expect(useGameStore.getState().mode).toBe('ranked');
-    const persistedBefore = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
-    useGameStore.setState({
-      phase: 'playing',
-      mode: 'ranked',
-      currentPlayer: 'X',
-      board: soloWinBoard(),
-    });
-    await useGameStore.getState().makeMove(8);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('/api/stats/outcome');
-    expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
-    expect(JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!)).toEqual(persistedBefore);
-    restore();
-  });
-
-  it('cross-mode (b): ranked fall-through then startGame("solo") reseeds internalStats from localStorage baseline', () => {
-    // Seed localStorage with a non-zero baseline; seed internal cache
-    // with a (mock) ranked server row that differs.
+  it('cross-mode (a): offline fall-through then startGame("online") reseeds internalStats from localStorage baseline', () => {
+    // Seed localStorage with a non-zero baseline.
     const baseline = { totalGames: 7, xWins: 5, oWins: 1, draws: 1, currentStreak: 3 };
     window.localStorage.setItem(SOLO_STATS_KEY, JSON.stringify(baseline));
-    const serverRow = { totalGames: 99, xWins: 50, oWins: 30, draws: 19, currentStreak: 10 };
-    useGameStore.getState().setInitialStats(serverRow);
-    expect(useGameStore.getState().__getInternalForTests()).toEqual(serverRow);
+    useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
 
-    // Simulate a finished ranked game.
+    // Simulate a finished offline game.
     useGameStore.setState({
       phase: 'won',
-      mode: 'ranked',
+      mode: 'offline',
       currentPlayer: null,
       winner: 'X',
       winLine: [0, 4, 8],
     });
 
-    // Switch to solo: internalStats must reseed from localStorage baseline,
-    // not carry the (stale) ranked server row into a solo game.
-    useGameStore.getState().startGame('solo');
-    expect(useGameStore.getState().mode).toBe('solo');
+    // Switch to online: internalStats must remain whatever it was
+    // (offline startGame already reseeded from localStorage; online
+    // startGame leaves it alone).
+    useGameStore.getState().startGame('online');
+    expect(useGameStore.getState().mode).toBe('online');
     expect(useGameStore.getState().__getInternalForTests()).toEqual(baseline);
   });
 
@@ -929,12 +616,13 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     });
     expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
 
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().setPlayerName('alice');
+    useGameStore.getState().startGame('offline');
     useGameStore.setState({
       phase: 'playing',
-      mode: 'solo',
+      mode: 'offline',
       currentPlayer: 'X',
-      board: soloWinBoard(),
+      board: offlineWinBoard(),
     });
 
     // makeMove must NOT propagate the setItem throw — the in-memory
@@ -955,82 +643,75 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     setItemSpy.mockRestore();
 
     // Simulate reload: since setItem never succeeded, the persisted
-    // baseline is empty — the next startGame('solo') reseeds from
+    // baseline is empty — the next startGame('offline') reseeds from
     // emptyStats, not the in-memory post-throw value.
     expect(loadSoloStats()).toEqual(emptyStats());
   });
 });
 
-describe('lib/store pure-local (W2: no soloSync field, no retry action)', () => {
+describe('lib/store pure-local (W1: online branch is a TODO, no network for offline)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
     resetStore();
   });
 
-  it('store state has no soloSync field (W2 contract)', () => {
-    const state = useGameStore.getState() as unknown as Record<string, unknown>;
-    expect(state.soloSync).toBeUndefined();
-  });
-
-  it('named solo win: ZERO fetches; localStorage accumulates; no lastWriteAt stamp', async () => {
+  it('named offline win: ZERO fetches; localStorage accumulates', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
     ]);
     useGameStore.getState().setPlayerName('alice');
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);
     await useGameStore.getState().makeMove(1);
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
     expect(useGameStore.getState().phase).toBe('won');
-    expect(calls, 'no fetch should be made for named solo win').toHaveLength(0);
-    expect(useGameStore.getState().lastWriteAt, 'pure-local must not stamp lastWriteAt').toBeNull();
+    expect(calls, 'no fetch should be made for offline win').toHaveLength(0);
     const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
     expect(stats.totalGames).toBe(1);
     restore();
   });
 
-  it('named solo draw: ZERO fetches; localStorage accumulates draws', async () => {
+  it('named offline draw: ZERO fetches; localStorage accumulates draws', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0 } } },
     ]);
     useGameStore.getState().setPlayerName('bob');
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     const drawSeq = [4, 0, 8, 5, 3, 7, 2, 6, 1];
     for (const i of drawSeq) {
       await useGameStore.getState().makeMove(i);
     }
     expect(useGameStore.getState().phase).toBe('drawn');
-    expect(calls, 'no fetch should be made for named solo draw').toHaveLength(0);
-    expect(useGameStore.getState().lastWriteAt).toBeNull();
+    expect(calls, 'no fetch should be made for offline draw').toHaveLength(0);
     const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
     expect(stats.draws).toBe(1);
     expect(stats.totalGames).toBe(1);
     restore();
   });
 
-  it('two named solo wins: localStorage accumulates to 2; ZERO fetches total', async () => {
+  it('two named offline wins: localStorage accumulates to 2; ZERO fetches total', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
       { status: 200, body: { stats: { totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 } } },
     ]);
     useGameStore.getState().setPlayerName('erin');
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);
     await useGameStore.getState().makeMove(1);
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
     expect(useGameStore.getState().phase).toBe('won');
-    useGameStore.getState().startGame('solo');
+    useGameStore.getState().startGame('offline');
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);
     await useGameStore.getState().makeMove(1);
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
-    expect(calls, 'pure-local: no fetches across two named games').toHaveLength(0);
+    expect(calls, 'offline: no fetches across two named games').toHaveLength(0);
     const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
     expect(stats.totalGames).toBe(2);
     expect(stats.xWins + stats.oWins).toBe(2);

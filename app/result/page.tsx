@@ -1,33 +1,32 @@
 import { ViewTransition } from 'react';
-import { Card } from '@/components/ui/Card';
-import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
-import { loadStats } from '@/lib/db';
 import { ResultBanner } from '@/components/ResultBanner';
 import { ResultActions } from '@/components/ResultActions';
-import { StatsHydrator } from '@/components/StatsHydrator';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
-
+/**
+ * W1 /result page (intermediate).
+ *
+ * The ranked public ledger (id=1, name=NULL) is retired along with the
+ * /api/stats chain, so the legacy StatsGrid (公共战绩数字) Card is
+ * gone. W3 will rebuild /result as an RSC reading the per-name row:
+ *   - `await loadSoloRecord(name)` → `await recordOutcome` → upsert
+ *     (server-side authoritative accumulation)
+ *   - render real-time ResultBanner + StatsGrid
+ *
+ * For W1's intermediate state, the /result page renders just the
+ * banner (which reads its own state from the store) and the
+ * play-again / back-home actions. No ranked ledger is shown.
+ */
 export default async function ResultPage() {
-  const stats = await loadStats();
-
   return (
     <ViewTransition enter="page" exit="page" default="none">
     <main className="page-shell page-fade-in">
-      <StatsHydrator stats={stats} />
       <header className="flex flex-row items-center justify-between gap-3 relative">
         <ResultBanner headingLevel={1} />
         <SoundToggle />
       </header>
-
-      <Card>
-        <div className="flex flex-col gap-4">
-          <h2 className="text-h2 font-display font-medium">战绩</h2>
-          <StatsGrid stats={stats} />
-        </div>
-      </Card>
 
       <ResultActions />
     </main>

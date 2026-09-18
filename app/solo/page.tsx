@@ -82,7 +82,7 @@ const DRAW_AUTO_SWITCH_MS = 600;
  * effect cleanup cancels the pending timer if the phase changes again
  * (e.g. user clicks 重新开局 → phase becomes 'idle') so a stale
  * switch never fires after a manual restart. Solo never navigates to
- * /result (no lastWriteAt by contract).
+ * /result (W1: ranked ledger retired; result navigation is W3 territory per ulw-one-game-two-versions §3 W3).
  */
 export default function SoloPage() {
   const [view, setView] = useState<SoloView>('board');
@@ -175,7 +175,7 @@ export default function SoloPage() {
       >
         <ViewTransition key={view} update="view-swap" default="none">
           {view === 'board' ? (
-            <PlayController mode="solo">
+            <PlayController mode="offline">
               <Board />
             </PlayController>
           ) : (

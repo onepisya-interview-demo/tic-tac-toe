@@ -1,20 +1,29 @@
 import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
 
 /**
- * Single-row stats table.
+ * Per-player stats table (W1 ulw-one-game-two-versions).
  *
- * `id = 1` is the canonical ranked (shared, two-player pass-and-play) row
- * — `name` stays NULL so the loadStats / saveStats / recordAndSave surface
- * in lib/db.ts keeps its existing semantics and its existing id contract.
+ * The ranked public ledger (id=1, name=NULL) is retired along with the
+ * /api/stats chain. `id` stays as INTEGER PRIMARY KEY (auto-incremented
+ * for new per-player rows); `name TEXT UNIQUE` is the canonical
+ * identity of a player row. SQLite allows multiple NULLs under UNIQUE,
+ * so legacy ranked shared rows (id=1, name=NULL) are migrated out by
+ * getDb()'s reconcile branch in lib/db.ts (W1 retired the ranked
+ * surface entirely).
  *
- * Per-player solo rows live in the same table under their own auto-
- * assigned `id`, identified by a non-null `name`. `name TEXT UNIQUE`
- * makes the row the player’s identity on the wire: registration is the
- * act of inserting a fresh emptyStats() row under a previously-unseen
- * name, login is reading the row that already exists. SQLite allows
- * multiple NULLs under UNIQUE, so the ranked shared row (name=NULL) and
- * the per-player rows (name='alice' etc.) coexist without constraint
- * conflicts.
+ * Per-player row lifecycle:
+ *  - Registration: insert emptyStats() under a previously-unseen name
+ *    (lib/db.ts:registerOrLoginName).
+ *  - Login: read the row that already exists.
+ *  - Online outcome: loadSoloRecord → recordOutcome → upsertSoloRecord
+ *    (lib/db.ts:recordOutcomeForName). Server-side authoritative.
+ *  - Cross-device merge: loadSoloRecord → accumulateMergeStats →
+ *    upsertSoloRecord (lib/db.ts:mergeSoloRecord). User-confirmed only.
+ *
+ * `name TEXT UNIQUE` makes the row the player's identity on the wire:
+ * there is exactly one row per non-null name, so renaming is
+ * structurally impossible (no rename endpoint + UNIQUE doubles the
+ * guard).
  */
 export const gameStats = sqliteTable('game_stats', {
   id: integer('id').primaryKey(),

@@ -29,88 +29,73 @@ import { playSound } from './sound';
 export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
 
 /**
- * 'ranked' (default) keeps the server-authoritative contract: outcomes
- * POST to /api/stats/outcome and the server owns the accumulation.
- * 'solo' never issues a network write — outcomes accumulate locally and
- * persist to localStorage (lib/solo-stats.ts).
+ * 'online' — 实时上服版本（W3 起 /online 路由：需 name 入口拦截，完局
+ *   通过 lib/game-net.ts → service `recordOutcomeForName` 服务端权威
+ *   累加）。本波（W1）只留清晰的 TODO 注释，不发任何请求。
+ * 'offline' — 离线单机版本（W4 起 /offline 路由：完全离线、本地账本、
+ *   **无名不记**、W3 合并弹框是唯一网络写）。
+ *
+ * 差异仅记账路径：online 走 service，offline 走 localStorage
+ * (`lib/solo-stats.ts`)。两者都遵守「无名不记」守卫：无名时根本不发
+ * 请求、不写本地账本（A4 前置）。
  */
-export type GameMode = 'ranked' | 'solo';
+export type GameMode = 'online' | 'offline';
 
 export interface GameState {
   phase: GamePhase;
-  /** Game mode of the current session; solo games skip all network writes. */
+  /** Game mode of the current session. */
   mode: GameMode;
   board: Board;
   currentPlayer: Player | null;
   winner: Player | null;
   winLine: readonly [number, number, number] | null;
   /**
-   * Wall-clock timestamp (Date.now()) of the most recent network write
-   * (POST /api/stats/outcome or DELETE /api/stats). Set inside the async
-   * makeMove / resetAll after the request settles so subscribers can
-   * observe write completion instead of guessing with timers. Stats
-   * hydration via setInitialStats also stamps lastWriteAt so a freshly
-   * mounted <StatsHydrator> triggers the same downstream effects as an
-   * in-game write.
-   */
-  lastWriteAt: number | null;
-  /**
    * Player name (mirror of `localStorage['ttt.player.name.v1']`).
    * Hydrated on mount by `setPlayerName` (the source of truth) and
-   * updated by PlayerNameForm on save / clear. W1 pure-local: setting
-   * a name no longer triggers auto-POST — solo outcomes are 100%
-   * local; cross-device sync is the user's opt-in via the
-   * SoloStatsPanel 「同步」 button.
+   * updated by PlayerNameForm on save / clear.
+   *
+   * **无名不记守卫**: online / offline 两条分支在 `makeMove` 内首句
+   * 即判断 `playerName` 是否为空；为空时**不发任何请求、不写
+   * localStorage、不累加 internalStats**，本步走完后 phase 仍正常
+   * 推进（用户体验：显示胜平，但战绩 0 增长；用户去填名字后下一局
+   * 开始计数）。这与 AC A4 「online 入口拦截 / offline 无名不记」
+   * 完全对应。
    */
   playerName: string | null;
 }
 
 export interface GameActions {
   /**
-   * Start a new game. Defaults to 'ranked'. Starting in 'solo' seeds the
-   * internal stats cache from the localStorage baseline (reload
-   * semantics) so solo accumulation continues across sessions.
+   * Start a new game. Defaults to 'online'. Starting in 'offline' seeds
+   * the internal stats cache from the localStorage baseline (reload
+   * semantics) so offline accumulation continues across sessions.
    */
   startGame: (mode?: GameMode) => void;
   /**
-   * Apply a move for the current player. Async because the underlying
-   * stats outcome POST is awaited so lastWriteAt is set on completion
-   * (PlayController subscribes to that to navigate). The function
-   * resolves even on POST failure — local UI state stays correct.
+   * Apply a move for the current player. Synchronous from the UI
+   * perspective — bookkeeping (network write for online, localStorage
+   * persistence for offline) happens inside the action but is fire-and-
+   * forget for offline (no return promise needed) and stays as a TODO
+   * seam for online (W2 wires the actual fetch).
    */
   makeMove: (index: number) => Promise<void>;
   restart: () => void;
   /**
-   * Delete server-side stats, reset internal cache, stamp lastWriteAt.
-   * Async so callers (ResultActions / ResetStatsButton) can await it
-   * before calling router.refresh(), avoiding a race where the refresh
-   * re-reads the still-present stats.
+   * Clear the offline-mode stats: remove the localStorage key and reset
+   * the internal cache to emptyStats().
    */
-  resetAll: () => Promise<void>;
-  setInitialStats: (stats: GameStats) => void;
-  /**
-   * Clear the solo-mode stats: remove the localStorage key and reset the
-   * internal cache to emptyStats(). Deliberately does NOT stamp
-   * lastWriteAt — that timestamp means "a network write settled", and
-   * solo reset is a purely local operation; stamping it would falsely
-   * trigger lastWriteAt subscribers (e.g. ranked navigation).
-   */
-  resetSoloStats: () => void;
+  resetOfflineStats: () => void;
   __resetInternalForTests: () => void;
   /**
    * Read-only handle for the module-level internalStats cache. Tests
-   * use it to assert the "write-only on network failure" invariant
-   * (the server-authoritative contract demands internalStats stays
-   * untouched when the POST outcome / DELETE fails). Mirrors the
-   * `__resetInternalForTests` seam; production code never calls it.
+   * use it to assert offline accumulation.
    */
   __getInternalForTests: () => GameStats;
   /**
    * Set / clear the player's name. Persists to localStorage and mirrors
-   * the value into state so the store's solo branch can branch on it
-   * without re-reading localStorage at every move (which would couple
-   * the store to a browser API). Called by PlayerNameForm on save and
-   * by SoloStatsPanel on mount / name-change event.
+   * the value into state so the store can branch on it without re-reading
+   * localStorage at every move. SSR-safe via lib/player-name.ts's window
+   * guard.
    */
   setPlayerName: (name: string | null) => void;
 }
@@ -119,45 +104,37 @@ export type GameStore = GameState & GameActions;
 
 const initial: GameState = {
   phase: 'idle',
-  mode: 'ranked',
+  mode: 'online',
   board: createEmptyBoard(),
   currentPlayer: null,
   winner: null,
   winLine: null,
-  lastWriteAt: null,
   playerName: null,
 };
 
-// Internal stats cache (NOT in GameState type). RSC pages hydrate this via
-// setInitialStats on mount, and every successful outcome POST / DELETE
-// refreshes it from the server response, so it mirrors the last-known
-// server row. The server — not this cache — is the authoritative
-// accumulator: makeMove only reports who won ('X' | 'O' | 'draw').
+// Internal stats cache (NOT in GameState type). For offline mode,
+// mirrors the last-known localStorage row; online mode (W2+) will mirror
+// the server-side per-name row via fetch response. W1 ships the offline
+// path; online path is a TODO seam inside `makeMove`.
 let internalStats: GameStats = emptyStats();
 
 /**
- * Tagged result for store-internal network writes. POST/DELETE calls go
- * through withTimeout, so a successful 2xx surfaces as { ok: true, value },
- * while abort (timeout) and non-2xx / thrown network errors collapse into
- * { ok: false, reason }. Callers (`makeMove`, `resetAll`) preserve the
- * same invariant as before — local UI state stays correct regardless of
- * outcome — but the `{ ok, reason }` shape gives reset-button UI a precise
- * signal to show a loading spinner and recover gracefully if Turso HTTP
- * hangs past 8 s (HAR §P2 evidence: DELETE observed 30 733 ms once).
+ * Tagged result for store-internal network writes (kept for W2 — when
+ * `recordOutcomeForName` lands, the network helper will use this same
+ * { ok, reason } shape as lib/solo-net.ts). W1 ships the helper but the
+ * `makeMove` online branch is a TODO.
  */
 export type StoreFetchResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: 'aborted' | 'network-error' | 'http-error'; status?: number };
+  | { ok: false; reason: 'aborted' | 'network-error' | 'http-error' | 'not-found'; status?: number };
 
 /**
  * Wrap a fetch() call so it rejects (well, returns ok:false) after
- * `ms` milliseconds. Uses AbortController + setTimeout, exactly the
- * pattern HAR §P2 recommends. 8000 ms is the chosen floor: the
- * observed Turso DELETE that took 30 s was an outlier, not a
- * re-occurring latency, but a single stuck PUT that blocks the
- * reset button for half a minute is what we're guarding against.
- * If we later need retry, the { ok, reason } shape gives it a clean
- * seam without changing the public store API.
+ * `ms` milliseconds. Uses AbortController + setTimeout — the pattern
+ * the solo-net / store helpers already use. 8000 ms is the chosen
+ * floor: a single stuck request that blocks the UI for half a minute
+ * is what we're guarding against. W2 will route the online branch's
+ * POST outcomes call through this helper.
  */
 export const NETWORK_TIMEOUT_MS = 8000;
 
@@ -178,52 +155,35 @@ export async function withTimeout(
 }
 
 /**
- * Server-authoritative outcome recording: the client only names who won
- * ('X' | 'O' | 'draw'); the POST /api/stats/outcome handler reads the
- * current row, applies the pure `recordOutcome` rule, and returns the
- * new full row as { stats: GameStats }. A successful 2xx surfaces as
- * { ok: true, value: { stats } } so the caller can adopt the server's
- * answer as its internal cache; abort (timeout) and non-2xx / thrown
- * network / JSON parse errors collapse into { ok: false, reason }.
+ * TODO (W2): wire online-mode outcome recording through this seam.
+ * W1 keeps the function signature stable so the W2 implementation
+ * drops in without touching the call site:
+ *
+ *   const r = await apiRecordOutcome('X');
+ *   if (r.ok) internalStats = r.value.stats;
+ *
+ * Server-authoritative contract: client only names the winner; service
+ * `recordOutcomeForName(name, outcome)` (lib/db.ts) reads the per-name
+ * row, applies `recordOutcome`, upserts, returns the new full row.
  */
 async function apiRecordOutcome(
-  outcome: 'X' | 'O' | 'draw',
+  // W2 will replace the W1 stub with: lib/game-net.ts:postOutcome
+  // → POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
+  // Parameters are pinned here so the W2 implementation drops in
+  // without changing the call site (`makeMove`).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _name: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _outcome: 'X' | 'O' | 'draw',
 ): Promise<StoreFetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout('/api/stats/outcome', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ outcome }),
-    });
-    if (!r.ok) return { ok: false, reason: 'network-error' };
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
-  }
-}
-
-async function apiDeleteStats(): Promise<StoreFetchResult<GameStats>> {
-  try {
-    const r = await withTimeout('/api/stats', { method: 'DELETE' });
-    if (!r.ok) return { ok: false, reason: 'network-error' };
-    const value = (await r.json()) as GameStats;
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
-  }
+  // W1 stub: online branch is intentionally a no-op until W2 lands
+  // the RESTful /api/players/{name}/stats/outcomes endpoint and the
+  // thin transport wrapper that calls lib/db.ts:recordOutcomeForName.
+  return { ok: false, reason: 'not-found' };
 }
 
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
-
-  setInitialStats: (stats) => {
-    internalStats = stats;
-    // Hydration is a write event for downstream subscribers (PlayController
-    // uses it to detect when stats are ready, ResultActions uses it to
-    // refresh after resetAll → rehydrate).
-    set({ lastWriteAt: Date.now() });
-  },
 
   __resetInternalForTests: () => {
     internalStats = emptyStats();
@@ -232,16 +192,13 @@ export const useGameStore = create<GameStore>((set) => ({
   __getInternalForTests: () => internalStats,
 
   startGame: (mode?: GameMode) => {
-    const resolvedMode: GameMode = mode ?? 'ranked';
-    if (resolvedMode === 'solo') {
-      // Reload semantics: a solo session resumes from the browser-
+    const resolvedMode: GameMode = mode ?? 'online';
+    if (resolvedMode === 'offline') {
+      // Reload semantics: an offline session resumes from the browser-
       // persisted baseline so accumulation survives page reloads.
       internalStats = loadSoloStats();
       // Rehydrate the player name from localStorage when the store
       // booted without one (SSR first frame, fresh page navigation).
-      // Done here so the solo branch in makeMove can read state.
-      // playerName on the first move without a localStorage round-trip
-      // in the hot path. SSR-safe via lib/player-name's window guard.
       if (!useGameStore.getState().playerName) {
         const stored = getPlayerName();
         if (stored) {
@@ -268,6 +225,11 @@ export const useGameStore = create<GameStore>((set) => ({
     if (s.currentPlayer === null) return;
     if (s.board[index] !== null) return;
 
+    // **无名不记守卫 (AC A4 前置)**: 不论 online 还是 offline, 没有
+    // playerName 时直接跳过 bookkeeping。本步的 phase / board 仍正常
+    // 推进——用户体验: 显示胜平, 但战绩 0 增长。
+    const isAnonymous = s.playerName === null || s.playerName === '';
+
     const board = applyMove(s.board, index, s.currentPlayer);
 
     const win = checkWinner(board);
@@ -284,31 +246,22 @@ export const useGameStore = create<GameStore>((set) => ({
       // Two-layer celebration: short ascending pair to confirm the win,
       // then a longer arpeggio with vibrato to celebrate it. The 360ms
       // delay lines up with the end of the 'win' envelopes (2 × 180ms).
-      // playSound('cheer') re-reads getMuted(), so toggling mute mid-
-      // celebration still silences the rest.
       setTimeout(() => playSound('cheer'), 360);
-      if (s.mode === 'solo') {
-        // Solo (W1 pure-local): local accumulation from the internal
-        // cache (seeded by startGame('solo')) + localStorage persistence.
-        // NO network write — 主公谕: 「单机版本，不需要发送任何请求，
-        // 全部存在本地」 Cross-device persistence is the user's opt-in
-        // via SoloStatsPanel 「同步」 button (POST /sync → server merges
-        // per-field → local cleared). The sync sentinel
-        // (persistSyncedServerTotal) is also written by that path, not
-        // here, so it tracks only the server-confirmed totalGames.
+      if (isAnonymous) {
+        // 无名不记: 既不发请求 (online) 也不写 localStorage (offline)。
+        return;
+      }
+      if (s.mode === 'offline') {
+        // Offline: 100% 本地累加 + localStorage 持久化。零网络写。
         internalStats = recordOutcome(internalStats, win.player);
         persistSoloStats(internalStats);
         return;
       }
-      // Server-authoritative write: the client only names the winner; the
-      // server reads the current row, applies recordOutcome, and returns
-      // the new full row, which becomes our internal cache. ok:false
-      // (aborted or network-error) keeps the same invariant as before —
-      // local UI state is already correct, the write is lost, and
-      // internalStats is left untouched (no client-side accumulation).
-      const r = await apiRecordOutcome(win.player);
-      if (r.ok) internalStats = r.value.stats;
-      set({ lastWriteAt: Date.now() });
+      // Online: TODO W2 — wire to lib/game-net.ts:postOutcome →
+      // POST /api/players/{name}/stats/outcomes → lib/db.ts:recordOutcomeForName.
+      // W1 ships the seam (apiRecordOutcome stub returning
+      // { ok: false, reason: 'not-found' }) but does not yet POST.
+      await apiRecordOutcome(s.playerName as string, win.player);
       return;
     }
 
@@ -320,19 +273,16 @@ export const useGameStore = create<GameStore>((set) => ({
         winLine: null,
       });
       playSound('draw');
-      if (s.mode === 'solo') {
-        // Same W1 pure-local contract as the win branch (no network
-        // write, no lastWriteAt stamp). See the comment in the win
-        // branch for the cross-device persistence story.
+      if (isAnonymous) {
+        return;
+      }
+      if (s.mode === 'offline') {
         internalStats = recordOutcome(internalStats, 'draw');
         persistSoloStats(internalStats);
         return;
       }
-      // Same server-authoritative contract as the win branch above: the
-      // server owns the accumulation, the client only reports 'draw'.
-      const r = await apiRecordOutcome('draw');
-      if (r.ok) internalStats = r.value.stats;
-      set({ lastWriteAt: Date.now() });
+      // Online: TODO W2 — same seam as the win branch.
+      await apiRecordOutcome(s.playerName as string, 'draw');
       return;
     }
 
@@ -353,41 +303,23 @@ export const useGameStore = create<GameStore>((set) => ({
     });
   },
 
-  resetSoloStats: () => {
-    // Defensive guard: resetSoloStats is solo-mode-only. The sole
+  resetOfflineStats: () => {
+    // Defensive guard: resetOfflineStats is offline-mode-only. The sole
     // current caller is components/ResetStatsButton (scope='local',
-    // rendered only by SoloStatsPanel), so this branch is unreachable
-    // in production today. It is added so a future caller that
-    // forgets to gate on mode cannot silently wipe the ranked server
-    // row mirror in `internalStats` with emptyStats(). Reads mode
-    // through getState() to avoid a stale closure if a future caller
-    // schedules resetSoloStats asynchronously after a mode switch.
-    if (useGameStore.getState().mode !== 'solo') return;
+    // rendered only by SoloStatsPanel → app/solo/page.tsx), so this
+    // branch is unreachable in production today. It is added so a
+    // future caller that forgets to gate on mode cannot silently wipe
+    // the online internal cache (which will become a server-row
+    // mirror in W2) with emptyStats().
+    if (useGameStore.getState().mode !== 'offline') return;
     clearSoloStats();
     internalStats = emptyStats();
-    // Deliberately no lastWriteAt stamp: solo reset is local-only with no
-    // network write; stamping would falsely signal a server write to
-    // subscribers (PlayController navigation).
-  },
-
-  resetAll: async (): Promise<void> => {
-    // Network write: await so callers can refresh() AFTER the server-side
-    // row is gone; otherwise a force-dynamic refresh races the DELETE and
-    // re-reads the still-present stats. Local cache mirrors server state
-    // on both success and failure paths (the { ok, reason } contract lets
-    // us fall back to emptyStats() without a try/catch at the call site).
-    const result = await apiDeleteStats();
-    internalStats = result.ok ? result.value : emptyStats();
-    set({ lastWriteAt: Date.now() });
   },
 
   setPlayerName: (name) => {
     // Mirror to localStorage so reloads re-hydrate the same value. Pass
     // null to clear (the panel's clear button uses this). SSR-safe via
-    // the inner typeof window guard in lib/player-name.ts; we still
-    // update the in-memory state unconditionally so server-rendered
-    // RSC trees that call this in a future use case see the latest
-    // value without depending on a localStorage round-trip.
+    // the inner typeof window guard in lib/player-name.ts.
     if (name === null) {
       clearPlayerNameLocal();
     } else {

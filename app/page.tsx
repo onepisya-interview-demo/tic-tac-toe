@@ -1,27 +1,30 @@
 import { ViewTransition } from 'react';
-import { Card } from '@/components/ui/Card';
-import { StatsGrid } from '@/components/ui/StatsGrid';
 import { SoundToggle } from '@/components/SoundToggle';
-import { ResetStatsButton } from '@/components/ResetStatsButton';
 import { StartGameButton } from '@/components/StartGameButton';
-import { PlayerNameForm } from '@/components/PlayerNameForm';
 import { OnlineStatsCard } from '@/components/OnlineStatsCard';
 import { HomeDialogMount } from '@/components/HomeDialogMount';
-import { StatsHydrator } from '@/components/StatsHydrator';
-import { loadStats } from '@/lib/db';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
-
+/**
+ * W1 home page (intermediate).
+ *
+ * The ranked public ledger (id=1, name=NULL) is retired along with the
+ * /api/stats chain, so the legacy "公共战绩 + 公共卡 + 重置公共战绩" Card
+ * is gone. W3 will rebuild this surface as a 展示页 (hero + 双入口 CTA +
+ * 身份区 + 线上战绩卡 + 合并弹框, schema.org JSON-LD).
+ *
+ * For W1's intermediate state, the home page renders the minimum
+ * surface that does not depend on the retired ledger:
+ *  - 标题 + SoundToggle
+ *  - 线上战绩卡 (OnlineStatsCard; reads /api/solo-stats?name=...)
+ *  - 双入口 CTA (online + offline; pending W3/W4 route rename)
+ *  - 合并弹框挂载 (HomeDialogMount)
+ */
 export default async function HomePage() {
-  const stats = await loadStats();
-
-  const isEmpty = stats.totalGames === 0;
-
   return (
     <ViewTransition enter="page" exit="page" default="none">
     <main className="page-shell page-fade-in">
-      <StatsHydrator stats={stats} />
       <header className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-display font-display font-semibold tracking-tight">井字棋</h1>
@@ -32,28 +35,11 @@ export default async function HomePage() {
         </p>
       </header>
 
-      <Card>
-        <div className="flex flex-col gap-4">
-          <h2 className="text-h2 font-display font-medium">战绩</h2>
-          {isEmpty ? (
-            <p
-              className="text-small text-text-secondary border border-dashed border-border-strong rounded-md px-3 py-2"
-              data-testid="empty-state"
-            >
-              还没有战绩，下一把开始吧。
-            </p>
-          ) : null}
-          <StatsGrid stats={stats} />
-          <PlayerNameForm />
-        </div>
-      </Card>
-
       <OnlineStatsCard />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />
-        <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />
-        <ResetStatsButton className="w-full sm:w-auto" caption="仅清零双人公共战绩，不含线上/单机战绩" />
+        <StartGameButton href="/play" label="开始对战" mode="online" variant="primary" testid="start-game" />
+        <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-solo" />
       </div>
 
       <HomeDialogMount />

@@ -3,7 +3,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResetStatsButton } from './ResetStatsButton';
 import { useGameStore } from '@/lib/store';
-import { emptyStats } from '@/lib/game';
 import { SOLO_STATS_KEY } from '@/lib/solo-stats';
 import { act } from 'react';
 
@@ -24,8 +23,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('components/ResetStatsButton scope=local', () => {
-  it('clears only the solo localStorage row: no fetch, no router.refresh, onCleared fires', async () => {
+describe('components/ResetStatsButton (W1: only local scope remains)', () => {
+  it('scope=local: clears the localStorage row + internal cache, no fetch, onCleared fires', async () => {
     const user = userEvent.setup();
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -36,15 +35,13 @@ describe('components/ResetStatsButton scope=local', () => {
       JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 }),
     );
 
-    // resetSoloStats is gated on mode === 'solo' (F-5.1 defensive
+    // resetOfflineStats is gated on mode === 'offline' (defensive
     // guard). In production the local-scope button only renders on
-    // /solo where PlayController has set mode='solo'; the isolated
+    // /solo where PlayController has set mode='offline'; the isolated
     // test render does not include PlayController, so mirror that
-    // state here. Without this setState the guard fires and the
-    // click is a no-op — exactly the regression the guard is designed
-    // to prevent in real code paths.
+    // state here.
     act(() => {
-      useGameStore.setState({ mode: 'solo' });
+      useGameStore.setState({ mode: 'offline' });
     });
 
     render(<ResetStatsButton scope="local" onCleared={onCleared} />);
@@ -60,52 +57,20 @@ describe('components/ResetStatsButton scope=local', () => {
     expect(onCleared).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
   });
-});
 
-describe('components/ResetStatsButton scope=server (default, home contract unchanged)', () => {
-  it('keeps testid reset-stats and awaits resetAll before router.refresh + onCleared', async () => {
-    const user = userEvent.setup();
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(
-        async () =>
-          new Response(JSON.stringify(emptyStats()), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
-      );
-    const onCleared = vi.fn();
-
-    render(<ResetStatsButton onCleared={onCleared} />);
-    const btn = screen.getByTestId('reset-stats');
-    expect(btn).toHaveTextContent('重置对战战绩');
-
-    await user.click(btn);
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/stats');
-    expect(refreshMock).toHaveBeenCalledTimes(1);
-    expect(onCleared).toHaveBeenCalledTimes(1);
-    fetchSpy.mockRestore();
-  });
-});
-
-
-describe('components/ResetStatsButton caption prop (W2 P2/D1)', () => {
-  it('renders muted caption span below the button when caption is provided', () => {
-    render(
-      <ResetStatsButton caption="仅清零双人公共战绩，不含线上/单机战绩" />,
+  it('resetOfflineStats is a no-op when mode is not "offline" (defensive guard)', () => {
+    // mode is 'online' after resetStore; resetOfflineStats must be a no-op.
+    window.localStorage.setItem(
+      SOLO_STATS_KEY,
+      JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 }),
     );
-    const caption = screen.getByTestId('reset-stats-caption');
-    expect(caption).toHaveTextContent('仅清零双人公共战绩');
-    expect(caption.className).toMatch(/text-text-muted/);
-    expect(caption.className).toMatch(/text-small/);
-  });
-
-  it('omits the caption span when caption prop is not provided', () => {
-    const { container } = render(<ResetStatsButton />);
+    act(() => {
+      useGameStore.setState({ mode: 'online' });
+    });
+    useGameStore.getState().resetOfflineStats();
+    // localStorage unchanged.
     expect(
-      container.querySelector('[data-testid="reset-stats-caption"]'),
-    ).toBeNull();
+      window.localStorage.getItem(SOLO_STATS_KEY),
+    ).not.toBeNull();
   });
 });

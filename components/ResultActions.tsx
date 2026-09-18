@@ -1,25 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 /**
- * Action stack on the /result page. The reset-stats CTA mirrors the home
- * page's ResetStatsButton (commit 5) — same useState pending pattern,
- * same loading prop, same try/finally cleanup. Awaiting resetAll() before
- * restart() + router.refresh() preserves the B-3b invariant: the RSC
- * force-dynamic re-fetch sees zeros (DELETE has landed) before the user
- * can navigate back to /play.
+ * Action stack on the /result page. W1 retired the `resetAll`/DELETE
+ * server branch along with the /api/stats chain — the ranked public
+ * ledger (id=1, name=NULL) is gone. W3 will rebuild /result as an
+ * RSC reading the per-name row; until then, the page only needs the
+ * play-again + back-home CTAs.
  */
 export function ResultActions() {
-  const router = useRouter();
   const startGame = useGameStore((s) => s.startGame);
-  const restart = useGameStore((s) => s.restart);
-  const resetAll = useGameStore((s) => s.resetAll);
-  const [pending, setPending] = useState(false);
 
   return (
     <div className="flex flex-col gap-3">
@@ -33,29 +26,6 @@ export function ResultActions() {
           返回首页
         </Button>
       </Link>
-      <Button
-        variant="ghost"
-        onClick={async () => {
-          setPending(true);
-          try {
-            await resetAll();
-            restart();
-            router.refresh();
-          } finally {
-            setPending(false);
-          }
-        }}
-        loading={pending}
-        data-testid="reset-stats-result"
-      >
-        {pending ? '重置中…' : '重置对战战绩'}
-      </Button>
-      <span
-        className="text-small text-text-muted"
-        data-testid="reset-stats-result-caption"
-      >
-        仅清零双人公共战绩，不含线上/单机战绩
-      </span>
     </div>
   );
 }

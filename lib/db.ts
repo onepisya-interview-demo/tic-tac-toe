@@ -9,7 +9,54 @@ import * as schema from '../db/schema';
 import { gameStats } from '../db/schema';
 import { emptyStats, recordOutcome, type GameStats } from './game';
 
-const STATS_ROW_ID = 1;
+/**
+ * ## Service layer (lib/db.ts) — 纯函数 / 传输层薄壳 强制分离契约
+ *
+ * 本文件是 service 层：所有「读 / 改 / 写战绩」的业务逻辑都收敛为纯函数（无
+ * HTTP 上下文、无 NextResponse、无 status code 知识）。调用方是 lib/store.ts
+ * （浏览器端）或 app/api/{...}/route.ts（Node runtime 端）。
+ *
+ * ### 强约束（自 W1 ulw-one-game-two-versions 起，W2 起传输层必须遵守）
+ *
+ * 1. service 函数返回值必须是「数据 + 状态标记」的纯数据形式：
+ *    - 命中：返回 `GameStats`（或 `{ stats, ... }` 等纯对象）；
+ *    - 缺失：返回明确的 `null` 或具名 `not-found` 标记字符串；
+ *    - 异常：抛 `Error`（调用方 try/catch 后翻译成 problem+json）。
+ *    **禁止**返回 `Response` / `NextResponse` / `{ status: 404 }` 等传输层
+ *    对象 — 让传输层（route handler）唯一决定 status code。
+ *
+ * 2. service 函数不读 `Request` / `headers` / `URL.searchParams`：
+ *    解析工作归传输层；service 只接 typed primitive 入参。
+ *
+ * 3. service 函数不写日志、不打 console：调用方负责 observability。
+ *
+ * 4. 任意 transport（RESTful route / GraphQL resolver / gRPC handler）只应：
+ *    - 解析入参 → 调用 service → 把 service 返回值映射到自己的 status code /
+ *      problem+json / GraphQL error / gRPC status。
+ *    - 不得在 transport 里再写一份「read → mutate → upsert」的业务规则。
+ *
+ * W2 落地：app/api/players/{name}/stats/{...,outcomes,sync}/route.ts 与
+ * lib/game-net.ts 的薄壳。GraphQL 双兼容仅需新增 schema + resolver，service
+ * 函数零改动。
+ *
+ * ## 行为契约
+ *
+ * - 每个 service 函数在 Node 单进程内是串行的（load → mutate → upsert 三步
+ *   在同一进程串行执行），不会交错。多实例（Vercel + Turso HTTP）的竞态超出
+ *   本文件范围。
+ * - 行不存在时返回明确信号（`null` / `not-found` 字符串），不静默建档。
+ * - 行存在的累加是纯函数 `recordOutcome(current, outcome)`（lib/game.ts）。
+ *
+ * ## W1 退役
+ *
+ * - `/api/stats` 链（route.ts + outcome/route.ts）+ `StatsHydrator` +
+ *   `lastWriteAt` 全链路退役：ranked 公共单行（id=1, name=NULL）的全行族
+ *   读 / 写 / 累加 / 重置 接口（`loadStats` / `saveStats` / `recordAndSave`
+ *   / `resetStats` + `STATS_ROW_ID`）整体删除。
+ * - 入口改走 per-name：所有读 / 写 / 累加都按 `name` 维度（`loadSoloRecord`
+ *   / `upsertSoloRecord` / `recordOutcomeForName` / `mergeSoloRecord` /
+ *   `registerOrLoginName`）。
+ */
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'tic-tac-toe.db');
 
@@ -127,9 +174,9 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   cachedClient = createClientFn(config);
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
-  // The single game_stats table holds both the ranked shared row
-  // (id=1, name=NULL) and per-player solo rows (auto-assigned id, name=…
-  // UNIQUE) since the ulw-name-login-one-truth plan merged the two.
+  // Single per-name rows under `name TEXT UNIQUE` since
+  // ulw-name-login-one-truth merged the ranked shared row out (W1
+  // ulw-one-game-two-versions retires the /api/stats chain entirely).
   await cachedClient.execute(`
     CREATE TABLE IF NOT EXISTS game_stats (
       id INTEGER PRIMARY KEY,
@@ -154,8 +201,8 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   // missing we rebuild the table inside a single transaction (CREATE →
   // INSERT...SELECT shared cols → DROP → RENAME) and retire the orphan
   // `solo_records` table; this is the only `getDb` path that touches the
-  // shape of `game_stats`, so the contract (single-row id=1 ranked,
-  // per-player rows under `name`) stays lock-step with `db/schema.ts`.
+  // shape of `game_stats`, so the contract (per-name rows under `name`)
+  // stays lock-step with `db/schema.ts`.
   // RC-drift §1 P1-1: probe must catch the half-applied state where
   // `name` column exists but no UNIQUE index covers it (someone ran a
   // raw ALTER TABLE ADD COLUMN without an index). Probe is two-step:
@@ -184,6 +231,18 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
     }
   }
   if (columnProbe.rows.length === 0 || !hasUniqueOnName) {
+    // W1 retires the ranked shared row (id=1, name=NULL) along with
+    // /api/stats. The reconcile branch is therefore a structural rebuild
+    // — only per-name rows (name IS NOT NULL) carry forward. When the
+    // legacy schema lacks the `name` column entirely, the carry-forward
+    // SELECT must skip the WHERE filter (referencing a missing column
+    // would error). Branch the INSERT statement on the probe result.
+    const hasNameColumn = columnProbe.rows.length > 0;
+    const carryForwardSql = hasNameColumn
+      ? `INSERT INTO game_stats_new (id, total_games, x_wins, o_wins, draws, current_streak, updated_at)
+           SELECT id, total_games, x_wins, o_wins, draws, current_streak, updated_at FROM game_stats WHERE name IS NOT NULL`
+      : `INSERT INTO game_stats_new (id, total_games, x_wins, o_wins, draws, current_streak, updated_at)
+           SELECT id, total_games, x_wins, o_wins, draws, current_streak, updated_at FROM game_stats`;
     await cachedClient.batch(
       [
         `CREATE TABLE game_stats_new (
@@ -196,16 +255,17 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
            name TEXT UNIQUE,
            updated_at INTEGER NOT NULL
          )`,
-        // Carry every legacy column except `name`. SQLite allows multiple
-        // NULLs under UNIQUE, so the ranked shared row keeps id=1
-        // (name=NULL) untouched and any future per-player row lands under
-        // its UNIQUE `name`.
-        `INSERT INTO game_stats_new (id, total_games, x_wins, o_wins, draws, current_streak, updated_at)
-           SELECT id, total_games, x_wins, o_wins, draws, current_streak, updated_at FROM game_stats`,
+        // Carry forward legacy rows (without `name`, which is freshly
+        // created as NULL under the new schema; SQLite allows multiple
+        // NULLs under TEXT UNIQUE). When the legacy schema had a `name`
+        // column, only per-name rows (name IS NOT NULL) carry forward;
+        // W1 retires the ranked shared row (id=1, name=NULL).
+        carryForwardSql,
         `DROP TABLE game_stats`,
         `ALTER TABLE game_stats_new RENAME TO game_stats`,
-        // Retire the pre-W1 `solo_records` table — solo data migrated to
-        // game_stats under `name` since ulw-name-login-one-truth.
+        // Retire the pre-W1 `solo_records` table — solo data was migrated
+        // to game_stats under `name` since ulw-name-login-one-truth; W1
+        // retires the separate solo_records table entirely.
         `DROP TABLE IF EXISTS solo_records`,
       ],
       'write',
@@ -215,88 +275,10 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   return cachedDb;
 }
 
-/** Read stats; creates the row if absent. Returns zero-stats on first read. */
-export async function loadStats(): Promise<GameStats> {
-  const db = await getDb();
-  const existing = await db
-    .select()
-    .from(gameStats)
-    .where(eq(gameStats.id, STATS_ROW_ID))
-    .get();
-  if (existing) {
-    return {
-      totalGames: existing.totalGames,
-      xWins: existing.xWins,
-      oWins: existing.oWins,
-      draws: existing.draws,
-      currentStreak: existing.currentStreak,
-    };
-  }
-  const now = new Date();
-  await db
-    .insert(gameStats)
-    .values({ id: STATS_ROW_ID, updatedAt: now })
-    .run();
-  return emptyStats();
-}
-
-/** Write stats (overwrite fields, bump updated_at). */
-export async function saveStats(stats: GameStats): Promise<void> {
-  const db = await getDb();
-  const now = new Date();
-  await db
-    .insert(gameStats)
-    .values({
-      id: STATS_ROW_ID,
-      totalGames: stats.totalGames,
-      xWins: stats.xWins,
-      oWins: stats.oWins,
-      draws: stats.draws,
-      currentStreak: stats.currentStreak,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: gameStats.id,
-      set: {
-        totalGames: stats.totalGames,
-        xWins: stats.xWins,
-        oWins: stats.oWins,
-        draws: stats.draws,
-        currentStreak: stats.currentStreak,
-        updatedAt: now,
-      },
-    })
-    .run();
-}
-
 /**
- * Server-authoritative accumulation for one finished game: read the current
- * row, apply the outcome via the pure `recordOutcome` rule (lib/game.ts), and
- * write the new full row back. Returns the new stats.
- *
- * Single Node process serializes callers, so load → record → save cannot
- * interleave within one instance; cross-instance (multi-Replica Vercel +
- * Turso HTTP) races are out of scope here (see future-work notes).
- */
-export async function recordAndSave(
-  outcome: 'X' | 'O' | 'draw',
-): Promise<GameStats> {
-  const current = await loadStats();
-  const next = recordOutcome(current, outcome);
-  await saveStats(next);
-  return next;
-}
-
-/** Reset stats to zero. */
-export async function resetStats(): Promise<GameStats> {
-  const zero = emptyStats();
-  await saveStats(zero);
-  return zero;
-}
-
-/**
- * Load a per-player solo record by name. Returns null when the row is
- * absent so callers (the /api/solo-stats GET handler) can branch on "fresh name" without sentinel values.
+ * Load a per-player record by name. Returns null when the row is
+ * absent so callers (the /api/players/{name}/stats GET handler) can
+ * branch on "fresh name" without sentinel values.
  */
 export async function loadSoloRecord(name: string): Promise<GameStats | null> {
   const db = await getDb();
@@ -315,7 +297,7 @@ export async function loadSoloRecord(name: string): Promise<GameStats | null> {
   };
 }
 
-/** Write a per-player solo record (insert-or-update by name). */
+/** Write a per-player record (insert-or-update by name). */
 export async function upsertSoloRecord(
   name: string,
   stats: GameStats,
@@ -347,7 +329,9 @@ export async function upsertSoloRecord(
     .run();
 }
 
-/** Close the cached client (used by tests / shutdown). */
+/**
+ * Close the cached client (used by tests / shutdown).
+ */
 /**
  * Pure per-field addition for the cross-device merge path
  * (ulw-solo-sync-rebuild.md B-T2). Adds server-side totals and
@@ -381,7 +365,7 @@ export function accumulateMergeStats(
  * the client-supplied totals via the pure accumulateMergeStats,
  * upserts the result, and returns the new row. Mirrors
  * load → mutate → upsert so the
- * caller (POST /api/solo-stats/sync) can adopt the server’s
+ * caller (POST /api/players/{name}/stats:merge) can adopt the server’s
  * authoritative answer without an extra GET.
  */
 export async function mergeSoloRecord(
@@ -392,6 +376,41 @@ export async function mergeSoloRecord(
   const next = accumulateMergeStats(server, clientStats);
   await upsertSoloRecord(name, next);
   return next;
+}
+
+/**
+ * Per-name server-authoritative outcome accumulator (W1
+ * ulw-one-game-two-versions, AC A9 / A5). Reads the per-name row,
+ * applies the pure `recordOutcome` rule (lib/game.ts) to bump the
+ * counters, upserts the new full row, and returns the result.
+ *
+ * Row-existence contract (与传输层约定, A4 前置):
+ *  - 行不存在 → 返回 `{ ok: false, reason: 'not-found' }`,
+ *    传输层映射成 404 problem+json。
+ *    拒绝静默建档 — 一个无名点击路径不该被偷渡成「已注册」。
+ *  - 行存在 → 返回 `{ ok: true, stats }`, 传输层映射成 200 + GameStats。
+ *
+ * 与 loadStats / recordAndSave 全行族（ranked, id=1）的区别：这是 per-name
+ * 维度，按 UNIQUE(name) 定位行；ranked 链在 W1 整体退役。
+ *
+ * 串行保证：单 Node 进程内 load → mutate → upsert 三步串行执行；多实例
+ * last-write-wins 由 README 边界注承担。
+ */
+export type RecordOutcomeResult =
+  | { ok: true; stats: GameStats }
+  | { ok: false; reason: 'not-found' };
+
+export async function recordOutcomeForName(
+  name: string,
+  outcome: 'X' | 'O' | 'draw',
+): Promise<RecordOutcomeResult> {
+  const current = await loadSoloRecord(name);
+  if (current === null) {
+    return { ok: false, reason: 'not-found' };
+  }
+  const next = recordOutcome(current, outcome);
+  await upsertSoloRecord(name, next);
+  return { ok: true, stats: next };
 }
 
 /**
@@ -412,19 +431,18 @@ export async function ensureSoloRecord(name: string): Promise<GameStats> {
 }
 
 /**
- * Player-session registration / login primitive for the /api/player-session
- * POST handler (ulw-name-login-one-truth W1). Reads the per-name row in
- * game_stats; if absent, inserts an emptyStats() row under that name and
- * returns { stats, existed: false }; if the row already exists, returns
- * { stats, existed: true }.
+ * Player-session registration / login primitive for the
+ * POST /api/sessions (W2) handler. Reads the per-name row in
+ * game_stats; if absent, inserts an emptyStats() row under that name
+ * and returns { stats, existed: false }; if the row already exists,
+ * returns { stats, existed: true }.
  *
- * Race-safety: a concurrent writer that inserted the row first trips the
- * UNIQUE constraint on game_stats.name. The catch block re-reads the row
- * so the loser surfaces the winner’s stats instead of throwing — callers
- * (the route handler) see the same response shape regardless of timing.
- * Mirrors the load → mutate → upsert shape so
- * loadStats / saveStats / recordAndSave behavior is untouched
- * (constraint: W1 keeps those three untouched).
+ * Race-safety: a concurrent writer that inserted the row first trips
+ * the UNIQUE constraint on game_stats.name. The catch block re-reads
+ * the row so the loser surfaces the winner’s stats instead of
+ * throwing — callers (the route handler) see the same response shape
+ * regardless of timing. Mirrors the load → mutate → upsert shape so
+ * the per-name contract is the single source of truth.
  *
  * UNIQUE on name is the server-side guarantee that name is an identity,
  * not a label: there is exactly one row per non-null name, so renaming

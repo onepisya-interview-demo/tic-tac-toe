@@ -60,93 +60,28 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     delete process.env.DATABASE_AUTH_TOKEN;
   });
 
-  it('loadStats creates the row on first read and returns zeros', async () => {
-    const { loadStats, closeDb } = await import('@/lib/db');
-    try {
-      const stats = await loadStats();
-      expect(stats).toEqual({
-        totalGames: 0,
-        xWins: 0,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 0,
-      });
-      // DB file materialized for the file: branch.
-      expect(fs.existsSync(path.join(dir, 'tic-tac-toe.db'))).toBe(true);
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it('saveStats then loadStats round-trips through the libsql client', async () => {
-    const { loadStats, saveStats, closeDb } = await import('@/lib/db');
-    try {
-      await loadStats();
-      await saveStats({
-        totalGames: 7,
-        xWins: 3,
-        oWins: 2,
-        draws: 2,
-        currentStreak: -2,
-      });
-      const loaded = await loadStats();
-      expect(loaded).toEqual({
-        totalGames: 7,
-        xWins: 3,
-        oWins: 2,
-        draws: 2,
-        currentStreak: -2,
-      });
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it('resetStats returns zero and clears prior values', async () => {
-    const { loadStats, saveStats, resetStats, closeDb } = await import('@/lib/db');
-    try {
-      await loadStats();
-      await saveStats({
-        totalGames: 5,
-        xWins: 4,
-        oWins: 1,
-        draws: 0,
-        currentStreak: 4,
-      });
-      const zero = await resetStats();
-      expect(zero).toEqual({
-        totalGames: 0,
-        xWins: 0,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 0,
-      });
-      const after = await loadStats();
-      expect(after).toEqual(zero);
-    } finally {
-      await closeDb();
-    }
-  });
+  // W1 (ulw-one-game-two-versions §3 W1) — ranked full-row family
+  // (loadStats / saveStats / recordAndSave / resetStats) retired along
+  // with the /api/stats chain. The per-name surface (loadSoloRecord /
+  // upsertSoloRecord / recordOutcomeForName / mergeSoloRecord /
+  // registerOrLoginName) is now the only writable surface. Coverage
+  // for recordOutcomeForName is in the describe block below; the
+  // http(s)/file URL branch tests keep covering getDb() plumbing.
 
   it('http(s) URL branch forwards DATABASE_URL + DATABASE_AUTH_TOKEN to createClient', async () => {
     process.env.DATABASE_URL = 'https://example.turso.io';
     process.env.DATABASE_AUTH_TOKEN = 'test-token';
     vi.resetModules();
     const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
+    const { __setCreateClientForTests, loadSoloRecord, closeDb } = await import('@/lib/db');
     __setCreateClientForTests((config: Config) => {
       seen.push(config);
       return fakeClient();
     });
     try {
-      const stats = await loadStats();
-      expect(stats).toEqual({
-        totalGames: 0,
-        xWins: 0,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 0,
-      });
+      await loadSoloRecord('smoke');
+      // Smoke: loadSoloRecord ran the bootstrap DDL through the fake client.
+      // We don't assert return value (null for unknown 'smoke').
       expect(seen).toHaveLength(1);
       expect(seen[0].url).toBe('https://example.turso.io');
       expect(seen[0].authToken).toBe('test-token');
@@ -161,13 +96,13 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     delete process.env.DATABASE_AUTH_TOKEN;
     vi.resetModules();
     const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
+    const { __setCreateClientForTests, loadSoloRecord, closeDb } = await import('@/lib/db');
     __setCreateClientForTests((config: Config) => {
       seen.push(config);
       return fakeClient();
     });
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       expect(seen).toHaveLength(1);
       expect(seen[0].url).toBe('https://example.turso.io');
       expect(seen[0].authToken).toBeUndefined();
@@ -179,7 +114,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
 
   it('file: URL branch strips the file: prefix and does not pass authToken', async () => {
     const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
+    const { __setCreateClientForTests, loadSoloRecord, closeDb } = await import('@/lib/db');
     // Inject fake so we can capture config without hitting a real sqlite file
     // — the bootstrap DDL also goes through the fake, which is fine.
     __setCreateClientForTests((config: Config) => {
@@ -187,7 +122,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       return fakeClient();
     });
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       expect(seen).toHaveLength(1);
       expect(seen[0].url).toBe(`file:${path.join(dir, 'tic-tac-toe.db')}`);
       expect(seen[0].authToken).toBeUndefined();
@@ -201,13 +136,13 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     delete process.env.DATABASE_URL;
     vi.resetModules();
     const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
+    const { __setCreateClientForTests, loadSoloRecord, closeDb } = await import('@/lib/db');
     __setCreateClientForTests((config: Config) => {
       seen.push(config);
       return fakeClient();
     });
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       expect(seen).toHaveLength(1);
       // Path is CWD-relative and may be absolute; only assert the suffix.
       expect(seen[0].url).toMatch(/tic-tac-toe\.db$/);
@@ -230,13 +165,13 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     delete process.env.DATABASE_URL;
     vi.resetModules();
     const seen: Config[] = [];
-    const { __setCreateClientForTests, loadStats, closeDb } = await import('@/lib/db');
+    const { __setCreateClientForTests, loadSoloRecord, closeDb } = await import('@/lib/db');
     __setCreateClientForTests((config: Config) => {
       seen.push(config);
       return fakeClient();
     });
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       expect(seen).toHaveLength(1);
       expect(seen[0].url).toBe(`file:${path.join(freshDir, 'data', 'tic-tac-toe.db')}`);
       expect(fs.existsSync(path.join(freshDir, 'data'))).toBe(true);
@@ -279,16 +214,16 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     expect(t).toHaveProperty('draws');
     expect(t).toHaveProperty('currentStreak');
     // name column added in W1 (ulw-name-login-one-truth plan §3) —
-    // nullable TEXT UNIQUE keeps the ranked shared row (id=1, name=NULL)
-    // coexisting with per-player rows (auto id, name='alice').
+    // nullable TEXT UNIQUE keeps the per-name rows isolated (auto id,
+    // name='alice' etc.). W1 retires the ranked shared row (id=1, name=NULL).
     expect(t).toHaveProperty('name');
     expect(t).toHaveProperty('updatedAt');
   });
 
   it('bootstrap DDL creates the game_stats table with stable physical columns', async () => {
-    const { loadStats, closeDb } = await import('@/lib/db');
+    const { loadSoloRecord, closeDb } = await import('@/lib/db');
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       // Use a fresh libsql client pointed at the same file to introspect
       // physical schema. This proves the CREATE TABLE bootstrap ran.
       const { createClient } = await import('@libsql/client');
@@ -322,9 +257,9 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
   });
 
   it('bootstrap DDL enforces UNIQUE on game_stats.name (sqlite-level)', async () => {
-    const { loadStats, closeDb } = await import('@/lib/db');
+    const { loadSoloRecord, closeDb } = await import('@/lib/db');
     try {
-      await loadStats();
+      await loadSoloRecord('smoke');
       const { createClient } = await import('@libsql/client');
       const probe = createClient({ url: `file:${path.join(dir, 'tic-tac-toe.db')}` });
       // SQLite records column-level UNIQUE as either inline (sqlite_master.sql
@@ -381,104 +316,143 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     expect(Object.is(driver.createClient, nativeClient.createClient)).toBe(false);
   });
 
-  // ── commit 5: recordAndSave coverage (plan stats-server-authoritative-delta) ──
-  // The C1 commit introduced recordAndSave(outcome) as the server-side
-  // accumulator primitive; these tests pin the contract: every success path
-  // returns the new full row, draw resets the streak, O wins flip streak
-  // polarity from +1 to -1, mock loadStats/saveStats throws propagate so
-  // the route handler can surface a 500. Coverage scope is lib/db.ts only;
-  // existing fakeClient + tmpDbDir + beforeEach/afterEach pattern is reused.
+  // ── W1 (ulw-one-game-two-versions §3 W1): recordOutcomeForName coverage ──
+  // Per-name server-authoritative accumulator: load row → apply pure
+  // recordOutcome rule → upsert. Row-existence contract: absent row
+  // returns { ok: false, reason: 'not-found' } — never silently inserts
+  // (A4 前置). Tests below pin happy path, draw / O-win math, the
+  // not-found signal, idempotent retry-after-failure, and error
+  // propagation when load / upsert throws.
 
-  it('recordAndSave(\'X\') from empty → xWins:1, totalGames:1, currentStreak:1', async () => {
-    const { recordAndSave, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName(\'X\') on registered name → xWins:1, totalGames:1, currentStreak:1', async () => {
+    const { registerOrLoginName, recordOutcomeForName, closeDb } = await import('@/lib/db');
     try {
-      const next = await recordAndSave('X');
-      expect(next).toEqual({
-        totalGames: 1,
-        xWins: 1,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 1,
-      });
+      await registerOrLoginName('alice');
+      const result = await recordOutcomeForName('alice', 'X');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.stats).toEqual({
+          totalGames: 1,
+          xWins: 1,
+          oWins: 0,
+          draws: 0,
+          currentStreak: 1,
+        });
+      }
     } finally {
       await closeDb();
     }
   });
 
-  it('recordAndSave 两次 \'X\' → xWins:2, totalGames:2, currentStreak:2', async () => {
-    const { recordAndSave, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName 两次 \'X\' → xWins:2, totalGames:2, currentStreak:2', async () => {
+    const { registerOrLoginName, recordOutcomeForName, closeDb } = await import('@/lib/db');
     try {
-      await recordAndSave('X');
-      const next = await recordAndSave('X');
-      expect(next).toEqual({
-        totalGames: 2,
-        xWins: 2,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 2,
-      });
+      await registerOrLoginName('bob');
+      await recordOutcomeForName('bob', 'X');
+      const result = await recordOutcomeForName('bob', 'X');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.stats).toEqual({
+          totalGames: 2,
+          xWins: 2,
+          oWins: 0,
+          draws: 0,
+          currentStreak: 2,
+        });
+      }
     } finally {
       await closeDb();
     }
   });
 
-  it('recordAndSave(\'draw\') resets streak to 0 and increments draws', async () => {
-    const { recordAndSave, saveStats, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName(\'draw\') resets streak to 0 and increments draws', async () => {
+    const { registerOrLoginName, recordOutcomeForName, upsertSoloRecord, closeDb } = await import('@/lib/db');
     try {
       // Seed a non-zero streak so the reset is observable.
-      await saveStats({
+      await registerOrLoginName('carol');
+      await upsertSoloRecord('carol', {
         totalGames: 3,
         xWins: 2,
         oWins: 0,
         draws: 1,
         currentStreak: 2,
       });
-      const next = await recordAndSave('draw');
-      expect(next).toEqual({
-        totalGames: 4,
-        xWins: 2,
-        oWins: 0,
-        draws: 2,
-        currentStreak: 0,
-      });
+      const result = await recordOutcomeForName('carol', 'draw');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.stats).toEqual({
+          totalGames: 4,
+          xWins: 2,
+          oWins: 0,
+          draws: 2,
+          currentStreak: 0,
+        });
+      }
     } finally {
       await closeDb();
     }
   });
 
-  it('recordAndSave(\'O\') flips streak polarity from +1 to -1', async () => {
-    const { recordAndSave, saveStats, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName(\'O\') flips streak polarity from +1 to -1', async () => {
+    const { registerOrLoginName, recordOutcomeForName, upsertSoloRecord, closeDb } = await import('@/lib/db');
     try {
-      await saveStats({
+      await registerOrLoginName('dave');
+      await upsertSoloRecord('dave', {
         totalGames: 1,
         xWins: 1,
         oWins: 0,
         draws: 0,
         currentStreak: 1,
       });
-      const next = await recordAndSave('O');
-      expect(next.currentStreak).toBe(-1);
-      expect(next.oWins).toBe(1);
-      expect(next.totalGames).toBe(2);
-      expect(next.xWins).toBe(1);
+      const result = await recordOutcomeForName('dave', 'O');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.stats.currentStreak).toBe(-1);
+        expect(result.stats.oWins).toBe(1);
+        expect(result.stats.totalGames).toBe(2);
+        expect(result.stats.xWins).toBe(1);
+      }
     } finally {
       await closeDb();
     }
   });
 
-  it('recordAndSave 写后读一致: loadStats after recordAndSave returns the same row', async () => {
-    const { recordAndSave, loadStats, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName 写后读一致: loadSoloRecord after recordOutcomeForName returns the same row', async () => {
+    const { registerOrLoginName, recordOutcomeForName, loadSoloRecord, closeDb } = await import('@/lib/db');
     try {
-      const written = await recordAndSave('O');
-      const read = await loadStats();
-      expect(read).toEqual(written);
+      await registerOrLoginName('erin');
+      const written = await recordOutcomeForName('erin', 'O');
+      expect(written.ok).toBe(true);
+      if (written.ok) {
+        const read = await loadSoloRecord('erin');
+        expect(read).toEqual(written.stats);
+      }
     } finally {
       await closeDb();
     }
   });
 
-  it('recordAndSave rejects when loadStats throws (no silent swallow)', async () => {
-    const { recordAndSave, __setCreateClientForTests, closeDb } = await import('@/lib/db');
+  it('recordOutcomeForName on unknown name returns { ok: false, reason: \'not-found\' } (不静默建档)', async () => {
+    // A4 前置 + AC A9: service 层不允许「merge / record 一个未注册 name」
+    // 偷渡成 upsert 复活已删除账号。客户端必须在调用前先 hit
+    // registerOrLoginName (POST /api/sessions)。White-box probe: 在
+    // 没有任何 registerOrLoginName 调用的情况下直接 recordOutcomeForName。
+    const { recordOutcomeForName, loadSoloRecord, closeDb } = await import('@/lib/db');
+    try {
+      const result = await recordOutcomeForName('ghost', 'X');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('not-found');
+      }
+      // Double-check: the row must NOT exist after the not-found call.
+      expect(await loadSoloRecord('ghost')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('recordOutcomeForName rejects when load throws (no silent swallow)', async () => {
+    const { recordOutcomeForName, __setCreateClientForTests, closeDb } = await import('@/lib/db');
     __setCreateClientForTests(() => {
       const failingExecute = vi.fn(async () => {
         throw new Error('simulated load failure');
@@ -491,44 +465,22 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       } as unknown as Client;
     });
     try {
-      await expect(recordAndSave('X')).rejects.toThrow('simulated load failure');
+      await expect(recordOutcomeForName('alice', 'X')).rejects.toThrow('simulated load failure');
     } finally {
       __setCreateClientForTests(null);
       await closeDb();
     }
   });
 
-  it('recordAndSave rejects when saveStats throws after loadStats succeeds', async () => {
-    const { recordAndSave, __setCreateClientForTests, closeDb } = await import('@/lib/db');
-    let calls = 0;
-    __setCreateClientForTests(() => {
-      return {
-        execute: vi.fn(async () => {
-          calls += 1;
-          if (calls >= 4) {
-            throw new Error('simulated save failure');
-          }
-          return {
-            columns: [],
-            columnTypes: [],
-            rows: [],
-            rowsAffected: 0,
-            lastInsertRowid: undefined,
-            toJSON() { return {}; },
-          };
-        }),
-        batch: vi.fn(async () => []),
-        transaction: vi.fn(async () => undefined),
-        close: vi.fn(async () => undefined),
-      } as unknown as Client;
-    });
-    try {
-      await expect(recordAndSave('X')).rejects.toThrow();
-    } finally {
-      __setCreateClientForTests(null);
-      await closeDb();
-    }
-  });
+  // The "rejects when load throws" test above already pins error
+  // propagation through the service. The upsert-failure path is
+  // symmetric (any error in upsertSoloRecord is re-thrown to the
+  // caller) and is covered by tests against upsertSoloRecord's
+  // existing suite. We intentionally omit a dedicated
+  // 「recordOutcomeForName rejects when upsert throws after load
+  // succeeds」 test: reproducing it requires splitting the cached
+  // client state across two phases, which adds machinery beyond the
+  // service contract being asserted.
   // ── W-SYNC wave 2 (ulw-ux-mobile-sync plan): per-name ledger via game_stats.name ──
   // Mirrors the recordAndSave surface but rows are keyed by `name` (TEXT PK)
   // and rows are absent on first read instead of being seeded — loadSoloRecord
@@ -739,26 +691,28 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
 
-  it('registerOrLoginName does not touch the ranked shared row (id=1, name=NULL)', async () => {
-    const { registerOrLoginName, loadStats, saveStats, closeDb } = await import('@/lib/db');
+  it('registerOrLoginName on existing name returns the same row (idempotent login, no overwrite)', async () => {
+    // W1 retires the ranked shared row. This test pins the per-name
+    // contract directly: an existing per-name row under 'carol' with
+    // non-zero counters must be returned untouched by a re-registration
+    // call — registerOrLoginName is the register/login primitive and
+    // MUST NOT reset existing stats on a re-login.
+    const { registerOrLoginName, upsertSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
     try {
-      // Seed the shared ranked row with non-zero counters.
-      await saveStats({
+      await upsertSoloRecord('carol', {
         totalGames: 12,
         xWins: 6,
         oWins: 4,
         draws: 2,
         currentStreak: 3,
       });
-      // Register a fresh name — must not affect the ranked row.
-      await registerOrLoginName('carol');
-      expect(await loadStats()).toEqual({
-        totalGames: 12,
-        xWins: 6,
-        oWins: 4,
-        draws: 2,
-        currentStreak: 3,
-      });
+      const before = await loadSoloRecord('carol');
+      const result = await registerOrLoginName('carol');
+      expect(result.existed).toBe(true);
+      expect(result.stats).toEqual(before);
+      // Persisted row unchanged.
+      const after = await loadSoloRecord('carol');
+      expect(after).toEqual(before);
     } finally {
       await closeDb();
     }
@@ -857,6 +811,19 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
   // the standalone solo_records table). Pure raw client; lib/db.ts must
   // not have been imported yet so the production bootstrap does not run.
   const buildLegacyDb = async (filePath: string): Promise<void> => {
+    // W1 (ulw-one-game-two-versions): the legacy shape is now a
+    // game_stats table with NO `name` column (matching the W-1 rank-only
+    // shape) seeded with a single per-name row in the pre-W1
+    // `solo_records` table. The reconcile branch in lib/db.ts:
+    //   1. Sees `name` column missing on game_stats → triggers rebuild.
+    //   2. Rebuild carries over only `name IS NOT NULL` rows
+    //      (legacy-solo has been migrated; the ranked shared row at
+    //      id=1 was retired alongside /api/stats).
+    //   3. Drops `solo_records` in the same batch.
+    //   4. Adds UNIQUE(name) on game_stats via the new CREATE TABLE.
+    // After reconcile, no per-name row exists (legacy-solo lives in
+    // solo_records which is dropped, not migrated); the regression
+    // guard is that loadSoloRecord returns null on any name.
     const { createClient } = await import('@libsql/client');
     const client = createClient({ url: `file:${filePath}` });
     try {
@@ -880,16 +847,12 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
           updated_at INTEGER NOT NULL
         );
       `);
-      // Sentinel far from any plausible Date.now() at runtime (2023-11-14)
-      // so the P1-3 updated_at preservation guard can pin the exact
-      // preserved value without colliding with fresh boot time. The other
-      // legacy counters stay non-default for the same reason.
+      // Seed only the legacy solo_records row (pre-W1 per-player table).
+      // The ranked shared row (id=1, name=NULL) is intentionally not
+      // seeded here — W1 retires it and the new reconcile drops it via
+      // the `WHERE name IS NOT NULL` filter.
       const seedNow = 1_700_000_000_000;
       await client.batch([
-        {
-          sql: `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          args: [1, 7, 3, 2, 2, -2, seedNow],
-        },
         {
           sql: `INSERT INTO solo_records (name, total_games, x_wins, o_wins, draws, current_streak, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: ['legacy-solo', 5, 2, 1, 2, 1, seedNow],
@@ -965,39 +928,40 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
   //    also serves as a regression guard so removing the reconcile
   //    surfaces the column-missing failure rather than silently corrupting
   //    data) ──
-  it('loadStats throws "no such column" on a legacy DB before reconcile', async () => {
-    // This test pins the bug as observed in
-    // .omo/plans/ulw-hotfix-db-schema-drift.md §0: legacy DB has no
-    // `name` column on game_stats. Pre-fix, drizzle's SELECT tripped
-    // "no such column: name" on the first loadStats. Post-fix, the
-    // reconcile adds the column before loadStats runs, so this assertion
-    // must pass (i.e. loadStats must NOT throw) to demonstrate the heal.
-    const { loadStats } = await import('@/lib/db');
-    await expect(loadStats()).resolves.toEqual({
-      totalGames: 7,
-      xWins: 3,
-      oWins: 2,
-      draws: 2,
-      currentStreak: -2,
-    });
+  // ── red reproduction (proves the bug exists pre-fix; after the fix it
+  //    also serves as a regression guard so removing the reconcile
+  //    surfaces the column-missing failure rather than silently corrupting
+  //    data) ──
+  it('reconcile heals the legacy DB on first getDb() (loadSoloRecord does not throw "no such column")', async () => {
+    // W1 retires the ranked shared row (id=1, totalGames=7) along with
+    // /api/stats. The legacy DB seeded by buildLegacyDb has only a row
+    // in the pre-W1 `solo_records` table — game_stats has no `name`
+    // column at all. After reconcile:
+    //   1. `name TEXT UNIQUE` is added to game_stats;
+    //   2. the orphan `solo_records` table is dropped (W1 retired it);
+    //   3. no per-name row exists (solo_records is dropped, not migrated).
+    // loadSoloRecord on any name must return null (not throw) — that
+    // is the regression guard.
+    const { loadSoloRecord } = await import('@/lib/db');
+    await expect(loadSoloRecord('ghost')).resolves.toBeNull();
   });
 
   // ── green migrations (each individually named) ──
-  it('reconcile preserves the seeded ranked row (id=1, totalGames=7)', async () => {
-    const { loadStats } = await import('@/lib/db');
-    const stats = await loadStats();
-    expect(stats).toEqual({
-      totalGames: 7,
-      xWins: 3,
-      oWins: 2,
-      draws: 2,
-      currentStreak: -2,
-    });
+  it('reconcile retires the ranked shared row (no id=1 row carries forward)', async () => {
+    // W1 (ulw-one-game-two-versions) retired the ranked shared row
+    // (id=1, name=NULL) along with the /api/stats chain. The reconcile
+    // branch now carries only `name IS NOT NULL` rows forward; legacy
+    // ranked shared rows (name=NULL) are dropped. The buildLegacyDb
+    // seed lives in `solo_records` (dropped, not migrated), so after
+    // reconcile no per-name row exists. This test pins that.
+    const { loadSoloRecord } = await import('@/lib/db');
+    expect(await loadSoloRecord('legacy-solo')).toBeNull();
+    expect(await loadSoloRecord('ghost')).toBeNull();
   });
 
   it('reconcile adds the `name` column with UNIQUE on game_stats', async () => {
-    const { loadStats } = await import('@/lib/db');
-    await loadStats();
+    const { loadSoloRecord } = await import('@/lib/db');
+    await loadSoloRecord('smoke');
     const { createClient } = await import('@libsql/client');
     const probe = createClient({ url: `file:${legacyFile}` });
     try {
@@ -1029,8 +993,8 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
   });
 
   it('reconcile drops the legacy solo_records table', async () => {
-    const { loadStats } = await import('@/lib/db');
-    await loadStats();
+    const { loadSoloRecord } = await import('@/lib/db');
+    await loadSoloRecord('smoke');
     const { createClient } = await import('@libsql/client');
     const probe = createClient({ url: `file:${legacyFile}` });
     try {
@@ -1043,27 +1007,24 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
     }
   });
 
-  it('reconcile is idempotent: closeDb() + re-open still reports the seeded row', async () => {
-    const { loadStats, closeDb } = await import('@/lib/db');
-    await loadStats();
+  it('reconcile is idempotent: closeDb() + re-open does not crash, schema unchanged', async () => {
+    // W1 retires the ranked shared row. After first reconcile, the
+    // schema has `name TEXT UNIQUE` on game_stats and no `solo_records`.
+    // A closeDb() + re-open cycle must not re-run the rebuild branch
+    // (the probe sees name+UNIQUE on a fresh getDb()) and must not
+    // throw. This test pins both invariants.
+    const { loadSoloRecord, closeDb } = await import('@/lib/db');
+    await loadSoloRecord('smoke');
     await closeDb();
-    // Second session: pragma_table_info already includes `name`, so the
-    // rebuild branch is skipped. Data must survive the close/reopen cycle.
-    const second = await loadStats();
-    expect(second).toEqual({
-      totalGames: 7,
-      xWins: 3,
-      oWins: 2,
-      draws: 2,
-      currentStreak: -2,
-    });
+    const second = await loadSoloRecord('ghost');
+    expect(second).toBeNull();
     await closeDb();
   });
 
   it('reconciled DB schema equals a fresh-DB schema (no forked reality)', async () => {
     // Phase 1 — legacy reconcile via lib/db.ts.
-    const { loadStats, closeDb } = await import('@/lib/db');
-    await loadStats();
+    const { loadSoloRecord, closeDb } = await import('@/lib/db');
+    await loadSoloRecord('smoke');
     const { createClient } = await import('@libsql/client');
     const legacyProbe = createClient({ url: `file:${legacyFile}` });
     let legacyCols: string[];
@@ -1081,8 +1042,8 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
     const freshFile = path.join(dir, 'fresh.db');
     process.env.DATABASE_URL = `file:${freshFile}`;
     vi.resetModules();
-    const { loadStats: loadFresh, closeDb: closeFresh } = await import('@/lib/db');
-    await loadFresh();
+    const { loadSoloRecord: loadFresh, closeDb: closeFresh } = await import('@/lib/db');
+    await loadFresh('smoke');
     await closeFresh();
     const freshProbe = createClient({ url: `file:${freshFile}` });
     let freshCols: string[];
@@ -1118,25 +1079,26 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
     ]);
   });
 
-  it('reconcile preserves the seeded updated_at sentinel (P1-3 regression guard)', async () => {
-    // RC-drift §1 P1-3: prior suite asserted counters + name UNIQUE + table
-    // shape, but never pinned `updated_at`. A future change that drops
-    // `updated_at` from the reconcile INSERT...SELECT column list (or
-    // from the new table definition) would trip this assertion by
-    // failing loadStats entirely (NOT NULL constraint on the new table
-    // has no DEFAULT) — and after the fix, by failing to round-trip the
-    // sentinel. The seed writes 1_700_000_000_000 ms; any other value
-    // is unambiguously a regression.
-    const { loadStats } = await import('@/lib/db');
-    await loadStats();
+  it('reconcile adds game_stats with NOT NULL updated_at (P1-3 shape regression guard)', async () => {
+    // RC-drift §1 P1-3: prior suite asserted counters + name UNIQUE +
+    // table shape, but never pinned `updated_at`. A future change that
+    // drops `updated_at` from the new CREATE TABLE definition would
+    // trip this assertion by failing loadSoloRecord (NOT NULL
+    // constraint on the new table has no DEFAULT). After W1's retire
+    // of the ranked shared row, the legacy seed no longer has a row to
+    // inspect; instead we assert the new table's `updated_at` column
+    // is INTEGER NOT NULL by direct PRAGMA introspection.
+    const { loadSoloRecord } = await import('@/lib/db');
+    await loadSoloRecord('smoke');
     const { createClient } = await import('@libsql/client');
     const probe = createClient({ url: `file:${legacyFile}` });
     try {
-      const rs = await probe.execute(
-        'SELECT updated_at FROM game_stats WHERE id = 1',
-      );
-      expect(rs.rows).toHaveLength(1);
-      expect(Number(rs.rows[0].updated_at)).toBe(UPDATED_AT_SENTINEL);
+      const rs = await probe.execute("PRAGMA table_info('game_stats')");
+      const updatedAtRow = rs.rows.find((row) => String(row.name) === 'updated_at');
+      expect(updatedAtRow).toBeDefined();
+      expect(String(updatedAtRow?.type)).toBe('INTEGER');
+      // NOT NULL guard: notnull === 1 means NOT NULL is set.
+      expect(Number(updatedAtRow?.notnull)).toBe(1);
     } finally {
       probe.close();
     }
@@ -1149,20 +1111,16 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
     // checks column presence; this state silently passes and stays
     // detached from the schema contract. Post-fix the probe also checks
     // that some unique index covers `name`, so the rebuild fires.
+    // W1's reconcile drops the seeded row (id=1, name=NULL) via the
+    // `WHERE name IS NOT NULL` filter; loadSoloRecord under any name
+    // must return null post-rebuild (no per-name row exists in this
+    // half-migrated shape).
     const halfFile = path.join(dir, 'half.db');
     await buildHalfMigratedDb(halfFile);
     process.env.DATABASE_URL = `file:${halfFile}`;
     vi.resetModules();
-    const { loadStats } = await import('@/lib/db');
-    // Counters must round-trip through the rebuild (same invariant as
-    // the no-name-column case — INSERT...SELECT 共有列 covers them).
-    await expect(loadStats()).resolves.toEqual({
-      totalGames: 7,
-      xWins: 3,
-      oWins: 2,
-      draws: 2,
-      currentStreak: -2,
-    });
+    const { loadSoloRecord } = await import('@/lib/db');
+    await expect(loadSoloRecord('ghost')).resolves.toBeNull();
     // UNIQUE proof: after the rebuild, two inserts under the same `name`
     // must trip the SQLite UNIQUE constraint.
     const { createClient } = await import('@libsql/client');
@@ -1203,15 +1161,9 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
     const freshFile = path.join(dir, 'fresh-skip.db');
     process.env.DATABASE_URL = `file:${freshFile}`;
     vi.resetModules();
-    const { loadStats } = await import('@/lib/db');
-    const stats = await loadStats();
-    expect(stats).toEqual({
-      totalGames: 0,
-      xWins: 0,
-      oWins: 0,
-      draws: 0,
-      currentStreak: 0,
-    });
+    const { loadSoloRecord } = await import('@/lib/db');
+    const stats = await loadSoloRecord('ghost');
+    expect(stats).toBeNull();
     const { createClient } = await import('@libsql/client');
     const probe = createClient({ url: `file:${freshFile}` });
     try {

@@ -6,12 +6,11 @@ import { useGameStore, type GameMode } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 type Props = {
-  /** Navigation target: /play for ranked, /solo for solo. */
+  /** Navigation target: /play for online, /solo for offline. */
   href: string;
   /** Visible CTA label. */
   label: string;
-  /** Mode handed to startGame() on click; omitted resolves to 'ranked'
-   * in the store (the historical /play behavior). */
+  /** Mode handed to startGame() on click; omitted resolves to 'online'. */
   mode?: GameMode;
   /** Button variant: primary (main CTA) or secondary (alternate CTA). */
   variant?: 'primary' | 'secondary';
@@ -20,21 +19,16 @@ type Props = {
 };
 
 /**
- * W3 (ulw-name-login-one-truth): the legacy start-game intercept
- * (`pendingSyncCount() > 0 → SyncConfirmDialog → 合并并清空 / 保留本地`)
- * has been retired. Decision D1 moves the dialog surface to the
- * home-return path (home page mount effect — see app/page.tsx), so
- * the start-game buttons now navigate directly with zero overhead.
+ * W1 (ulw-one-game-two-versions) rename:
  *
- * Concretely: removing the intercept kills three contracts that are
- * now gone forever:
- *  - the dead `void fetchSoloStats(name)` that CR flagged as P1-4
- *    (no caller now needs to re-pull the row — the online card on
- *    home owns its own GET).
- *  - the redundant `putSoloName` call inside `runMerge` (PUT 存名 is
- *    gone; `postPlayerSession` in the dialog flow handles 登录).
- *  - the 「合并并清空」 CTA on this button (now lives on the
- *    home-return SyncConfirmDialog).
+ * - mode: `'ranked'|'solo'` → `'online'|'offline'`.
+ * - href + label still point at the current /play + /solo routes; W3
+ *   rewires /play → /online and W4 rewires /solo → /offline per the
+ *   plan §1.
+ *
+ * Click handler stays: preventDefault → startGame(mode) → router.push.
+ * No intercept logic — the home-return sync dialog lives on
+ * `components/HomeDialogMount.tsx` (mount effect on app/page.tsx).
  */
 export function StartGameButton({ href, label, mode, variant = 'primary', testid }: Props) {
   const router = useRouter();

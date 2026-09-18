@@ -48,13 +48,11 @@ vi.mock('next/navigation', () => ({
 
 afterEach(() => {
   cleanup();
-  // Clear any persisted solo baseline from previous tests so
-  // pendingSyncCount() reads 0 and the dialog never opens unexpectedly.
   window.localStorage.clear();
   routerPush.mockClear();
   useGameStore.setState({
     phase: 'idle',
-    mode: 'ranked',
+    mode: 'online',
     board: [
       null, null, null,
       null, null, null,
@@ -63,7 +61,7 @@ afterEach(() => {
     currentPlayer: null,
     winner: null,
     winLine: null,
-    lastWriteAt: null,
+    playerName: null,
   });
   useGameStore.getState().__resetInternalForTests();
 });
@@ -71,7 +69,7 @@ afterEach(() => {
 describe('components/StartGameButton (parameterized CTA)', () => {
   it('renders href, label, variant and the caller testid', () => {
     render(
-      <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />,
+      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-solo" />,
     );
     // W1: the testid now sits on the Link (<a>) itself — the dialog
     // and intercept logic attach directly to the anchor so probe
@@ -83,25 +81,25 @@ describe('components/StartGameButton (parameterized CTA)', () => {
     expect(link).toHaveTextContent('单机练习');
   });
 
-  it('starts a ranked game on the /play CTA (default mode contract unchanged)', async () => {
+  it('starts an online game on the /play CTA (default mode contract unchanged)', async () => {
     const user = userEvent.setup();
     render(
-      <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />,
+      <StartGameButton href="/play" label="开始对战" mode="online" variant="primary" testid="start-game" />,
     );
     await user.click(screen.getByTestId('start-game'));
     const s = useGameStore.getState();
-    expect(s.mode).toBe('ranked');
+    expect(s.mode).toBe('online');
     expect(s.phase).toBe('playing');
   });
 
-  it('starts a solo game on the /solo CTA', async () => {
+  it('starts an offline game on the /solo CTA', async () => {
     const user = userEvent.setup();
     render(
-      <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />,
+      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-solo" />,
     );
     await user.click(screen.getByTestId('start-solo'));
     const s = useGameStore.getState();
-    expect(s.mode).toBe('solo');
+    expect(s.mode).toBe('offline');
     expect(s.phase).toBe('playing');
   });
 });

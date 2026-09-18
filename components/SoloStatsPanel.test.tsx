@@ -89,15 +89,15 @@ describe('components/SoloStatsPanel', () => {
     render(<SoloStatsPanel />);
     expect(panelValues()).toEqual(['2', '2', '0', '0', 'X 连胜 2']);
 
-    // resetSoloStats is gated on mode === 'solo' (F-5.1 defensive
+    // resetSoloStats is gated on mode === 'offline' (F-5.1 defensive
     // guard). Production always reaches this button on /solo where
-    // PlayController has already set mode='solo'; the isolated test
+    // PlayController has already set mode='offline'; the isolated test
     // render does not include PlayController, so mirror that state
     // here. Without this setState the guard fires and the click is a
     // no-op — exactly the regression the guard is designed to prevent
     // in real code paths.
     act(() => {
-      useGameStore.setState({ mode: 'solo' });
+      useGameStore.setState({ mode: 'offline' });
     });
 
     await user.click(screen.getByTestId('reset-solo-stats'));

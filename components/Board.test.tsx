@@ -15,7 +15,6 @@ function setPlaying() {
     board: createEmptyBoard(),
     winLine: null,
     currentPlayer: 'X',
-    lastWriteAt: null,
   });
 }
 
