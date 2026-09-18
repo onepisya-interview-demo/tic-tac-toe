@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { isPlayerName } from '@/lib/player-name';
 import { useGameStore } from '@/lib/store';
-import { postPlayerSession } from '@/lib/solo-net';
+import { postSession } from '@/lib/game-net';
 import { Button } from '@/components/ui/Button';
 
 const NAME_MAX = 24;
@@ -106,7 +106,7 @@ export function PlayerNameForm() {
     }
     setBusy(true);
     try {
-      const r = await postPlayerSession(trimmed);
+      const r = await postSession(trimmed);
       if (!r.ok) {
         if (r.reason === 'http-error' && r.status === 422) {
           setFeedback({

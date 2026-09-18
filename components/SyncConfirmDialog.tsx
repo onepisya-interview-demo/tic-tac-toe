@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { isPlayerName } from '@/lib/player-name';
-import { postPlayerSession, postSoloSync } from '@/lib/solo-net';
+import { postSession, postMerge } from '@/lib/game-net';
 import { loadSoloStats } from '@/lib/solo-stats';
 import type { GameStats } from '@/lib/game';
 
@@ -134,12 +134,12 @@ export function SyncConfirmDialog({
   const canConfirm = nameOk && !busy;
 
   async function runMergeSequence(): Promise<GameStats> {
-    // Two-step sequence: (1) postPlayerSession guarantees the row
-    // exists (注册 if fresh, 登录 if existing); (2) postSoloSync
-    // merges the local snapshot into the row. The server answers
-    // 409 on sync if the row vanished in between; we surface that
+    // Two-step sequence: (1) postSession guarantees the row
+    // exists (注册 if fresh, 登录 if existing); (2) postMerge
+    // folds the local snapshot into the row. The server answers
+    // 409 on merge if the row vanished in between; we surface that
     // verbatim so the user knows to retry after re-logging in.
-    const session = await postPlayerSession(trimmed);
+    const session = await postSession(trimmed);
     if (!session.ok) {
       if (session.reason === 'http-error' && session.status === 422) {
         throw new Error('名字含不允许的字符');
@@ -150,7 +150,7 @@ export function SyncConfirmDialog({
       throw new Error('登录失败，请稍后重试（战绩仍在本地）');
     }
     const localSnapshot = loadSoloStats();
-    const r = await postSoloSync(trimmed, localSnapshot);
+    const r = await postMerge(trimmed, localSnapshot);
     if (!r.ok) {
       throw new Error(
         r.reason === 'http-error' && r.status === 409

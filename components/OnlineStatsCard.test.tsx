@@ -6,7 +6,9 @@ import { useGameStore } from '@/lib/store';
 // OnlineStatsCard — read-only online stats surface on the home page
 // (ulw-name-login-one-truth W3 contract). Verifies:
 //  - Logged out (playerName=null) shows a low-key prompt, no fetch.
-//  - Logged in: GET /api/solo-stats?name= → renders StatsGrid.
+//  - Logged in: GET /api/players/{name}/stats (W2 RESTful) → renders StatsGrid.
+//    A 404 problem+json maps to { stats: null } client-side; the
+//    empty-state copy renders the placeholder, not the grid.
 //  - Response lives ONLY in component state — never written to
 //    localStorage or store.solo (A2 red-line).
 //  - Error path: failure → inline error, no localStorage write.
@@ -34,7 +36,7 @@ describe('components/OnlineStatsCard', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('logged-in: GET /api/solo-stats?name=… and render the five-stat grid', async () => {
+  it('logged-in: GET /api/players/{name}/stats and render the five-stat grid', async () => {
     useGameStore.setState({ playerName: 'alice' });
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -45,7 +47,7 @@ describe('components/OnlineStatsCard', () => {
     render(<OnlineStatsCard />);
     await waitFor(() => screen.getByTestId('online-stats-grid'));
     const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
-    expect(url).toBe('/api/solo-stats?name=alice');
+    expect(url).toBe('/api/players/alice/stats');
     expect(screen.getByTestId('online-stats-grid')).toBeInTheDocument();
     // Response stays in component state — localStorage never touched.
     expect(window.localStorage.getItem('ttt.solo.stats.v1')).toBeNull();

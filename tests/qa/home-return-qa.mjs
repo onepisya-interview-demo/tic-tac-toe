@@ -99,19 +99,19 @@ async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
 
 // Hard-reset the shared server row and the DB so / renders empty.
 async function resetServer(page) {
-  await page.request.delete(`${BASE}/api/stats`);
+  await page.request.delete(`${BASE}/api/sessions`);
 }
 
 async function seedSoloRowViaApi(ctx, name, stats) {
-  // Register / login first to create the row, then fold via /sync.
-  const session = await ctx.request.post(`${BASE}/api/player-session`, {
+  // Register / login first to create the row, then fold via /merge.
+  const session = await ctx.request.post(`${BASE}/api/sessions`, {
     data: { name },
   });
-  assert.equal(session.status(), 200, `seed player-session 200, got ${session.status()}`);
-  const sync = await ctx.request.post(`${BASE}/api/solo-stats/sync`, {
-    data: { name, stats },
+  assert.equal(session.status(), 200, `seed sessions 200, got ${session.status()}`);
+  const merge = await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
+    data: { stats },
   });
-  assert.equal(sync.status(), 200, `seed sync 200, got ${sync.status()}`);
+  assert.equal(merge.status(), 200, `seed merge 200, got ${merge.status()}`);
 }
 
 await step("step 01 reset server + verify home empty-state visible", async () => {
@@ -327,7 +327,7 @@ await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显�
     assert.equal(localStart[LOCAL_SOLO_KEY], undefined, "no local solo key on fresh context");
     assert.equal(localStart[PLAYER_KEY], undefined, "no name key on fresh context");
     // Type + save the name via the PlayerNameForm. The form posts to
-    // /api/player-session which returns existed:true (登录).
+    // /api/sessions which returns existed:true (登录).
     await pageB.fill('[data-testid="player-name-input"]', `hrqa-${RUN_SUFFIX}-b`);
     await pageB.click('[data-testid="player-name-save"]');
     // Wait for the login feedback.
@@ -517,9 +517,8 @@ await step("step 10 (W2) window focus triggers online card refetch", async () =>
     // Simulate an external mutation: another device syncs a 5-game row
     // under the same name. Use the same context's APIRequestContext so
     // we don't need a second browser.
-    const sync = await ctx.request.post(`${BASE}/api/solo-stats/sync`, {
+    const sync = await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
       data: {
-        name,
         stats: { totalGames: 5, xWins: 5, oWins: 0, draws: 0, currentStreak: 5 },
       },
     });
@@ -569,9 +568,8 @@ await step("step 11 (W2) reset button: 文案 + caption + 公共清零 + online/
       timeout: 4000,
     });
     // External mutation: server solo row gets totalGames=7.
-    await ctx.request.post(`${BASE}/api/solo-stats/sync`, {
+    await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
       data: {
-        name,
         stats: { totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: 1 },
       },
     });

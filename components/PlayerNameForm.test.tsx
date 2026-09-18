@@ -6,7 +6,7 @@ import { useGameStore } from '@/lib/store';
 
 // PlayerNameForm — W3 (ulw-name-login-one-truth) reframe: the form is
 // now the home-page identity region. On submit it fires
-// POST /api/player-session (注册 / 登录 primitive); the localStorage
+// POST /api/sessions (注册 / 登录 primitive, W2 RESTful surface); the localStorage
 // write + store mirror happen ONLY on a 2xx response, never on
 // 422 / network failure / abort. We stub globalThis.fetch so the
 // test doesn't hit the network; individual tests vary the response
@@ -63,7 +63,7 @@ describe('components/PlayerNameForm', () => {
     expect(save.className).toMatch(/\bw-full\b/);
   });
 
-  it('保存按钮：触发 POST /api/player-session 注册/登录', async () => {
+  it('保存按钮：触发 POST /api/sessions 注册/登录', async () => {
     const user = userEvent.setup();
     render(<PlayerNameForm />);
     await user.type(screen.getByTestId('player-name-input'), 'pname-form-A');
@@ -75,7 +75,7 @@ describe('components/PlayerNameForm', () => {
     });
     expect(posts.length).toBeGreaterThanOrEqual(1);
     const [url, init] = posts[0];
-    expect(String(url)).toBe('/api/player-session');
+    expect(String(url)).toBe('/api/sessions');
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       name: 'pname-form-A',
     });

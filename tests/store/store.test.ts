@@ -132,10 +132,12 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
-  it('online win: named user → ZERO network writes (W1 online branch is a TODO seam)', async () => {
-    // W1 ships the online branch as a TODO stub that returns
-    // { ok: false, reason: 'not-found' } but does NOT issue a fetch.
-    // W2 wires the actual POST /api/players/{name}/stats/outcomes.
+  it('online win: named user → fires POST /api/players/{name}/stats/outcomes (W2 seam)', async () => {
+    // W2 wires the online branch through lib/game-net.ts:postOutcome
+    // → POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
+    // The server-authoritative response (mocked here) is the source of
+    // truth for internalStats; the call site is awaited so the store
+    // sees the new row before the UI commits the next render.
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
     ]);
@@ -155,8 +157,15 @@ describe('lib/store (zustand game store)', () => {
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
     expect(s.winner).toBe('X');
-    // No fetch: online branch is a TODO stub in W1.
-    expect(calls).toHaveLength(0);
+    // W2: online branch fires exactly one POST outcomes call.
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0].url)).toBe('/api/players/alice/stats/outcomes');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
+    // internalStats mirrors the server-authoritative row after the await.
+    expect(useGameStore.getState().__getInternalForTests()).toEqual({
+      totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1,
+    });
     restore();
   });
 
@@ -262,7 +271,10 @@ describe('lib/store (zustand game store)', () => {
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
     expect(vi.mocked(playSound)).toHaveBeenCalledWith('draw');
-    expect(calls).toHaveLength(0);
+    // W2: online draw fires POST outcomes with outcome: 'draw'.
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0].url)).toBe('/api/players/alice/stats/outcomes');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'draw' });
     restore();
   });
 
@@ -300,11 +312,11 @@ describe('lib/store (zustand game store)', () => {
     restore();
   });
 
-  it('makeMove abort: keeps phase=won, no throw (named online, W1 TODO seam)', async () => {
-    // The store's online branch (apiRecordOutcome stub) does not issue
-    // a fetch in W1; abort-based behavior lives in the offline / W2
-    // path. This test pins the W1 contract: a named online win must
-    // never throw, regardless of mock fetch state.
+  it('makeMove abort: keeps phase=won, no throw (named online, W2 AbortController timeout)', async () => {
+    // W2 wires the online branch through postOutcome; the helper wraps
+    // fetch with an 8 s AbortController. A TimeoutError must surface
+    // as ok:false aborted without throwing — the local UI state stays
+    // correct regardless of network state.
     const { calls, restore } = mockFetchWithAbort();
     useGameStore.getState().setPlayerName('alice');
     useGameStore.getState().startGame('online');
@@ -322,9 +334,10 @@ describe('lib/store (zustand game store)', () => {
     await new Promise((r) => setTimeout(r, 10));
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
-    // W1: online branch is a TODO stub that returns immediately; no
-    // fetch is issued, so the abort mock is not called.
-    expect(calls).toHaveLength(0);
+    // W2: online branch fires the fetch; the abort surfaces as the
+    // typed { ok: false, reason } the store swallows.
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0].url)).toBe('/api/players/alice/stats/outcomes');
     restore();
   });
 

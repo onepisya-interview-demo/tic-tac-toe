@@ -41,6 +41,25 @@ export function isPlayerName(value: unknown): value is string {
   return true;
 }
 
+
+/**
+ * Single source of truth for server-side name normalization
+ * (W2 ulw-one-game-two-versions). Trims `raw` if and only if it
+ * passes `isPlayerName`; returns null otherwise. All four route
+ * handlers under app/api/ import this so the whitelist cannot
+ * drift between endpoints — the prior W3 setup duplicated the
+ * rule inside `app/api/solo-stats/route.ts` and `app/api/solo-stats/sync/route.ts`,
+ * which AGENTS.md §本项目反模式 already flagged as the single
+ * drift point to remove.
+ *
+ * Returns the trimmed canonical PK value (the same shape `isPlayerName`
+ * validates), so callers can pass the result straight into a service
+ * function without re-trimming.
+ */
+export function normalizePlayerName(raw: unknown): string | null {
+  if (!isPlayerName(raw)) return null;
+  return (raw as string).trim();
+}
 /**
  * Read the persisted player name. SSR-safe (no window → null) and
  * corruption-safe: missing key, non-string value, or a value whose

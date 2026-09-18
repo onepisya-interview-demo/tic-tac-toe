@@ -95,9 +95,9 @@ page.on('request', (req) => {
     (method === 'POST' && url.endsWith('/api/stats/outcome')) ||
     (method === 'PUT' && url.endsWith('/api/stats')) ||
     (method === 'DELETE' && url.endsWith('/api/stats')) ||
-    (method === 'POST' && url.endsWith('/api/solo-stats')) ||
-    (method === 'POST' && url.endsWith('/api/solo-stats/sync')) ||
-    (method === 'PUT' && url.endsWith('/api/solo-stats'));
+    (method === 'POST' && url.endsWith('/api/sessions')) ||
+    (method === 'POST' && /\/api\/players\/[^/]+\/stats\/outcomes/.test(url)) ||
+    (method === 'POST' && /\/api\/players\/[^/]+\/stats\/merge/.test(url));
   if (isWrite) soloWriteCount += 1;
 });
 

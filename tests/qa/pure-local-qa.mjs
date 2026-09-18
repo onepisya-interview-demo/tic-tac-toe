@@ -62,9 +62,10 @@ async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
 await ensureDir(EVIDENCE);
 const shoot = shootTo(EVIDENCE);
 
-// Filter that counts writes to /api/solo-stats and /api/stats. Read
-// traffic (GET /api/solo-stats?name=…) is allowed by the W1 contract —
-// only writes (POST /sync, POST /api/solo-stats, PUT, DELETE) must be 0.
+// W2 RESTful surface: writes to /api/sessions + /api/players/{name}/stats/*
+// are the only network writes that should fire on /solo. Read traffic
+// (GET /api/players/{name}/stats via the online card) is allowed by
+// the W1 contract; only writes must be 0 for the pure-local /solo flow.
 function isWriteToApi(method, url) {
   if (!url.includes("/api/")) return false;
   return method === "POST" || method === "PUT" || method === "DELETE";
@@ -274,10 +275,13 @@ try {
     const writes = writeCalls.filter((c) => c.url.includes("/api/"));
     assert.ok(
       writes.length >= 1,
-      `合并并清空 must fire network writes (PUT + POST /sync); saw ${writes.length}: ${JSON.stringify(writes)}`,
+      `合并并清空 must fire network writes (POST sessions + POST merge); saw ${writes.length}: ${JSON.stringify(writes)}`,
     );
     const postSync = writes.find((c) => c.method === "POST" && c.url.includes("/sync"));
-    assert.ok(postSync, `合并并清空 must fire POST /api/solo-stats/sync; got ${JSON.stringify(writes)}`);
+    assert.ok(
+      writes.some((c) => c.method === "POST" && /\/api\/players\/[^/]+\/stats\/merge/.test(c.url)),
+      `合并并清空 must fire POST /api/players/{name}/stats/merge; got ${JSON.stringify(writes)}`,
+    );
 
     // Local must be cleared.
     const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_SOLO_KEY);
@@ -285,8 +289,8 @@ try {
 
     // Server row must be the per-field sum (server=0 + local=3 = 3).
     const server = await page.evaluate(async (n) => {
-      const r = await fetch(`/api/solo-stats?name=${encodeURIComponent(n)}`, { cache: "no-store" });
-      return r.json();
+      const r = await fetch(`/api/players/${encodeURIComponent(n)}/stats`, { cache: "no-store" });
+      return r.ok ? r.json() : { stats: null };
     }, NAME_A2);
     assert.equal(server.stats.totalGames, 3, `merged totalGames must be 3, got ${server.stats.totalGames}`);
     assert.equal(server.stats.xWins, 3, `merged xWins must be 3, got ${server.stats.xWins}`);

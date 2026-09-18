@@ -16,8 +16,8 @@ import { SyncConfirmDialog } from './SyncConfirmDialog';
 //    「合并并清空」成功 → onConfirm(name) 收到 name（merged row 由 dialog 自用 — W4 F1 fix）;
 //    fetch 失败 → dialog 不关不触发 onConfirm.
 //
-// Network stubs: postPlayerSession returns {stats, existed:false};
-// postSoloSync returns a merged row.
+// Network stubs (W2 RESTful surface): postSession returns {stats, existed:false};
+// postMerge returns a merged row.
 
 const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
@@ -26,13 +26,13 @@ beforeEach(() => {
   // Default success: 注册 / 合并成功
   fetchSpy.mockImplementation(async (url) => {
     const s = String(url);
-    if (s.endsWith('/api/player-session')) {
+    if (s.endsWith('/api/sessions')) {
       return new Response(
         '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":false}',
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
-    if (s.endsWith('/api/solo-stats/sync')) {
+    if (s.includes('/stats/merge')) {
       return new Response(
         '{"stats":{"totalGames":3,"xWins":2,"oWins":0,"draws":1,"currentStreak":2}}',
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -145,7 +145,7 @@ describe('components/SyncConfirmDialog', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('「合并并清空」成功：onConfirm 收到 trim-name，并按序触发 postPlayerSession + postSoloSync', async () => {
+  it('「合并并清空」成功：onConfirm 收到 trim-name，并按序触发 postSession + postMerge', async () => {
     // W4 F1 fix: the dialog's onConfirm now only forwards the chosen
     // name. The merged row is still returned by runMergeSequence
     // internally for symmetry / future callers, but the contract
@@ -168,15 +168,15 @@ describe('components/SyncConfirmDialog', () => {
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
     expect(onConfirm).toHaveBeenCalledWith('carol');
     const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
-    expect(urls).toContain('/api/player-session');
-    expect(urls).toContain('/api/solo-stats/sync');
+    expect(urls).toContain('/api/sessions');
+    expect(urls.some((u) => u.includes('/api/players/carol/stats/merge'))).toBe(true);
   });
 
   it('onReject 在 onConfirm 抛错时仍能触发（error 留在 dialog 内，不静默关）', async () => {
     fetchSpy.mockReset();
     fetchSpy.mockImplementation(async (url) => {
       const s = String(url);
-      if (s.endsWith('/api/player-session')) {
+      if (s.endsWith('/api/sessions')) {
         // Login succeeds so the dialog reaches /sync; /sync then 409s.
         return new Response(
           '{"stats":{"totalGames":5,"xWins":3,"oWins":1,"draws":1,"currentStreak":2},"existed":true}',
@@ -209,11 +209,11 @@ describe('components/SyncConfirmDialog', () => {
   });
 
   // P1-5 (ulw §5 A12): 「合并并清空」POST /sync 失败 → dialog 留开不导航.
-  it('postSoloSync 抛 network-error：dialog 不关，不调用 onConfirm', async () => {
+  it('postMerge 抛 network-error：dialog 不关，不调用 onConfirm', async () => {
     fetchSpy.mockReset();
     fetchSpy.mockImplementation(async (url) => {
       const s = String(url);
-      if (s.endsWith('/api/player-session')) {
+      if (s.endsWith('/api/sessions')) {
         return new Response(
           '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":true}',
           { status: 200, headers: { 'content-type': 'application/json' } },

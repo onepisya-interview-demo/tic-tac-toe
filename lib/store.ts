@@ -19,6 +19,7 @@ import {
   loadSoloStats,
   persistSoloStats,
 } from './solo-stats';
+import { postOutcome } from './game-net';
 import {
   clearPlayerName as clearPlayerNameLocal,
   getPlayerName,
@@ -121,7 +122,7 @@ let internalStats: GameStats = emptyStats();
 /**
  * Tagged result for store-internal network writes (kept for W2 — when
  * `recordOutcomeForName` lands, the network helper will use this same
- * { ok, reason } shape as lib/solo-net.ts). W1 ships the helper but the
+ * { ok, reason } shape as lib/game-net.ts). W1 ships the helper but the
  * `makeMove` online branch is a TODO.
  */
 export type StoreFetchResult<T> =
@@ -131,7 +132,7 @@ export type StoreFetchResult<T> =
 /**
  * Wrap a fetch() call so it rejects (well, returns ok:false) after
  * `ms` milliseconds. Uses AbortController + setTimeout — the pattern
- * the solo-net / store helpers already use. 8000 ms is the chosen
+ * the game-net / store helpers already use. 8000 ms is the chosen
  * floor: a single stuck request that blocks the UI for half a minute
  * is what we're guarding against. W2 will route the online branch's
  * POST outcomes call through this helper.
@@ -167,19 +168,25 @@ export async function withTimeout(
  * row, applies `recordOutcome`, upserts, returns the new full row.
  */
 async function apiRecordOutcome(
-  // W2 will replace the W1 stub with: lib/game-net.ts:postOutcome
-  // → POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
-  // Parameters are pinned here so the W2 implementation drops in
-  // without changing the call site (`makeMove`).
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _name: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _outcome: 'X' | 'O' | 'draw',
+  // W2 online branch seam. lib/game-net.ts:postOutcome →
+  // POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
+  // The 404 from the server maps to `reason: 'not-found'` so callers
+  // can branch on the row-vanished case without inspecting status
+  // codes (the row-existence contract is enforced server-side; we
+  // just translate the signal). Other failures keep the same reason
+  // strings the rest of lib/store.ts's network layer uses
+  // ('aborted' / 'network-error' / 'http-error').
+  name: string,
+  outcome: 'X' | 'O' | 'draw',
 ): Promise<StoreFetchResult<{ stats: GameStats }>> {
-  // W1 stub: online branch is intentionally a no-op until W2 lands
-  // the RESTful /api/players/{name}/stats/outcomes endpoint and the
-  // thin transport wrapper that calls lib/db.ts:recordOutcomeForName.
-  return { ok: false, reason: 'not-found' };
+  const r = await postOutcome(name, outcome);
+  if (!r.ok) {
+    if (r.reason === 'http-error' && r.status === 404) {
+      return { ok: false, reason: 'not-found' };
+    }
+    return { ok: false, reason: r.reason };
+  }
+  return { ok: true, value: r.value };
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -257,11 +264,15 @@ export const useGameStore = create<GameStore>((set) => ({
         persistSoloStats(internalStats);
         return;
       }
-      // Online: TODO W2 — wire to lib/game-net.ts:postOutcome →
+      // Online: W2 — wire to lib/game-net.ts:postOutcome →
       // POST /api/players/{name}/stats/outcomes → lib/db.ts:recordOutcomeForName.
-      // W1 ships the seam (apiRecordOutcome stub returning
-      // { ok: false, reason: 'not-found' }) but does not yet POST.
-      await apiRecordOutcome(s.playerName as string, win.player);
+      // The helper returns the server-authoritative row on success;
+      // internalStats mirrors it so the next /result render + the
+      // online card refetch stay in sync (the home-return path reads
+      // internalStats only on /online /result, never for the local
+      // /offline display — A2 red-line preserved).
+      const r = await apiRecordOutcome(s.playerName as string, win.player);
+      if (r.ok) internalStats = r.value.stats;
       return;
     }
 
@@ -281,8 +292,9 @@ export const useGameStore = create<GameStore>((set) => ({
         persistSoloStats(internalStats);
         return;
       }
-      // Online: TODO W2 — same seam as the win branch.
-      await apiRecordOutcome(s.playerName as string, 'draw');
+      // Online: W2 — same seam as the win branch.
+      const r = await apiRecordOutcome(s.playerName as string, 'draw');
+      if (r.ok) internalStats = r.value.stats;
       return;
     }
 

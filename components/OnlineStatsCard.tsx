@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/store';
-import { fetchSoloStats } from '@/lib/solo-net';
+import { fetchPlayerStats } from '@/lib/game-net';
 import { emptyStats, type GameStats } from '@/lib/game';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
@@ -61,7 +61,7 @@ export function OnlineStatsCard() {
     const ticket = { cancelled: false };
     ticketRef.current = ticket;
     setState({ kind: 'loading' });
-    void fetchSoloStats(playerName).then((r) => {
+    void fetchPlayerStats(playerName).then((r) => {
       if (ticket.cancelled) return;
       if (!r.ok) {
         setState({
