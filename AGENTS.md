@@ -14,22 +14,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 > Router 形态：本文件只做最小路由与 digest，细节在各节指向的 docs/ 与 .omo/plans/ 文档，按需读取（2026-09-12 瘦身，Plan: .omo/plans/agents-md-slim.md）。
 
-**生成时间：** 2026-09-12
-**提交：** d9acf4c
-**分支：** main
+**生成时间：** 2026-09-19
+**提交：** d07fd07（基线）→ W5 docs 收口
+**分支：** dev
 
 ## 概览
 
-两人同设备对战的井字棋，战绩自动持久化。技术栈是 Next.js 16 App Router、React 19、strict TypeScript、Tailwind v4 设计令牌、Zustand、Drizzle ORM 和 @libsql/client（本地 file: sqlite / Vercel 走 Turso HTTP）。
+一局棋两版本（offline 单机 / online 在线）+ RESTful API + schema.org 词汇对齐的井字棋：首页是展示页，offline 完全离线、本地账本、唯一网络写是合并弹框；online 需 name、入口拦截、战绩实时上服服务端权威累加、`/result` RSC 实时成绩单。技术栈是 Next.js 16 App Router、React 19、strict TypeScript、Tailwind v4 设计令牌、Zustand、Drizzle ORM 和 @libsql/client（本地 file: sqlite / Vercel 走 Turso HTTP）。详细产品模型见 [.omo/plans/ulw-one-game-two-versions.md](.omo/plans/ulw-one-game-two-versions.md)。
 
 ## 结构
 
     .
-    ├── app/               # 三个页面路由、战绩 API、全局字体和设计令牌
-    ├── components/        # 棋盘、音效/彩纸客户端组件，以及 ui/ 基础组件
-    ├── lib/               # 纯规则、客户端 store、浏览器效果、SQLite I/O
-    ├── db/                # Drizzle schema：game_stats 单行表
-    ├── tests/qa/          # 面向生产服务的 Playwright 探针和提交审计
+    ├── app/               # 展示页 / online / offline / result 四路由 + RESTful API 4 端点 + JSON-LD
+    ├── components/        # 棋盘、合并弹框、战绩客户端组件，ui/ 基础组件
+    ├── lib/               # 纯规则、客户端 store、浏览器效果、SQLite I/O、RFC 9457 helper
+    ├── db/                # Drizzle schema：game_stats 单行表（name TEXT UNIQUE）
+    ├── tests/qa/          # 面向生产服务的 Playwright 探针（含 offline-qa / one-identity-qa 整合探针）
     ├── docs/              # 面向人的测试、运维和经验记录
     ├── .omo/plans/        # 非平凡提交必需的设计记录
     └── data/              # 已忽略的 SQLite 运行数据库
@@ -38,10 +38,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 | 任务 | 位置 | 说明 |
 | --- | --- | --- |
-| 路由或 API 行为 | app/ | 客户端页面和 Node runtime 的 /api/stats 与 /api/stats/outcome |
-| 规则、战绩、持久化 | lib/game.ts、lib/store.ts、lib/db.ts、db/schema.ts | 纯规则不依赖 React/DOM |
+| 路由或 API 行为 | app/ | 客户端四页路由 + Node runtime RESTful 四端点（`/api/sessions` + `/api/players/[name]/stats` + `/api/players/[name]/stats/merge` + `/api/players/[name]/stats/outcomes`） |
+| 规则、战绩、持久化 | lib/game.ts、lib/store.ts、lib/db.ts、db/schema.ts | 纯规则不依赖 React/DOM；lib/db.ts 是 service 层，零 HTTP 上下文 |
+| RESTful 浏览器薄壳 | lib/game-net.ts | postSession / fetchPlayerStats / postMerge / postOutcome + 8s AbortController |
+| RFC 9457 problem+json | lib/api-problem.ts | problemResponse + ProblemSlug + typeUriFor |
 | 视觉和无障碍契约 | DESIGN.md、app/globals.css、components/ | 设计令牌与全局 focus 所有权是契约 |
-| 浏览器验证 | tests/qa/ | 先 pnpm build && pnpm start，不要用 dev server |
+| 浏览器验证 | tests/qa/ | 先 pnpm build && pnpm start (`:3101`)，不要用 dev server |
 | 提交策略 | 下方贡献指南 | tests/qa/commit-audit.mjs 和 Git hook 共同强制 |
 | 既有设计理由 | .omo/plans/*.md | 非平凡提交必须引用 Plan footer |
 
@@ -52,19 +54,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | 符号/模块 | 类型 | 位置 | 引用点 | 作用 |
 | --- | --- | --- | --- | --- |
 | game | 纯规则 + 战绩 | lib/game.ts:1 | 9（4 prod + 5 test） | 棋盘、胜负、落子、连胜、streakLabel |
-| useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、API 同步、AbortController |
-| stats API | Route handlers | app/api/stats/{route,outcome/route}.ts | 1 prod + 8 QA + 1 test | GET/PUT/DELETE 全行 + POST outcome 服务端权威增量 |
-| RESTful 4 endpoints (W2) | Route handlers | app/api/sessions/route.ts + app/api/players/[name]/stats/{route,merge/route,outcomes/route}.ts | 1 prod + 9 QA + 3 test | POST /api/sessions 注册/登录幂等 {stats,existed} (200) + 422；GET /api/players/{name}/stats 按名查 row (200 / 404 problem+json)；POST /api/players/{name}/stats/merge 跨设备 per-field 累加 (200 / 409 player-session-required problem+json 防静默建档)；POST /api/players/{name}/stats/outcomes 服务端权威累加 (200 / 404 stats-not-found problem+json) |
-| lib/db solo | DB helpers | lib/db.ts:loadSoloRecord/upsertSoloRecord/mergeSoloRecord/registerOrLoginName/accumulateMergeStats | 6（5 prod + 1 test）| 单表 game_stats（含 name 列 UNIQUE）的 read→mutate→upsert 单线；registerOrLoginName 幂等注册/登录；accumulateMergeStats 纯函数 per-field 相加 |
-| lib/game-net | 浏览器 HTTP | lib/game-net.ts:postSession/fetchPlayerStats/postMerge/postOutcome | 5 prod + 2 test | withTimeout 8s + {ok,value}/{ok,reason} 契约；fetchPlayerStats 把 404 problem+json 翻译成 {stats:null} 让展示层零分支 |
-| lib/api-problem | RFC 9457 helper | lib/api-problem.ts:problemResponse/ProblemSlug | 4 prod + 3 test | problem+json helper；{type,title,status,detail?}；type 是 https 形态短 URI |
-| OnlineStatsCard | 只读展示 | components/OnlineStatsCard.tsx:1 | 1 direct（app/page.tsx） | GET /api/solo-stats 响应只入组件 state；严禁写 localStorage / store.solo（A2 红线） |
-| HomeDialogMount | 首页 effect | components/HomeDialogMount.tsx:1 | 1 direct（app/page.tsx） | HomeDialogMount effect 监听 pathname/focus/visibility/storage 事件，pendingSyncCount()>declinedSentinel → 打开 SyncConfirmDialog |
-| PlayerNameForm | 身份区 | components/PlayerNameForm.tsx:1 | 1 direct（app/page.tsx）+ 1 test | 注册/登录语义（POST /api/player-session）；422 错误就地展示；localStorage → store 反向 hydration（防 soft-nav 丢身份） |
-| lib/solo-stats | localStorage | lib/solo-stats.ts:SOLO_STATS_KEY/SOLO_SYNCED_SERVER_KEY + load/persist/clear | 2 prod + 1 test | 浏览器战绩持久化 + 同步哨兵（防 double-count） |
-| SyncConfirmDialog | 原生 modal | components/SyncConfirmDialog.tsx:1 | 1 direct（HomeDialogMount）+ 1 test | 内嵌 name 流 + 主「合并战绩」/ 次「保留本地」 + n/24 计数 + ESC 关 + reduced-motion；合并时自己跑 postPlayerSession + postSoloSync（合并 row 透传 onConfirm） |
-| Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/play）；间接经 PlayController/ResultBanner 等消费 | roving focus、键盘输入、落子动画 |
-| launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 9 探针 | 统一 Chromium、context、autoplay policy |
+| useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、`mode: 'online'\|'offline'`、apiRecordOutcome AbortController |
+| RESTful 4 endpoints | Route handlers | app/api/sessions/route.ts + app/api/players/[name]/stats/{route,merge/route,outcomes/route}.ts | 4 prod + 9 QA + 3 test | POST /api/sessions 注册/登录幂等 `{stats,existed}` (200 + 422) + GET /api/players/{name}/stats (200 / 404 problem+json) + POST /api/players/{name}/stats/merge (200 / 409 player-session-required 防静默建档) + POST /api/players/{name}/stats/outcomes (200 / 404 stats-not-found 防静默建档) |
+| lib/db service layer | DB helpers | lib/db.ts:loadRecordByName/upsertRecordByName/mergeRecordByName/recordOutcomeForName/registerOrLoginName/accumulateMergeStats/closeDb | 7（5 prod + 2 test） | 单表 game_stats（`name TEXT UNIQUE`）的 read→mutate→upsert 单线；registerOrLoginName 幂等注册/登录；accumulateMergeStats 纯函数 per-field 相加；零 HTTP 上下文（service/transport 分离契约，AGENTS.md §本项目反模式 + README §GraphQL 双兼容预留节） |
+| lib/game-net | 浏览器 HTTP | lib/game-net.ts:postSession/fetchPlayerStats/postMerge/postOutcome | 5 prod + 2 test | withTimeout 8s + `{ok,value}/{ok,reason}` 契约；fetchPlayerStats 把 404 problem+json 翻译成 `{stats:null}` 让展示层零分支 |
+| lib/api-problem | RFC 9457 helper | lib/api-problem.ts:problemResponse/ProblemSlug/typeUriFor | 4 prod + 3 test | problem+json helper；`{type,title,status,detail?}`；type 是 https 形态短 URI（`https://docs.example.com/probs/<slug>`） |
+| OnlineStatsCard | 只读展示 | components/OnlineStatsCard.tsx:1 | 1 direct（app/page.tsx） | GET /api/players/{name}/stats 响应只入组件 state；严禁写 localStorage / 任何 store 字段（A2 红线） |
+| OfflineStatsPanel | 本地战绩展示 | components/OfflineStatsPanel.tsx:1 | 2（app/offline/page.tsx + 1 test） | `/offline` 棋盘↔战绩 view-swap；纯本地（zero network writes，零 `lib/game-net` 引用）；`offline-stats-anonymous` 卡片显形无名不记语义 |
+| HomeDialogMount | 首页 effect | components/HomeDialogMount.tsx:1 | 1 direct（app/page.tsx） | HomeDialogMount effect 监听 pathname/focus/visibility/storage 事件，`pendingSyncCount() > declinedSentinel` → 打开 SyncConfirmDialog |
+| PlayerNameForm | 身份区 | components/PlayerNameForm.tsx:1 | 1 direct（app/page.tsx）+ 1 test | 注册/登录语义（POST /api/sessions）；W4 折叠态（已登录只读 + 编辑展开）；422 错误就地展示；localStorage → store 反向 hydration（防 soft-nav 丢身份） |
+| lib/offline-stats | localStorage | lib/offline-stats.ts:OFFLINE_STATS_KEY/OFFLINE_LAST_MERGED_LOCAL_KEY + load/persist/clear/pendingSyncCount | 3 prod + 1 test | 浏览器战绩持久化 + 同步哨兵（防 double-count）；`pendingSyncCount()` 是单一客户端真相；旧 `SOLO_SYNCED_SERVER_KEY` 与 helpers 保留为 `@deprecated` |
+| SyncConfirmDialog | 原生 modal | components/SyncConfirmDialog.tsx:1 | 1 direct（HomeDialogMount）+ 1 test | 内嵌 name 流 + 主「合并并清空」/ 次「保留本地」 + n/24 计数 + ESC 关 + reduced-motion；合并时自己跑 postSession + postMerge（合并 row 透传 onConfirm） |
+| Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/online、/offline）；间接经 PlayController/ResultNavigator 等消费 | roving focus、键盘输入、落子动画 |
+| ResultNavigator | 阶段→导航 | components/ResultNavigator.tsx:1 | 1 direct（/online） | phase→'won'/'drawn' 时 push `/result?name=<name>`；ref 去重避免 Strict Mode 双推 |
+| StartGameButton | 入口拦截 | components/StartGameButton.tsx:1 | 2 direct（app/page.tsx 双 CTA） | `requireName` prop：online CTA 默认 true，无名点击 dispatch `ttt:player-name-required`（不导航）；offline CTA 传 false 直行 |
+| WinConfetti | 庆祝层 | components/WinConfetti.tsx:1 | 1 direct（app/offline/page.tsx） | bug B fix：hoisted 出 view-swap 容器，celebratedRef 保证胜局仅触发一次 |
+| launchQA | Playwright 启动器 | tests/qa/lib/browser.mjs:7 | 14 探针（含 offline-mode-qa / offline-result-qa / one-identity-qa / home-return-qa 等） | 统一 Chromium、context、autoplay policy；`BASE_URL` env 变量（默认 :3000，QA 用 :3101）；W4 F5 fix 探针不硬编码 :3000 |
 
 库与 QA 都靠 `lib/game.ts` 与 `lib/store.ts`；store 是浏览器内单例。修改这两文件必跑对应 vitest / Stryker / fast-check（见 §验证门禁）。
 
@@ -75,10 +80,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 路径别名 @/* 指向仓库根目录；规则放 lib，schema 放 db，UI 组合放 components。
 - 设计令牌保存在 app/globals.css 和 DESIGN.md；Tailwind class 引用令牌。
 - 提交主题和正文可以中文；Conventional 前缀与 lore trailer 键名保持英文。
+- 路由命名遵循 W1 御定：`/online` (实时上服) + `/offline` (纯本地) + `/result` (RSC 成绩单)；不引入 `solo` / `ranked` / `singleplayer` / `multiplayer` 词汇（schema.org 词汇表对齐理由见 README「词汇语义说明」节）。
 
 ## 本项目反模式
 
 - **service 层纯函数 / 传输层薄壳强制分离（GraphQL 双兼容预留）** —— W2 起（ulw-one-game-two-versions §0）：lib/db.ts 是 service 层，全部「读 / 改 / 写战绩」业务规则收敛为纯函数（无 HTTP 上下文、无 NextResponse、无 status code 知识）；调用方是 lib/store.ts（浏览器端）或 app/api/**/route.ts（Node runtime 端）。任意 transport（RESTful route / GraphQL resolver / gRPC handler）只做「解析入参 → 调 service → 映射返回值到 status code / problem+json」；不得在 transport 里再写一份「read → mutate → upsert」业务规则。GraphQL 双兼容仅需新增 schema + resolver，service 函数零改动。transport 层错误统一走 lib/api-problem.ts:problemResponse，RFC 9457 application/problem+json。
+- **service 函数禁止返回 `Response` / `NextResponse` / `{ status: 404 }`** —— lib/db.ts 的函数返回值必须是纯数据 + 状态标记（命中 → `GameStats` / `{ stats, ... }`；缺失 → `null` 或具名 `not-found` 字符串；异常 → 抛 `Error`）。transport 层是唯一决定 status code 的地方。
 - 已有命名令牌时，不要使用 Tailwind 原生色板或内联 hex。
 - 不要在 SSR 首帧读取 localStorage；先渲染安全默认值，再用 useEffect 同步。
 - 不要引入 UI、路由、动画、数据访问或表单库；这些是项目约束明确排除的。
@@ -86,36 +93,40 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 不要用 --no-verify 绕过 commit-msg hook。
 - 契约要求生产构建时，不要对 dev server 跑浏览器 QA。
 - **LSP 服务端工具（typescript-language-server / yaml-language-server / bash-language-server）走 vp 全局安装，禁止作为项目 npm 依赖** —— 它们是 Codex `lsp.*` MCP 的语言服务端，永不进 Next.js runtime bundle。`.codex/lsp-client.json` 是被 git 跟踪的共享配置，**必须可移植：只写 id / priority / disabled / env 级覆写，禁止 install hash 或机器本地绝对路径**（曾因写入 vp hash 的 `initialization.tsserver.path` 导致 fresh clone 即坏 + 本机重装静默失效）。TLS 的 typescript 由 codex-lsp initialize 恒带的 workspaceFolders 解析到项目 devDep `typescript` 的 `node_modules/typescript/lib`，无需任何 override；per-machine override 写 user 级 `~/.codex/lsp-client.json`（不入库）。任何 LSP 改动必须：(1) 三个 server 通过 `vp add -g` / `vp rm -g` 同步增删；(2) `.codex/lsp-client.json` 保持无机器本地路径并同步；(3) `pnpm vitest run` + `pnpm typecheck` 确认不破 Gauntlet。详见 `.omo/plans/lsp-revert-to-global.md` 与 `.omo/plans/lsp-client-portable-config.md`。
-- **RSC 页面读取可变数据必须声明 `dynamic = 'force-dynamic'`** —— Next.js 16 默认静态优化可能烘焙 build-time 异步数据（如 Drizzle DB 调用）的结果到 HTML，runtime 返回脏数据直到下次 build。B-3a 实证：首屏 HTML 显示旧战绩而 DB 已是新战绩。
+- **RSC 页面读取可变数据必须声明 `dynamic = 'force-dynamic'`** —— Next.js 16 默认静态优化可能烘焙 build-time 异步数据（如 Drizzle DB 调用）的结果到 HTML，runtime 返回脏数据直到下次 build。B-3a 实证：首屏 HTML 显示旧战绩而 DB 已是新战绩。`/result` RSC 实时成绩单（W3 起）即强制声明此 flag。
 - **Service Worker fetch handler 必须按方法门控** —— `event.respondWith(fetch(event.request))` 无门控会让 PUT/POST/DELETE 被发两次（浏览器观察到两条 outbound 请求）。可安装但不缓存的 SW 范式：`if (event.request.method !== 'GET') return;` 后再 respondWith。B-1 实证：生产 DevTools Network 面板观察到 2 行 PUT。
 - **store 的网络写 action 必须返回 Promise** —— 让调用方可以 await 后再调 `router.refresh()`。在 `force-dynamic` 下无需 `revalidatePath`（冗余）；在 ISR 下 Route Handler 必须调 `revalidatePath('/')` + `revalidatePath('/result')`。B-2 + B-3b 实证：setTimeout 700ms 与 PUT 落库时刻不固定；resetAll fire-and-forget DELETE 后同步 router.refresh() 会读到旧值。
-- **网络写 action 必须带 AbortController timeout** —— Turso HTTP 在 iad1 偶发 30 s 默认 fetch 超时；client 必须主动 8 s `AbortController.timeout()` abort + Button `loading` state + 强制 disabled，否则重置战绩按钮会卡 30 s 不响应。HAR §P2 实证：线上抓到一个孤立 DELETE 200 time=30733 ms。
+- **网络写 action 必须带 AbortController timeout** —— Turso HTTP 在 iad1 偶发 30 s 默认 fetch 超时；client 必须主动 8 s `AbortController.timeout()` abort + Button `loading` state + 强制 disabled，否则重置战绩按钮会卡 30 s 不响应。HAR §P2 实证：线上抓到一个孤立 DELETE 200 time=30733 ms。`lib/store.ts:NETWORK_TIMEOUT_MS` 与 `lib/game-net.ts` 8s 约定同源。
 - **静态资源缓存必须双层** —— `_next/static/**` 已被 Vercel 边缘 immutable 缓存；但 `manifest.webmanifest` / `icon.svg` / `apple-icon*` / `favicon*` / `icon-*.png` 默认 `max-age=0, must-revalidate` 会让浏览器每次 nav 都 304 roundtrip（50-200 ms）。必须 `next.config.ts headers()` + SW cache-first 双层。HAR 直读实证：单次 PWA 会话 56-94 次 manifest 请求 + 头 = `max-age=0`。
 - **仓库内任何"清理/迁移/deslop"批量文件操作必须走 git 通道：删 tracked 文件前先 commit，删 untracked/ignored 内容前先备份** —— worktree-only 删除可由 `git ls-files -d -z | xargs -0 git checkout --` 一条命令恢复，但 ignored 内容（如 `.omx/backups` 备份 tar）被删即永久丢失。2026-09-12 00:00:08-23 实证：40 个 tracked 文件（全部属于最后提交日期 2026-09-07 的 cohort）+ `.git/hooks` + `.omx/backups/repo.git.tar` 在 15 秒内被未知进程按清单删除；同波进程还触碰了 /tmp 顶层 35 个不相关目录。
 - **herdr 多 pane 工作区内，同一 worktree 同时只允许一个 agent 写入；午夜定时任务窗口（00:00±15min）不做绕过 git 的批量文件操作** —— 2026-09-12 实证：仓库删除（00:00:08-23）与 `/tmp/hooks-v2` 空骨架创建（00:00:15）交错 6 秒，指向同一迁移脚本中途停止；三个 herdr pane 的会话转录在窗口内均零条目，hermes 生态 4 个 cron 同窗触发但无一认领删除行为——reflog/index 零记录证明它绕过了 git。
 - **DB schema 变更必须带 getDb reconcile + legacy 旧库迁移测试** —— `db/schema.ts`（drizzle 声明）与 `lib/db.ts:getDb()` 的手写 bootstrap DDL 是两份真相；任何对 `game_stats` 的列级变更（如 ulw-name-login-one-truth 加 `name TEXT UNIQUE`）必须在 `getDb()` bootstrap 后追加 `SELECT name FROM pragma_table_info('game_stats')` 列探测 + 缺失即事务内重建（CREATE TABLE _new → INSERT SELECT 共有列 → DROP → RENAME）+ `DROP TABLE IF EXISTS` 退役孤儿表。`tests/db/db.test.ts` 必须新增 describe「legacy DB migration」，用手建旧形状 DDL + 种子行复现「存量库炸」→ 断言迁移后种子保留 / `name` 列 UNIQUE 实证 / 迁移幂等（closeDb+重开仍 7） / 与 fresh 库 PRAGMA 列集相等。W1 实证（plan `.omo/plans/ulw-hotfix-db-schema-drift.md`）：未做此修复前主公 :3000 存量库 `no such column: "name"` 起服 500；盲区根因 — fresh session ≠ 视角多样性，CR/V5 验了两份 schema 真相互相一致（确实一致），没人问「上个月代码建的库会怎样」。**已知缓议**（参见 `reports/review/RC-drift.md` §4.1 处置表）：**P1-2** Turso HTTP `batch('write')` 事务原子性未在 CI 部署硬化波实测（理论网络半成品重试路径未实证）；**P1-4** `.env.example` / `drizzle.config.ts` / `lib/db.ts:resolveDbConfig` 三处默认值字面字符串形态不齐（相对路径 vs `path.join(cwd,...)` 绝对路径），待下次 schema/deploy 波抽 `lib/db-path.ts` 单一常量源；**P1-5** `resolveDbConfig` 无 DATABASE_URL 时 `fs.mkdirSync({recursive:true})` 同步阻塞冷启动 hot path（冷启动稀疏 + 目录小可接受）。
 - **commit-msg hook 位于 `.git/` 内，git 永不跟踪；重建只能靠文档契约，重建后必须双向冒烟** —— 契约三源：docs/commit-policy.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B（audit 脚本是策略真源，hook 委托 audit）。任何 commit（含 `fcbde26f`）都不含 hook 原件；`.git/HEAD` 丢失用 `echo 'ref: refs/heads/main' > .git/HEAD` 恢复；hook 重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B。
-- **solo by-name 同步：客户端禁止手动 PUT solo 全行，POST 只发单个 outcome** —— 与 ranked 同根约束。`lib/db.ts:accumulateSoloRecord` 是 solo server 侧权威累加点（read → recordOutcome → upsert）；客户端仅 POST `{name, outcome}` 收 server 回传的 `{stats}`。`components/SoloStatsPanel.tsx` 的「同步」按钮在无 pending 时退化为纯 GET 刷新，避免 double-count footgun。
-- **`ttt.player.name.v1` 白名单必须与 `lib/player-name.ts:normalizePlayerName` 同源（W2 收敛）** —— trim → 1–24 字符 → 禁 `< 0x20 / 0x7F / 0x80–0x9F` 控制字符；W2 起 4 个 RESTful 端点（sessions + players/[name]/stats/{GET,merge,outcomes}）全部 import `normalizePlayerName` 作为 service-side 单一真相，`isPlayerName` 是单一客户端真相；DRIFT = 「保存名字 → POST 422」坏 UX。W1 之前 `app/api/solo-stats/route.ts` 与 `app/api/solo-stats/sync/route.ts` 各内联一份 normalizeName 是 4 endpoint DRIFT 根因，W2 整链退役 + 单点收口。
-- **未命名 solo 路径零新增网络行为** —— `SoloStatsPanel` 用 `playerName` 三元 if 而非无条件 GET 是 wave 2 §A5 验收硬约束（sync-qa step 01 探针断言）；任何「顺手 GET 一次」改动都破坏该契约。
+- **`ttt.player.name.v1` 白名单必须与 `lib/player-name.ts:normalizePlayerName` 同源（W2 收敛）** —— trim → 1–24 字符 → 禁 `< 0x20 / 0x7F / 0x80–0x9F` 控制字符；W2 起 4 个 RESTful 端点（sessions + players/[name]/stats/{GET,merge,outcomes}）全部 import `normalizePlayerName` 作为 service-side 单一真相，`isPlayerName` 是单一客户端真相；DRIFT = 「保存名字 → POST 422」坏 UX。W1 之前 `app/api/player-session/route.ts` 与 `app/api/solo-stats/sync/route.ts` 各内联一份 normalizeName 是 4 endpoint DRIFT 根因，W2 整链退役 + 单点收口。
+- **未命名 offline 路径零新增网络行为** —— `OfflineStatsPanel` 用 `playerName` 三元 if 而非无条件 GET 是 W4 验收硬约束（`one-identity-qa` step 断言）；任何「顺手 GET 一次」改动都破坏该契约。`/offline` 路由全程 `/api/*` 请求数 = 0；`offline-stats-anonymous` 卡片显形无名不记语义。
 - **同名并发故意 last-write-wins，README 注明边界** —— 不做 CRDT / 时间戳合并；单机 UX 场景下「跨设备累加足够」，过度合并引入「为什么不同步删除」的迷惑。
-- **solo 100% 纯本地——store 不再 auto-POST，跨设备走首页 HomeDialogMount 弹框** —— W1+W2+W3 收尾（.omo/plans/ulw-solo-pure-local-closeout.md §1 + ulw-name-login-one-truth.md §1 G1）：`lib/store.ts` 的 `makeMove` 在 solo 分支只调 `recordOutcome(internalStats, outcome)` + `persistSoloStats(...)`，不发任何 fetch；`retrySoloSync` action + `soloSync{pending,inflight,error}` 字段整段删除（W2 CR P2）。具名玩家与匿名玩家一致——零网络写。「合并并清空」由 `components/HomeDialogMount.tsx` 的 mount effect 监听 `pathname='/'` + focus + visibilitychange + storage 事件触发（pendingSyncCount>declinedSentinel 时打开 `SyncConfirmDialog`，W3 替换 W1 的 StartGameButton 拦截；D1 决议），弹框内自己跑 `lib/game-net.ts:postSession` + `postMerge`（W2 重接；W1 旧 import 已退役） → `lib/db.ts:mergeSoloRecord` 服务端 per-field 累加 → 客户端 `clearSoloStats()` + `persistLastMergedLocal(0)`（W4 F1 哨兵）。
+- **offline 100% 纯本地——store 不再 auto-POST，跨设备走首页 HomeDialogMount 弹框** —— W1+W2+W3 收尾（.omo/plans/ulw-solo-pure-local-closeout.md §1 + ulw-name-login-one-truth.md §1 G1）：`lib/store.ts` 的 `makeMove` 在 offline 分支只调 `recordOutcome(internalStats, outcome)` + `persistOfflineStats(...)`，不发任何 fetch；具名玩家与匿名玩家一致——零网络写。「合并并清空」由 `components/HomeDialogMount.tsx` 的 mount effect 监听 `pathname='/'` + focus + visibilitychange + storage 事件触发（pendingSyncCount>declinedSentinel 时打开 `SyncConfirmDialog`，W3 替换 W1 的 StartGameButton 拦截；D1 决议），弹框内自己跑 `lib/game-net.ts:postSession` + `postMerge` → `lib/db.ts:mergeRecordByName` 服务端 per-field 累加 → 客户端 `clearOfflineStats()` + `persistLastMergedLocal(0)`（W4 F1 哨兵）。
 
-- **PUT /api/solo-stats 已退役 → app/api/sessions/route.ts 单一入口（W2）** —— W3 起 PUT 返 405；W2 进一步把整条 /api/solo-stats/* 与 /api/player-session 链退役，注册/登录改走 `POST /api/sessions`（200 {stats,existed}，422 problem+json），跨设备合并改走 `POST /api/players/{name}/stats/merge`（409 防静默建档），按名查 row 改走 `GET /api/players/{name}/stats`（404 problem+json），在线版完局记一局改走 `POST /api/players/{name}/stats/outcomes`（404 防静默建档）。所有错误响应统一 application/problem+json（lib/api-problem.ts）。 —— W3（ulw-name-login-one-truth §3）：注册/登录语义改走 `POST /api/player-session`，PUT 存名路径不再需要；handler 改为 `return 405 + Allow: GET`（任何旧客户端 curl PUT 应看到清晰错误）。`lib/solo-net.ts:putSoloName` 同步删除（无调用方）。新契约：PlayerNameForm submit 后 `await postPlayerSession(trimmed)` → 服务端返 `{stats, existed}` → 仅在 ok=true 时写 localStorage + store.playerName（422 / network / aborted → 就地展示错误，不写任何持久层）。
-- **POST /api/players/{name}/stats/merge 是「用户主动确认的合并」接口（W2），URL 携带 name，body 接 `{stats: GameStats}`** —— wave 2「合并需弹框问询」契约（B-T2/B-T3/B-T4）：server 端 read→`accumulateMergeStats` per-field 相加→upsert→返回合并后 `{stats}`，幂等（同一 stats 第二次 POST 会双计——这是 why 客户端在成功后 `clearSoloStats()` + 写 sentinel `persistSyncedServerTotal(mergedTotal)` 防再点）；调用方必须在 SyncConfirmDialog 主 CTA 「合并并清空」按下后才发，「保留本地」零网络写。
-- **同步哨兵 `ttt.solo.last-merged-local.v1` 跟踪合并后本机零位（基线模型，W4 F1 fix）** —— W4 修复 V4 MINOR-F1：旧 `ttt.solo.server.synced.v1` 存服务端绝对 totalGames，导致合并后本地 0..N 局内 catch-up 窗口内弹框被抑 + 文案少报（总数恒正确，无双计——server 侧 per-field 累加 + 本地清空不变量保证；问题只在「dialog text 与实际 payload 不一致」）。新模型存「合并完成时 local.totalGames = 0」基线，合并成功后 `HomeDialogMount.handleConfirm` 写 `persistLastMergedLocal(0)`，`pendingSyncCount = max(0, local.totalGames - lastMergedLocal)` 永远等于 local —— 弹框文 = 实际发送。旧 `SOLO_SYNCED_SERVER_KEY` 与 helpers 保留为 `@deprecated`（向后兼容读 + 测试 surface，无产线调用方）。`lib/solo-stats.ts:pendingSyncCount` 是单一客户端真相。
-- **W2 solo 页纯净化：`/solo` 零 name、零网络、零同步按钮、零 PlayerNameForm** —— `.omo/plans/ulw-name-login-one-truth.md` §1 G1：`components/SoloStatsPanel.tsx` 仅渲染「单机战绩」+ `StatsGrid` + `ResetStatsButton(scope='local')`，不再挂载按名 GET、不再内嵌存名或同步按钮、不再渲染 `SyncConfirmDialog`；`app/solo/page.tsx` 渲染树零 `PlayerNameForm` 零网络组件。pure-local-qa A4 step 断言：预设 `ttt.player.name.v1` + 挂载 `/solo` → 全程 `/api/*` 请求数 = 0；以下 testid 在 **`/solo` 路由**下 0 命中：`solo-sync`、`sync-confirm-dialog`、`sync-confirm-desc`、`sync-confirm-confirm`、`sync-confirm-reject`、`solo-stats-merge-note`、`solo-stats-error`、`player-name-section`。`sync-confirm-*` / `player-name-section` 仍在 home 页由 `HomeDialogMount` 触发弹框 + `PlayerNameForm` 渲染（W3 改造面完成），不是代码失效；`tests/qa/sync-qa.mjs` / `tests/qa/merge-sync-qa.mjs` 头部注释标注 DISABLED 是它们原本就是探 `/solo` 同步按钮的 probe；W3 已上 `tests/qa/home-return-qa.mjs` 重建跨设备同步的探针覆盖（A3 全路径 + A7 fresh-context 跨设备只读恢复）。
-- **POST /api/solo-stats 单局累加端点已删除** —— W2 `lib/solo-net.ts:postSoloOutcome` 无调用方，server-side `app/api/solo-stats/route.ts` POST handler 整段删除；`lib/db.ts:accumulateSoloRecord` 同步删除；对应 `tests/api/solo-stats.test.ts` POST describe + `tests/db/db.test.ts` 5 个 accumulate 集成测试 + `tests/lib-solo-net.test.ts` postSoloOutcome describe 同步清理。`curl -X POST /api/solo-stats` 期望 `405 method not allowed`；GET（按名查 row）通；PUT（存名落库）W3 起返 405（注册/登录改走 `POST /api/player-session`），由 PlayerNameForm 注册/登录 + HomeDialogMount 触发弹框继续消费。
+- **POST /api/players/{name}/stats/merge 是「用户主动确认的合并」接口（W2），URL 携带 name，body 接 `{stats: GameStats}`** —— wave 2「合并需弹框问询」契约（B-T2/B-T3/B-T4）：server 端 read→`accumulateMergeStats` per-field 相加→upsert→返回合并后 `{stats}`，幂等（同一 stats 第二次 POST 会双计——这是 why 客户端在成功后 `clearOfflineStats()` + 写 sentinel `persistLastMergedLocal(0)` 防再点）；调用方必须在 SyncConfirmDialog 主 CTA「合并并清空」按下后才发，「保留本地」零网络写。
+- **同步哨兵 `ttt.offline.last-merged-local.v1` 跟踪合并后本机零位（基线模型，W4 F1 fix）** —— W4 修复 V4 MINOR-F1：旧 `ttt.offline.server.synced.v1` 存服务端绝对 totalGames，导致合并后本地 0..N 局内 catch-up 窗口内弹框被抑 + 文案少报（总数恒正确，无双计——server 侧 per-field 累加 + 本地清空不变量保证；问题只在「dialog text 与实际 payload 不一致」）。新模型存「合并完成时 local.totalGames = 0」基线，合并成功后 `HomeDialogMount.handleConfirm` 写 `persistLastMergedLocal(0)`，`pendingSyncCount = max(0, local.totalGames - lastMergedLocal)` 永远等于 local —— 弹框文 = 实际发送。旧 `OFFLINE_SYNCED_SERVER_KEY` 与 helpers 保留为 `@deprecated`（向后兼容读 + 测试 surface，无产线调用方）。`lib/offline-stats.ts:pendingSyncCount` 是单一客户端真相。
+- **`/offline` 页纯净化：零 name 展示、零网络、零同步按钮、零 PlayerNameForm** —— `.omo/plans/ulw-name-login-one-truth.md` §1 G1：`components/OfflineStatsPanel.tsx` 仅渲染「单机战绩」+ `StatsGrid` + `ResetStatsButton(scope='local')` + 无名时的 `offline-stats-anonymous` 提示卡，不挂载按名 GET、不内嵌存名或同步按钮、不渲染 `SyncConfirmDialog`；`app/offline/page.tsx` 渲染树零 `PlayerNameForm` 零网络组件。`one-identity-qa` A4 step 断言：预设 `ttt.player.name.v1` + 挂载 `/offline` → 全程 `/api/*` 请求数 = 0；以下 testid 在 **`/offline` 路由**下 0 命中：`offline-stats` 之外的 `sync-*`、`player-name-section`。`sync-confirm-*` / `player-name-section` 仍在 home 页由 `HomeDialogMount` 触发弹框 + `PlayerNameForm` 渲染（W3 改造面完成），不是代码失效；`tests/qa/{sync-qa,merge-sync-qa}.mjs` 头部注释标注 DISABLED 是它们原本就是探 `/solo` 同步按钮的 probe；W3 已上 `tests/qa/home-return-qa.mjs` + `tests/qa/one-identity-qa.mjs` 重建跨设备同步的探针覆盖（A3 全路径 + A7 fresh-context 跨设备只读恢复）。
 
-- **首页「开始对战」/「单机练习」点击零拦截（pure-local 时）** —— W3（ulw-name-login-one-truth §1 D1）：StartGameButton 整段删除 pendingSyncCount 拦截逻辑 + onAfterConfirm 导航回调；点击即直行 `startGame(mode) + router.push(href)`。SyncConfirmDialog 不再由 StartGameButton 渲染，改由 `components/HomeDialogMount.tsx`（mount 在 app/page.tsx 末尾）的 effect 监听 `pathname='/'` + focus + visibilitychange + storage 事件触发；`pendingSyncCount() > declinedSentinel` 才开 dialog，否则静默直行。`onAfterConfirm?: () => void` 保留以备未来「navigate after merge」调用方（当前 HomeDialogMount 不传该 prop）。
-- **首页线上战绩只读卡：响应只入组件 state（A2 红线）** —— W3：`components/OnlineStatsCard.tsx` 通过 `GET /api/solo-stats?name=` 拉取服务端战绩 row，response **只写 `useState<LoadState>`**，**严禁**写 localStorage（`ttt.solo.*` 任何 key）或 `useGameStore.soloStats` / 任何 store 字段；`name` 取自 `useGameStore.playerName`（仅读）。「登录已有名 → 浏览线上战绩卡前后 localStorage 快照逐字节一致」是 home-return-qa step 07 的硬断言。组件状态机 idle→loading→ok/empty/error；error 行就地展示，不污染持久层。
-- **`ttt.solo.sync-declined.v1` sessionStorage 哨兵（保留本地时不重弹）** —— W3：D3 决策「保留本地 → 零网络写 + 同会话 pending 无增量不重弹」的实现机制。`SyncConfirmDialog` 不直接写 sessionStorage；由 `components/HomeDialogMount.tsx` 的 onReject handler 写 `writeDeclinedPending(pendingSnapshot)`；`loadDeclinedPending()` 在 mount effect 中读取参与判断。`sessionStorage`（非 localStorage）保证关标签页即忘——新会话总是从 declined=0 重新计算。`clearDeclinedPending()` 在合并并清空成功后被 HomeDialogMount 调，清后下次访问 pending=0 → dialog 不开。
-- **POST /api/players/{name}/stats/merge 409 防静默建档** —— W3：服务端在 merge 前必须先 `loadSoloRecord(name)`；row 不存在 → 409 `player session required`（不允许「merge 一个未注册 name」被偷渡成 upsert 复活已删除账号）。弹框流强制保证先 hit POST /api/player-session（注册/登录）才许调 /sync；客户端 `SyncConfirmDialog.runMergeSequence` 把 409 翻译成「需要先登录该账号才能同步（请重新输入名字）」就地展示，不调 onConfirm。server 端 `loadSoloRecord` 是 sync handler 唯一的 row-existence probe（mergeSoloRecord 内部的 read-then-upsert 是私有实现，不参与 409 判定）。
-- **PlayerNameForm 反向 hydration：localStorage → store** —— W3：`PlayerNameForm` 的 useEffect 读 store.playerName；若为空但 localStorage `ttt.player.name.v1` 有值，调 `setStoreName(stored)` + setName(stored)。这是 home-return 路径上 OnlineStatsCard 能立即 fetch 的前提——soft-nav /solo → / 时 store 是空的（Zustand 模块单例在客户端跨 nav 保留，但若 SSR-first-frame 的 RSC 树没有预跑 StatsHydrator 类似的 store seed，store 会保留旧值；为防 soft-nav 边缘 case 让 store 跟着 localStorage 走）。注：hard reload 时 localStorage 是 source of truth；soft nav 时 store 优先（最新 setStoreName）。
+- **首页「开始对战」/「单机练习」点击零拦截（pure-local 时）** —— W3（ulw-one-game-two-versions §1 D1）：StartGameButton 整段删除 pendingSyncCount 拦截逻辑 + onAfterConfirm 导航回调；点击即直行 `startGame(mode) + router.push(href)`。SyncConfirmDialog 不再由 StartGameButton 渲染，改由 `components/HomeDialogMount.tsx`（mount 在 app/page.tsx 末尾）的 effect 监听 `pathname='/'` + focus + visibilitychange + storage 事件触发；`pendingSyncCount() > declinedSentinel` 才开 dialog，否则静默直行。`onAfterConfirm?: () => void` 保留以备未来「navigate after merge」调用方（当前 HomeDialogMount 不传该 prop）。
+
+- **首页线上战绩只读卡：响应只入组件 state（A2 红线）** —— W3：`components/OnlineStatsCard.tsx` 通过 `GET /api/players/{name}/stats` 拉取服务端战绩 row，response **只写 `useState<LoadState>`**，**严禁**写 localStorage（`ttt.offline.*` 任何 key）或任何 store 字段；`name` 取自 `useGameStore.playerName`（仅读）。「登录已有名 → 浏览线上战绩卡前后 localStorage 快照逐字节一致」是 `home-return-qa` step 07 的硬断言。组件状态机 idle→loading→ok/empty/error；error 行就地展示，不污染持久层。
+
+- **`ttt.offline.sync-declined.v1` sessionStorage 哨兵（保留本地时不重弹）** —— W3：D3 决策「保留本地 → 零网络写 + 同会话 pending 无增量不重弹」的实现机制。`SyncConfirmDialog` 不直接写 sessionStorage；由 `components/HomeDialogMount.tsx` 的 onReject handler 写 `writeDeclinedPending(pendingSnapshot)`；`loadDeclinedPending()` 在 mount effect 中读取参与判断。`sessionStorage`（非 localStorage）保证关标签页即忘——新会话总是从 declined=0 重新计算。`clearDeclinedPending()` 在合并并清空成功后被 HomeDialogMount 调，清后下次访问 pending=0 → dialog 不开。
+
+- **POST /api/players/{name}/stats/merge 409 防静默建档** —— W3：服务端在 merge 前必须先 `loadRecordByName(name)`；row 不存在 → 409 `player-session-required`（不允许「merge 一个未注册 name」被偷渡成 upsert 复活已删除账号）。弹框流强制保证先 hit POST /api/sessions（注册/登录）才许调 /stats/merge；客户端 `SyncConfirmDialog.runMergeSequence` 把 409 翻译成「需要先登录该账号才能同步（请重新输入名字）」就地展示，不调 onConfirm。server 端 `loadRecordByName` 是 merge handler 唯一的 row-existence probe（mergeRecordByName 内部的 read-then-upsert 是私有实现，不参与 409 判定）。
+
+- **POST /api/players/{name}/stats/outcomes 404 防静默建档** —— W2：`recordOutcomeForName(name, outcome)` 服务端 read → 命中则累加 upsert → 缺失返 `{ ok: false, reason: 'not-found' }`，transport 映射 404 problem+json。拒绝「一个匿名点击路径被偷渡成已注册」。
+
+- **PlayerNameForm 反向 hydration：localStorage → store** —— W3：`PlayerNameForm` 的 useEffect 读 store.playerName；若为空但 localStorage `ttt.player.name.v1` 有值，调 `setStoreName(stored)` + setName(stored)。这是 home-return 路径上 OnlineStatsCard 能立即 fetch 的前提——soft-nav /offline → / 时 store 是空的（Zustand 模块单例在客户端跨 nav 保留，但若 SSR-first-frame 的 RSC 树没有预跑 StatsHydrator 类似的 store seed，store 会保留旧值；为防 soft-nav 边缘 case 让 store 跟着 localStorage 走）。注：hard reload 时 localStorage 是 source of truth；soft nav 时 store 优先（最新 setStoreName）。
 
 - **SyncConfirmDialog 弹框初焦落主 CTA「合并并清空」（F3 fix）** —— W4 修 V4 MINOR-F3：W3 已在 showModal 后 `primaryRef.current?.focus()`，但同 commit phase 内 `setName(initialName)` 触发的 re-render 会重置焦点。修复：focus 调用包进 `requestAnimationFrame(() => primaryRef.current?.focus())` 并 cleanup `cancelAnimationFrame`，落到 React re-render settle 之后；`reduced-motion` 路径不受影响（`requestAnimationFrame` 在 reduced-motion 下仍触发，仅回调内不读偏好）。回归断言：`.omx/evidence/ulw/ulw-name-login-one-truth/w4-f23-verify.mjs` step 2 — `document.activeElement.dataset.testid === 'sync-confirm-confirm'`。
 
 - **浏览器 QA 探针的 BASE_URL 必须来自 `tests/qa/lib/browser.mjs` 的 `BASE_URL` 导出，不要硬编码 `http://localhost:3000`（F5 fix）** —— W4 修 sw-console-hygiene step05 陈年硬编码 `http://localhost:3000/_next/static/media/...woff2`（dev 用 3000 / QA 用 3101，:3101 必 FAIL）。修复后改读页面 `link[rel="preload"][as="font"]` 的 href 并用 `new URL(href, base).toString()` 拼 BASE；fallback 仍走原 hash。其它探针已经走 `BASE_URL` env 变量，零硬编码。
+
 - **eslint `globalIgnores` 必须包含 `.delta/**`（F8 fix）** —— W4 修：`.delta/worktrees/**` 是 `git worktree add` + 重元工具的沙箱（不入仓，`.git/info/exclude` 本地排除），`pnpm lint` 之前把扫描到这堆陈年源码上，11 条 warnings 全是 stale 沙箱里来——和 vitest（`.vitest-tmp/**`）和 stryker（`.stryker-tmp/**`）三工具配置不一。W4 同步在 `eslint.config.mjs` 加 `.delta/**`，回归到「0 errors 0 warnings」基线。
 
 ## 项目特有风格
@@ -125,6 +136,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 所有装饰性动效都有 prefers-reduced-motion 下的无动效路径。
 - 稳定的 data-testid 节点是 QA 契约，包括不接收交互的彩纸层。
 - 胜局探针使用 0,3,1,4,2，保证随机先手总能赢上排。
+- 路由命名遵循 offline/online（schema.org 词汇表对齐）；不引入 solo/ranked/singleplayer/multiplayer。
 
 ## 命令
 
@@ -135,6 +147,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
     pnpm test:coverage
     pnpm test:mutation
     node tests/qa/visual-qa.mjs
+    # 探针通常用 :3101 hermetic 库
+    DATABASE_URL=file:/tmp/ulw-og2v/<unique>.db PORT=3101 pnpm start &
+    BASE_URL=http://localhost:3101 node tests/qa/one-identity-qa.mjs
 
 ## herdr 多代理 session 卫生
 
@@ -159,7 +174,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 备注
 
 - lib/db.ts 通过 @libsql/client + Drizzle 初始化并缓存 libsql 客户端；测试通过 DATABASE_URL/临时目录隔离，并调用 closeDb()。
-- 战绩表唯一行是 id=1；即使 PUT 失败，本地 UI 状态仍保持正确。
+- 战绩表是 per-name 单行族（`name TEXT UNIQUE`），不是单行 id=1。即使 POST 失败，本地 UI 状态仍保持正确。
 - next-env.d.ts 是已跟踪的生成文件；切换构建模式时，它的引用发生变化是合理的。
 
 # 贡献指南

@@ -76,12 +76,12 @@
 | Route | Composition (single flex-row) | h1 slot | testid |
 | --- | --- | --- | --- |
 | `/` | (no single-line header — home is the score-cards layout) | n/a | n/a |
-| `/play` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "游戏中" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
-| `/solo` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "单机练习" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
+| `/online` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "游戏中" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
+| `/offline` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "单机练习" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
 | `/result` | `[ResultBanner h1 | SoundToggle]` | `result-headline` is the h1 | `result-headline` (aria-live=assertive) |
 
 Each row is a single `flex flex-row items-center justify-between gap-3` line. The h1
-slot is `text-h2 font-semibold` (compact) on `/play` and `/solo`; on `/result` the
+slot is `text-h2 font-semibold` (compact) on `/online` and `/offline`; on `/result` the
 h1 is `result-headline` itself (`text-h1 font-display font-medium`) because the
 redundant `<h1>本局结束</h1>` was dropped during this pass. `StatusBar` is the
 inline-flex pill variant (`text-small`, `whitespace-nowrap`) so the row's tallest
@@ -92,17 +92,17 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 
 ## 4b. OnlineStatsCard & SyncConfirmDialog (W3 增补)
 
-`/solo` 纯净化后身份与跨设备同步上首页，新增两个组件；写明动效与契约以免后人重发明。
+`/offline` 纯净化后身份与跨设备同步上首页，新增两个组件；写明动效与契约以免后人重发明。
 
 ### OnlineStatsCard（components/OnlineStatsCard.tsx）
 
 | 维度 | 契约 |
 | --- | --- |
-| 数据源 | `GET /api/solo-stats?name=...`（仅读） |
+| 数据源 | `GET /api/players/{name}/stats`（仅读） |
 | 触发 | `useEffect([playerName])`：store.playerName 由空变非空时拉取；同 store 字段变化（PlayerNameForm 改）会重拉 |
 | 状态机 | `idle → loading → ok / empty / error`（组件内 `useState<LoadState>`） |
 | 渲染 | 三态共用 `Card` 槽位（登录前「设置名字后在此查看」+ 登录后「StatsGrid / 该名字尚无战绩记录 / 加载失败」），避免空/有态布局跳变守 375 一屏 |
-| 持久层 | 严禁写 localStorage / `useGameStore.soloStats` —— A2 红线，home-return-qa step 07 逐字节快照断言 |
+| 持久层 | 严禁写 localStorage / 任何 store 字段 —— A2 红线，home-return-qa step 07 逐字节快照断言 |
 | 错误处理 | 网络/超时/404 等行内展示，不污染持久层 |
 
 ### SyncConfirmDialog（components/SyncConfirmDialog.tsx）
@@ -114,8 +114,8 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | 背板 | `::backdrop` 选 `bg-base/70`（显式 CSS：`dialog::backdrop { background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent) }`，因 Tailwind v4 不生成 `backdrop:bg-X/Y` 变体）+ `backdrop-blur-sm`（Tailwind 类仍生效）；禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255）；复用 §图底关系行 |
 | 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局；同步后本机清零以防重复」+ name 输入 + 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
 | 焦点 | showModal 后主 CTA「合并并清空」初焦（rAF 延后到 re-render settle 之后；F3 fix） |
-| 关键路径 | 内部 `runMergeSequence`: `postPlayerSession`（注册/登录）→ `loadSoloStats()` 快照 → `postSoloSync`（合并）；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm |
-| 退路 | ESC / 点击遮罩 / 次 CTA「保留本地」= `onReject`；`HomeDialogMount` 写 sessionStorage `ttt.solo.sync-declined.v1` 避免同会话重弹 |
+| 关键路径 | 内部 `runMergeSequence`: `postSession`（注册/登录）→ `loadOfflineStats()` 快照 → `postMerge`（合并）；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm |
+| 退路 | ESC / 点击遮罩 / 次 CTA「保留本地」= `onReject`；`HomeDialogMount` 写 sessionStorage `ttt.offline.sync-declined.v1` 避免同会话重弹 |
 | reduced-motion | 弹框内无连续动画；ESC/click 关 dialog 即时 |
 
 why-not: 为什么不做「合并并清空」按钮的 loading spinner 旋转动画
@@ -177,13 +177,13 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 | View Transitions (route) | opacity crossfade 双向 | 150ms | ease-out |
 | GameShell header sticky (`sticky top-0`) | position 状态 (非动画) | — | — |
 | In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
-| /solo Card morph | `view-transition-name: solo-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
+| /offline Card morph | `view-transition-name: offline-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
 | view-toggle button width | grid-stack 双图层（StatusBar 4 态 `grid-area: 1/1` 同格叠放，visibility 切换可见态）+ button `min-width: max-content` 锁宽 | — (静态) | — |
 | SyncConfirmDialog 打开 | `<dialog>.showModal()` 平台 API（无 enter 动画；原生 `::backdrop` 由浏览器绘制）| — (静态) | — |
 
 - **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
-- **In-page view switch**: 同上平台 API 的 `update` 路径（React 19 `<ViewTransition update="view-swap">` + `useTransition` 驱动），仅 `/solo` 顶栏切换棋盘↔战绩时启用；CSS 关键帧 `translate` + `opacity`，GPU-only，不动布局属性；`prefers-reduced-motion` 归零；不动 `prefers-reduced-motion` 既有全局 `*` 兜底
-- **/solo Card morph（A-T3，ulw-solo-sync-rebuild W-A）**: Card 根加 `view-transition-name: solo-card`，浏览器对 OLD/NEW 各拍一张 group snapshot 做同位 morph；同容器 `min-h: 28rem` 锁高，使两态在同位 crossfade 而非高度 snap。28rem 是 Board (~22rem) 与 SoloStatsPanel (~24rem) 中取大者再留呼吸空间；hardcode 而非 `clamp` 是因为 Card 内容由 React 控制，不需要响应式伸缩
+- **In-page view switch**: 同上平台 API 的 `update` 路径（React 19 `<ViewTransition update="view-swap">` + `useTransition` 驱动），仅 `/offline` 顶栏切换棋盘↔战绩时启用；CSS 关键帧 `translate` + `opacity`，GPU-only，不动布局属性；`prefers-reduced-motion` 归零；不动 `prefers-reduced-motion` 既有全局 `*` 兜底
+- **/offline Card morph（A-T3，ulw-solo-sync-rebuild W-A）**: Card 根加 `view-transition-name: offline-card`，浏览器对 OLD/NEW 各拍一张 group snapshot 做同位 morph；同容器 `min-h: 28rem` 锁高，使两态在同位 crossfade 而非高度 snap。28rem 是 Board (~22rem) 与 OfflineStatsPanel (~24rem) 中取大者再留呼吸空间；hardcode 而非 `clamp` 是因为 Card 内容由 React 控制，不需要响应式伸缩
 - **view-toggle button width（A-T2，ulw-solo-sync-rebuild W-A）**: StatusBar 4 态文本（准备开始 / 轮到 X / X 获胜 / 平局）以 `display: inline-grid` + `grid-area: 1/1` 同格叠放，非活动态 `visibility: hidden`；grid 容器宽度 = max(全部子项) = 活动态自带脉冲点的最宽态；button 仅 `min-width: max-content`，不写硬编码像素；`prefers-reduced-motion` 下行为不变（visibility 是布局态而非动画态）
 - **No bounce / no slide-in / no parallax**; transitions communicate a move, outcome, or route change only
 - GPU-only (`transform`, `opacity`, `background-color`)
@@ -198,7 +198,7 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 - **W3 弹框 (SyncConfirmDialog) 为什么不加 enter 动画（W4 终校：仍无新增动效）**
   原生 `<dialog>.showModal()` 自带 ::backdrop 渐入 + 焦点 trap，但这是浏览器实现而非项目动画；本项目无 enter transition 自定义 CSS（`dialog` 上无 `animation`/`transition` 属性）。why-not: 加 enter 动画 = 「确认性操作」类装饰（Fitts's Law 已经在遮罩 1.5 click 关 + 主 CTA 大字 + 主操作 8s loading 这三层上做到明确反馈；任何额外淡入/缩放都会让用户在「是否合并」二选一前多读 200ms 视觉噪音，违反 Tesler's Law 复杂度守恒）。W4 F3 修焦点 race 后，showModal → primaryRef.focus() 仍无视觉过渡。`prefers-reduced-motion` 路径下无差异（本就 0ms）。
 - **OnlineStatsCard 加载态为什么不加 skeleton screen 闪烁**
-  GET /api/solo-stats 在 Turso iad1 + Vercel edge 实测 80-200ms（HAR §P3）；骨架屏会让用户在 200ms 内看到 1-2 次内容替换抖动，反而比「加载中…」一行更扰。`prefers-reduced-motion` 路径下骨架屏的呼吸光晕（pulse）是反模式。
+  GET /api/players/{name}/stats 在 Turso iad1 + Vercel edge 实测 80-200ms（HAR §P3）；骨架屏会让用户在 200ms 内看到 1-2 次内容替换抖动，反而比「加载中…」一行更扰。`prefers-reduced-motion` 路径下骨架屏的呼吸光晕（pulse）是反模式。
 
 
 - **A-T2 StatusBar grid-stack 为什么不选 min-w-[7rem] / min-w-[8ch]**
@@ -234,7 +234,7 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 | 菲茨定律（Fitts's Law） | W1 弹框主/次 CTA 整行宽（移动端单列 1fr/1fr 堆叠）；按钮 padding 8/12/16 | 触区 ≥44px；遮罩外 click 不关弹框（用 ESC + 显式按钮替代） |
 | 多尔蒂门槛（Doherty Threshold） | W1 弹框显形 ≤100ms + 主 CTA loading + 8s `AbortController.timeout()` | 400ms 内用户必须看见反馈；HAR §P2 实证 30s 卡死反例 |
 | 图底关系（Figure-Ground） | W1 `::backdrop` 选 `bg-base/70` + `backdrop-blur-sm`；W3 sticky `bg-base` 实色 | 禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
-| 反馈环（Feedback Loop） | W2 `ttt:solo-stats-changed` dispatch + OnlineStatsCard focus refetch；W3 win/draw ≤2s 切 stats 视图 + confetti 落位 | 行为 → 状态变化 → 视觉响应 ≤400ms 闭环；不依赖用户主动刷新 |
+| 反馈环（Feedback Loop） | W2 `ttt:offline-stats-changed` dispatch + OnlineStatsCard focus refetch；W3 win/draw ≤2s 切 stats 视图 + confetti 落位 | 行为 → 状态变化 → 视觉响应 ≤400ms 闭环；不依赖用户主动刷新 |
 | 映射关系（Mapping） | W2 ResetStatsButton caption 显形作用域；aria-pressed ↔ view-toggle 控制-状态同构 | 控件外观 / 文案须与系统状态一一对应；禁「按钮名 ≠ 作用域」歧义（A5） |
 | 图层化（Layering） | W1 `::backdrop` 暗背景层；W3 confetti overlay `z-index: 50` 悬浮于战绩视图 | 视觉层级 = 信息层级；z-index 须 token 化阶梯（globals.css 单一源） |
 | 宽容性（Forgiveness） | W1 弹框 ESC = reject；W4 折叠态「编辑」独占可达面；「保留本地」零网络写 | 撤销 / 退出必须可逆且零代价；禁把破坏性操作伪装成中性操作（D1） |
@@ -256,32 +256,34 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 
 | Route | Purpose | Key elements |
 | --- | --- | --- |
-| `/` | Home | Title, 战绩卡片（StatsCard×N）, 开始对战, 单机练习, 重置战绩 |
-| `/play` | Ranked game (two players, pass-and-play) | StatusBar, Board (3×3 Cell grid), 返回首页 / 重开 |
-| `/solo` | Solo practice (local stats only) | StatusBar, Board, inline ResultBanner, SoloStatsPanel, 返回首页 / 重开 |
-| `/result` | Game over (ranked only) | Winner / draw message, 庆祝动画, 再来一局, 返回首页, 重置战绩 |
+| `/` | Showcase (landing) | H1 `井字棋`, 副标, OnlineStatsCard, PlayerNameForm, 双入口 CTA（start-offline / start-online）, JSON-LD, HomeDialogMount |
+| `/online` | Online versus (two players, pass-and-play, server-authoritative) | StatusBar, Board (3×3 Cell grid), 返回首页 / 重开; on game end auto-push `/result?name=<name>` |
+| `/offline` | Solo practice (pure local, anonymous-not-recorded) | StatusBar, Board ↔ OfflineStatsPanel view-swap (W3 result-paginated), 返回首页 / 重开 |
+| `/result?name={trimmed}` | Real-time score sheet (RSC, per-name) | StatsGrid, 再来一局 → /online, 返回首页 → / |
 
 **Transitions**:
-- `/` → click 开始对战 → `/play` (first player randomized in store)
-- `/` → click 单机练习 → `/solo` (first player randomized in store)
-- `/play` → 胜/平 → `/result`
-- `/solo` → 胜/平 → inline ResultBanner (no navigation)
-- `/result` → click 再来一局 → `/play` (new randomized first player, stats updated)
-- `/result` / `/solo` → click 返回首页 → `/`
+- `/` → click start-online → `/online` (first player randomized in store)
+- `/` → click start-offline → `/offline` (first player randomized in store)
+- `/online` → 胜/平 → `/result?name=<name>` (ResultNavigator push; real-time RSC score sheet)
+- `/offline` → 胜/平 → inline OfflineStatsPanel view-swap (no navigation; confetti fires once)
+- `/result` → click 再来一局 → `/online` (new randomized first player, stats updated server-side)
+- `/result` / `/offline` → click 返回首页 → `/`
 
-### Modes: ranked (default) vs solo
+### Modes: online (default) vs offline
 
-One store, one `mode` field; the two modes are mirror contracts:
+One store, one `mode` field (`'online' | 'offline'`); the two modes share the board / win-check / recordOutcome math — the only divergence is the **score path**:
 
-| | ranked (`/play`) | solo (`/solo`) |
+| | online (`/online`) | offline (`/offline`) |
 | --- | --- | --- |
-| Outcome write | `POST /api/stats/outcome` — server-authoritative accumulation | Zero network writes — local `recordOutcome` accumulation |
-| Stats persistence | Server single row (`/api/stats`) | `localStorage['ttt.solo.stats.v1']` (5-number JSON; shape mismatch → `emptyStats`)
-| Game over | Event-driven nav to `/result` (subscribes `lastWriteAt`) | Inline `ResultBanner` (Confetti included); no navigation by design |
-| Stats display | Server snapshot via force-dynamic RSC | `SoloStatsPanel`: SSR renders `emptyStats`, hydrates in effect, re-reads on settle |
-| Reset | `DELETE /api/stats` + `router.refresh()` (`reset-stats`) | `resetSoloStats()` — local only, instant (`reset-solo-stats`)
+| Entry gate | `StartGameButton` blocks when `useGameStore.playerName` is empty; dispatches `ttt:player-name-required` so the identity region focuses | Always navigable; anonymous path is allowed (无名不记) |
+| Outcome write | `POST /api/players/{name}/stats/outcomes` — server-authoritative accumulator (`lib/db.ts:recordOutcomeForName`) | Zero network writes — local `recordOutcome` accumulation |
+| Stats persistence | Server per-name row (`game_stats`, `name TEXT UNIQUE`) | `localStorage['ttt.offline.stats.v1']` (5-number JSON; shape mismatch → `emptyStats`) |
+| Game over | `ResultNavigator` pushes `/result?name=<name>` (RSC real-time score sheet, force-dynamic) | Inline `OfflineStatsPanel` view-swap (Confetti fires once via W4 Bug B hoisted `WinConfetti`); no navigation by design |
+| Stats display | RSC reads `loadRecordByName(name)` at request time (force-dynamic) | `OfflineStatsPanel`: SSR renders `emptyStats`, hydrates from localStorage in effect |
+| Reset | Server-side row delete (admin op, no frontend UI) | `clearOfflineStats()` — local only, instant (`reset-offline-stats`) |
+| Cross-device merge | n/a (server is single source of truth) | `HomeDialogMount` mount effect → `SyncConfirmDialog` → `POST /api/sessions` + `POST /api/players/{name}/stats/merge` (per-field sum) + local clear + `ttt.offline.last-merged-local.v1` baseline sentinel (W4 F1) |
 
-The two ledgers never mix: the home card reads the server row only; the solo panel reads localStorage only. All visual, motion, and accessibility contracts (§1–§6) apply identically to both modes.
+The two ledgers never mix: the online card reads the server row only; the offline panel reads localStorage only. All visual, motion, and accessibility contracts (§1–§6) apply identically to both modes. See `.omo/plans/ulw-one-game-two-versions.md` §1 for the vocabulary rationale.
 
 ## 8. Accepted Debt
 
@@ -301,31 +303,35 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 本文件的验收域是设计契约本身：视觉 QA 断言暗色 `#0A0A0A` 基底、Geist / Inter 加载（无 FOUT）、
 无 emoji、focus ring 可见、动效符合第 5 节时长/缓动表。
 
-**截图来源**（重制于 ulw-solo-pure-local-closeout W4；详见本仓 `.omo/evidence/ulw/ulw-solo-pure-local-closeout/W4-gauntlet.log`）：
+**截图来源**（W5 重制于 ulw-one-game-two-versions §W5；详见本仓 `.omo/evidence/ulw/ulw-one-game-two-versions/W5-gauntlet.log`）：
 
-- 桌面 1280×900：`docs/screenshots/{home,board,result,solo}.png`（visual-qa 桌面 pass）
-- 移动 375×667：`docs/screenshots/mobile/{home,board,solo,solo-stats,result}.png`（visual-qa 移动 pass，
-  4 路由 + solo 双视图各一张）
+- 桌面 1280×900：`docs/screenshots/{home,board,result,solo}.png`（visual-qa 桌面 pass）—— 文件名沿用旧命名以保 PR diff 稳定；`board.png` ↔ `/online`，`solo.png` ↔ `/offline`
+- 移动 375×667：`docs/screenshots/mobile/{home,online,offline,offline-stats,result}.png`（visual-qa 移动 pass，
+  4 路由 + offline 双视图各一张）
 
 **Mobile one-screen rule**（T3 验收契约，visual-qa 移动 pass `scrollWidth === viewport.width`
-断言 + 显式度量）：`/play` / `/result` 路由在 375×667 视口下滚动长度严格等于视口高度（无纵向滚动）；
-`/solo` 在 board ↔ stats 两视图下同样满足。`/home` 战绩为空时可一屏；战绩非空时 StatsGrid + 战绩卡
-+ 按钮组纵向铺，仍允许轻量滚动（与桌面同等体验）。
+断言 + 显式度量）：`/online` / `/result` 路由在 375×667 视口下滚动长度严格等于视口高度（无纵向滚动）；
+`/offline` 在 board ↔ stats 两视图下同样满足。`/` 战绩为空时可一屏；战绩非空时 StatsGrid + 战绩卡 + 按钮组纵向铺，仍允许轻量滚动（与桌面同等体验）。
 
 ---
 
-### Solo by-name sync (W-SYNC wave 2)
+### Offline cross-device merge (历史叙述 · W-SYNC wave 2 已并入主 README「offline 跨设备同步」段)
 
-| Contract | Value | Notes |
+下表是 W-SYNC wave 2 的旧契约摘要，仅保留作为「历史叙述」；现行契约见 README.md / README.en.md「offline 跨设备同步是怎么工作的」段以及 `lib/offline-stats.ts` / `components/SyncConfirmDialog.tsx` / `components/HomeDialogMount.tsx` 顶 doc。
+
+| 旧 Contract | 旧 Value | 当前状态 |
 | --- | --- | --- |
-| Storage key | `ttt.player.name.v1` (localStorage) | Versioned for future shape changes. SSR-safe + fail-soft, mirrors `ttt.solo.stats.v1`. |
-| API: read | `GET /api/solo-stats?name={trimmed}` → `{ stats: GameStats \| null }` | 422 on invalid name (whitelist mirror of client-side `isPlayerName`) |
-| API: write | `POST /api/solo-stats` body `{ name, outcome }` → `{ stats: GameStats }` | Server-authoritative — read → recordOutcome → upsert, last-write-wins |
-| DB | `solo_records` (name TEXT PRIMARY KEY + 5 ints + updated_at) | One row per name; same shape as `game_stats` |
-| Client UI | `components/PlayerNameForm.tsx` (input + save + clear) mounted in home 战绩 Card; `components/SoloStatsPanel.tsx` shows the name in heading when set | No new Tailwind tokens |
-| Test ids | `player-name-input` / `player-name-save` / `player-name-clear` / `player-name-current` / `player-name-section` / `solo-stats-heading` / `solo-sync` / `solo-stats-error` | Stable QA contract; added on top of wave 1's `view-toggle` / `solo-stats` / `reset-solo-stats` |
-| Concurrency model | Last-write-wins per name (intentional simplicity) | README documents the boundary; no CRDT / no timestamp merging |
-| Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | A5 acceptance — verified by sync-qa step 01 |
+| Storage key | `ttt.player.name.v1` (localStorage) | 保留；与 `lib/player-name.ts:normalizePlayerName` 同源 |
+| Offline stats key | `ttt.solo.stats.v1` | 弃用不迁移 → `ttt.offline.stats.v1` |
+| API: read | `GET /api/solo-stats?name={trimmed}` | 退役 → `GET /api/players/{name}/stats` (RFC 9457 404 problem+json) |
+| API: write | `POST /api/solo-stats` body `{ name, outcome }` | 退役（405）→ `POST /api/players/{name}/stats/outcomes` (RFC 9457) |
+| DB | `solo_records` (name TEXT PRIMARY KEY + 5 ints + updated_at) | 退役 → 单表 `game_stats` (name TEXT UNIQUE)，per-name 行族 |
+| Client UI | `PlayerNameForm` + `SoloStatsPanel` | 改 `PlayerNameForm` (W4 折叠) + `OfflineStatsPanel` (W4 重命名) |
+| Test ids | `solo-sync` / `solo-stats-heading` / `solo-stats-error` / `reset-solo-stats` | 重命名 → `offline-stats-heading` / `offline-stats-error` / `reset-offline-stats` / `offline-stats`；`sync-confirm-*` 改在 home 页触发 |
+| Concurrency model | Last-write-wins per name | 保留；README 「FAQ · offline 跨设备同步」注明边界 |
+| Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | 重写为「`/offline` 路由零网络写；`loadOfflineStats()` only」（`one-identity-qa` A4 步骤断言） |
+
+新契约的完整描述在「一局棋两版本 → offline / online」与「localStorage 旧 key 弃用注」两节；本表只保留「为什么是这样」的轨迹。
 
 #### 玩家名输入对照（行业最佳实践，W4 增补）
 
@@ -345,7 +351,7 @@ The two ledgers never mix: the home card reads the server row only; the solo pan
 - 允许 CJK 与 emoji（字符接受侧；计数侧见已知差距）
 - SSR-safe + `aria-invalid` + `aria-describedby` + `role="alert"`（a11y 最佳实践）
 - 「先玩后填」匿名路径：`playerName === null` 时 UI 走「匿名玩家」且零网络写
-  （punchev BP-E3 路径；ulw-solo-pure-local-closeout W1 落地）
+  （punchev BP-E3 路径；W1 ulw-solo-pure-local-closeout 落地为「未命名 solo = 匿名玩家」）
 
 **P0 采纳**（学界共识；本轮不改代码，但在设计契约中显形以兑现可见性）：
 
