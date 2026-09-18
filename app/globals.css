@@ -32,6 +32,17 @@
   color-scheme: dark;
 }
 
+/* SyncConfirmDialog ::backdrop (ulw-ux-refresh-pass W1).
+   Tailwind v4 does not generate `backdrop:bg-base/70` for the ::backdrop
+   pseudo (color-mix + arbitrary variant limitation), so we set it
+   explicitly using the same theme token to keep the figure-ground
+   contract from DESIGN.md §图底关系. blur is still applied via
+   `backdrop:backdrop-blur-sm` (verified to generate). */
+dialog[data-testid="sync-confirm-dialog"]::backdrop {
+  background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent);
+}
+
+
 /* Page container shared by all three routes (DESIGN.md §3).
    Single source so layout changes never need three-file edits. */
 .page-shell {

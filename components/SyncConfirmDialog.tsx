@@ -196,7 +196,7 @@ export function SyncConfirmDialog({
       aria-labelledby={titleId}
       aria-describedby={descId}
       data-testid="sync-confirm-dialog"
-      className="bg-bg-elevated text-text-primary border border-border-subtle rounded-lg p-6 max-w-[min(420px,calc(100vw-32px))] backdrop:bg-black/60 motion-reduce:animate-none"
+      className="m-auto bg-bg-elevated text-text-primary border border-border-subtle rounded-lg p-6 max-w-[min(420px,calc(100vw-32px))] backdrop:backdrop-blur-sm motion-reduce:animate-none"
     >
       <h2
         id={titleId}

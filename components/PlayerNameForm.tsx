@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { isPlayerName, PLAYER_NAME_KEY } from '@/lib/player-name';
+import { isPlayerName } from '@/lib/player-name';
 import { useGameStore } from '@/lib/store';
 import { postPlayerSession } from '@/lib/solo-net';
 import { Button } from '@/components/ui/Button';
@@ -276,17 +276,6 @@ export function PlayerNameForm() {
           role="alert"
         >
           {feedback.message}
-        </p>
-      ) : null}
-      {hasSaved && feedback.kind !== 'success' ? (
-        <p
-          className="text-small text-text-muted"
-          data-testid="player-name-current"
-        >
-          当前：<span className="text-text-primary font-mono">{playerName}</span>
-          <span className="ml-2 text-text-muted">
-            （保存在 localStorage「{PLAYER_NAME_KEY}」）
-          </span>
         </p>
       ) : null}
     </form>

@@ -110,6 +110,8 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | 维度 | 契约 |
 | --- | --- |
 | 触发 | `HomeDialogMount` mount effect：`pendingSyncCount() > declinedSentinel` 时开 |
+| 居中 | 原生 `<dialog>` + Tailwind v4 Preflight 把 UA `dialog:modal { margin: auto }` 清零；项目加 `m-auto` 显形居中（契约：dialog 中心与视口中心偏差 ≤8px，A1 验收） |
+| 背板 | `::backdrop` 选 `bg-base/70`（显式 CSS：`dialog::backdrop { background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent) }`，因 Tailwind v4 不生成 `backdrop:bg-X/Y` 变体）+ `backdrop-blur-sm`（Tailwind 类仍生效）；禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255）；复用 §图底关系行 |
 | 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局；同步后本机清零以防重复」+ name 输入 + 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
 | 焦点 | showModal 后主 CTA「合并并清空」初焦（rAF 延后到 re-render settle 之后；F3 fix） |
 | 关键路径 | 内部 `runMergeSequence`: `postPlayerSession`（注册/登录）→ `loadSoloStats()` 快照 → `postSoloSync`（合并）；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm |
@@ -121,6 +123,13 @@ why-not: 为什么不做「合并并清空」按钮的 loading spinner 旋转动
 
 why-not: 为什么主次按钮用 `flex-col-reverse sm:flex-row sm:justify-end` 而非 modal library
   → 库引入违「禁 UI/动画/路由/数据访问库」项目约束；原生 `<dialog>` 自带 focus trap / ESC / inert 背景三件套，足够。
+
+why-not: 为什么 `<dialog>` 加 `m-auto` 而不是改 global UA 样式或换 Tailwind plugin
+  → Tailwind v4 Preflight `* { margin: 0 }`（node_modules/tailwindcss/preflight.css:13）覆盖 UA `dialog:modal { margin: auto }`；项目解法是在 dialog 自己 className 上 `m-auto` 把居中找回（最小作用域）。global 加 `dialog { margin: auto }` 会让其它未来 modal 实例共享同一规则，违反「契约先行 / 最小作用域」原则。prefers-reduced-motion 下无差异（m-auto 是 layout 态非动画态）。
+why-not: 为什么 `::backdrop` 的 `bg-base/70` 走显式 CSS 而非 `backdrop:bg-base/70` Tailwind 类
+  → Tailwind v4 不生成 `backdrop:bg-X/Y`（color-mix + arbitrary variant 组合）规则；.next 静态 CSS 实测只产出 `.backdrop\:backdrop-blur-sm::backdrop { backdrop-filter }`，无 `bg-base/70::backdrop { background-color }`。换成显式 CSS rule 用同一 `--color-bg-base` token，契约不变（DESIGN.md §图底关系 bg-base/70），且与 `backdrop-blur-sm` 类共享变量源。
+why-not: 为什么 `::backdrop` 用 `bg-base/70 + backdrop-blur-sm` 而非 `bg-black/60`
+  → DESIGN.md §图底关系行已明文禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255，破坏暗色背景下的边界感知）；`bg-base/70` 既守住图底关系又维持品牌调性，`backdrop-blur-sm` 提一点层次（与 sticky header 不用 blur 是因为 `bg-base` 暗色下 12px blur 几乎不可见，徒增合成成本；modal 后景是页面整体而非一行，blur 收益更高）。
 
 ## 5. Motion
 
