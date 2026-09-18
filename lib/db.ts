@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
-import { gameStats, soloRecords } from '../db/schema';
+import { gameStats } from '../db/schema';
 import { emptyStats, recordOutcome, type GameStats } from './game';
 
 const STATS_ROW_ID = 1;
@@ -127,12 +127,9 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   cachedClient = createClientFn(config);
   // Bootstrap table — keeps the app runnable without a manual `db:push`.
   // DDL via the raw client ensures the schema exists before drizzle hits it.
-  // Bootstrap tables — keeps the app runnable without a manual `db:push`.
-  // DDL via the raw client ensures the schema exists before drizzle hits
-  // it. Each CREATE TABLE goes through its own execute() call because the
-  // @libsql client.execute() runs only the first statement of a multi-
-  // statement script (verified empirically with the standalone client);
-  // splitting the DDL keeps the second table from being silently dropped.
+  // The single game_stats table holds both the ranked shared row
+  // (id=1, name=NULL) and per-player solo rows (auto-assigned id, name=…
+  // UNIQUE) since the ulw-name-login-one-truth plan merged the two.
   await cachedClient.execute(`
     CREATE TABLE IF NOT EXISTS game_stats (
       id INTEGER PRIMARY KEY,
@@ -141,17 +138,7 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
       o_wins INTEGER NOT NULL DEFAULT 0,
       draws INTEGER NOT NULL DEFAULT 0,
       current_streak INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-  `);
-  await cachedClient.execute(`
-    CREATE TABLE IF NOT EXISTS solo_records (
-      name TEXT PRIMARY KEY,
-      total_games INTEGER NOT NULL DEFAULT 0,
-      x_wins INTEGER NOT NULL DEFAULT 0,
-      o_wins INTEGER NOT NULL DEFAULT 0,
-      draws INTEGER NOT NULL DEFAULT 0,
-      current_streak INTEGER NOT NULL DEFAULT 0,
+      name TEXT UNIQUE,
       updated_at INTEGER NOT NULL
     );
   `);
@@ -247,8 +234,8 @@ export async function loadSoloRecord(name: string): Promise<GameStats | null> {
   const db = await getDb();
   const existing = await db
     .select()
-    .from(soloRecords)
-    .where(eq(soloRecords.name, name))
+    .from(gameStats)
+    .where(eq(gameStats.name, name))
     .get();
   if (!existing) return null;
   return {
@@ -268,7 +255,7 @@ export async function upsertSoloRecord(
   const db = await getDb();
   const now = new Date();
   await db
-    .insert(soloRecords)
+    .insert(gameStats)
     .values({
       name,
       totalGames: stats.totalGames,
@@ -279,7 +266,7 @@ export async function upsertSoloRecord(
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: soloRecords.name,
+      target: gameStats.name,
       set: {
         totalGames: stats.totalGames,
         xWins: stats.xWins,
@@ -373,6 +360,43 @@ export async function ensureSoloRecord(name: string): Promise<GameStats> {
   const zero = emptyStats();
   await upsertSoloRecord(name, zero);
   return zero;
+}
+
+/**
+ * Player-session registration / login primitive for the /api/player-session
+ * POST handler (ulw-name-login-one-truth W1). Reads the per-name row in
+ * game_stats; if absent, inserts an emptyStats() row under that name and
+ * returns { stats, existed: false }; if the row already exists, returns
+ * { stats, existed: true }.
+ *
+ * Race-safety: a concurrent writer that inserted the row first trips the
+ * UNIQUE constraint on game_stats.name. The catch block re-reads the row
+ * so the loser surfaces the winner’s stats instead of throwing — callers
+ * (the route handler) see the same response shape regardless of timing.
+ * Mirrors the load → mutate → upsert shape of accumulateSoloRecord so
+ * loadStats / saveStats / recordAndSave behavior is untouched
+ * (constraint: W1 keeps those three untouched).
+ *
+ * UNIQUE on name is the server-side guarantee that name is an identity,
+ * not a label: there is exactly one row per non-null name, so renaming
+ * is structurally impossible (no rename endpoint + UNIQUE doubles the
+ * guard).
+ */
+export async function registerOrLoginName(
+  name: string,
+): Promise<{ stats: GameStats; existed: boolean }> {
+  const existing = await loadSoloRecord(name);
+  if (existing) return { stats: existing, existed: true };
+  const zero = emptyStats();
+  try {
+    await upsertSoloRecord(name, zero);
+    return { stats: zero, existed: false };
+  } catch (err) {
+    // Concurrent writer inserted first: re-read surfaces their row.
+    const after = await loadSoloRecord(name);
+    if (after) return { stats: after, existed: true };
+    throw err;
+  }
 }
 
 export async function closeDb(): Promise<void> {
