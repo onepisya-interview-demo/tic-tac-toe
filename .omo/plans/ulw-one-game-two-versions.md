@@ -23,6 +23,7 @@
 - `POST /api/players/{name}/stats:merge`（单机合并 custom method，409 防静默建档）
 - `POST /api/players/{name}/stats/outcomes`（在线版记一局，outcome 子资源创建，服务端权威累加，404）
 - 错误统一 RFC 9457 problem+json（`lib/api-problem.ts`）
+- **调度者注（2026-09-19 W2 落地实测）**：`stats:merge` 以 custom-method 子路径形态实现为 `POST /api/players/{name}/stats/merge`（语义等价；V6 终验按此 URL 断言 A2）
 - **GraphQL 双兼容**：service 层（lib/db.ts 纯函数）与传输层薄壳强制分离成文；未来 GraphQL 只加 schema+resolver 复用 service；README 预留节。
 
 ## 1. 语义与命名（schema.org 词汇表对齐，主公御定 online/offline）
