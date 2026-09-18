@@ -156,10 +156,34 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   // `solo_records` table; this is the only `getDb` path that touches the
   // shape of `game_stats`, so the contract (single-row id=1 ranked,
   // per-player rows under `name`) stays lock-step with `db/schema.ts`.
-  const probe = await cachedClient.execute(
+  // RC-drift §1 P1-1: probe must catch the half-applied state where
+  // `name` column exists but no UNIQUE index covers it (someone ran a
+  // raw ALTER TABLE ADD COLUMN without an index). Probe is two-step:
+  // (a) column present + (b) at least one unique index lists `name` as
+  // a column. Both must hold, else rebuild. Fresh DB satisfies both —
+  // bootstrap DDL declares `name TEXT UNIQUE`, which creates an internal
+  // `sqlite_autoindex_game_stats_<n>` that pragma_index_list surfaces.
+  const columnProbe = await cachedClient.execute(
     "SELECT name FROM pragma_table_info('game_stats') WHERE name = 'name'",
   );
-  if (probe.rows.length === 0) {
+  let hasUniqueOnName = false;
+  if (columnProbe.rows.length > 0) {
+    const indexList = await cachedClient.execute(
+      "SELECT name FROM pragma_index_list('game_stats') WHERE [unique] = 1",
+    );
+    for (const row of indexList.rows) {
+      const idxName = String(row.name);
+      const info = await cachedClient.execute({
+        sql: "SELECT name FROM pragma_index_info(?) WHERE name = 'name' LIMIT 1",
+        args: [idxName],
+      });
+      if (info.rows.length > 0) {
+        hasUniqueOnName = true;
+        break;
+      }
+    }
+  }
+  if (columnProbe.rows.length === 0 || !hasUniqueOnName) {
     await cachedClient.batch(
       [
         `CREATE TABLE game_stats_new (

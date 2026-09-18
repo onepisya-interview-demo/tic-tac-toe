@@ -846,6 +846,12 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
 //   );
 
 describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
+  // Sentinel value chosen to be far from any plausible runtime
+  // Date.now() so the P1-3 updated_at preservation guard below can pin
+  // the exact preserved value without colliding with the build wall-clock.
+  // 1_700_000_000_000 ms = 2023-11-14T22:13:20Z.
+  const UPDATED_AT_SENTINEL = 1_700_000_000_000;
+
   // Build a fresh legacy DB at a tmpfile path: matches the shape
   // .env.local pointed to before W1 (no name column on game_stats, plus
   // the standalone solo_records table). Pure raw client; lib/db.ts must
@@ -874,10 +880,11 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
           updated_at INTEGER NOT NULL
         );
       `);
-      // Seed: id=1 ranked row with non-default counters + a solo_records
-      // row. Non-default values so a regression that drops the row or
-      // resets counters trips the assertion immediately.
-      const seedNow = Date.now();
+      // Sentinel far from any plausible Date.now() at runtime (2023-11-14)
+      // so the P1-3 updated_at preservation guard can pin the exact
+      // preserved value without colliding with fresh boot time. The other
+      // legacy counters stay non-default for the same reason.
+      const seedNow = 1_700_000_000_000;
       await client.batch([
         {
           sql: `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -888,6 +895,43 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
           args: ['legacy-solo', 5, 2, 1, 2, 1, seedNow],
         },
       ], 'write');
+    } finally {
+      client.close();
+    }
+  };
+
+  // Build a "half-migrated" DB at a tmpfile path: someone added the
+  // `name` column manually (or an intermediate version did) but did NOT
+  // declare it UNIQUE — e.g. raw `ALTER TABLE game_stats ADD COLUMN
+  // name TEXT` with no index. The current reconcile probe keys on column
+  // presence alone, so this state silently passes the probe and stays
+  // detached from db/schema.ts (`name: text('name').unique()`). RC-drift
+  // §1 P1-1: this scenario must trigger a rebuild so UNIQUE is restored.
+  const buildHalfMigratedDb = async (filePath: string): Promise<void> => {
+    const { createClient } = await import('@libsql/client');
+    const client = createClient({ url: `file:${filePath}` });
+    try {
+      await client.executeMultiple(`
+        CREATE TABLE game_stats (
+          id INTEGER PRIMARY KEY,
+          total_games INTEGER NOT NULL DEFAULT 0,
+          x_wins INTEGER NOT NULL DEFAULT 0,
+          o_wins INTEGER NOT NULL DEFAULT 0,
+          draws INTEGER NOT NULL DEFAULT 0,
+          current_streak INTEGER NOT NULL DEFAULT 0,
+          name TEXT,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+      // Seed the ranked row with sentinel counters + sentinel timestamp;
+      // name stays NULL because the schema is "column exists but UNIQUE
+      // missing" — under such a state, two per-player rows with the same
+      // name would be silently allowed. After the fix, the rebuild path
+      // restores UNIQUE on `name` and these counters must round-trip.
+      await client.execute({
+        sql: `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [1, 7, 3, 2, 2, -2, null, UPDATED_AT_SENTINEL],
+      });
     } finally {
       client.close();
     }
@@ -1072,5 +1116,136 @@ describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
       'name',
       'updated_at',
     ]);
+  });
+
+  it('reconcile preserves the seeded updated_at sentinel (P1-3 regression guard)', async () => {
+    // RC-drift §1 P1-3: prior suite asserted counters + name UNIQUE + table
+    // shape, but never pinned `updated_at`. A future change that drops
+    // `updated_at` from the reconcile INSERT...SELECT column list (or
+    // from the new table definition) would trip this assertion by
+    // failing loadStats entirely (NOT NULL constraint on the new table
+    // has no DEFAULT) — and after the fix, by failing to round-trip the
+    // sentinel. The seed writes 1_700_000_000_000 ms; any other value
+    // is unambiguously a regression.
+    const { loadStats } = await import('@/lib/db');
+    await loadStats();
+    const { createClient } = await import('@libsql/client');
+    const probe = createClient({ url: `file:${legacyFile}` });
+    try {
+      const rs = await probe.execute(
+        'SELECT updated_at FROM game_stats WHERE id = 1',
+      );
+      expect(rs.rows).toHaveLength(1);
+      expect(Number(rs.rows[0].updated_at)).toBe(UPDATED_AT_SENTINEL);
+    } finally {
+      probe.close();
+    }
+  });
+
+  it('reconcile rebuilds when name column exists without UNIQUE (P1-1 half-applied schema)', async () => {
+    // RC-drift §1 P1-1: a DB with `name TEXT` (no UNIQUE) must still trip
+    // the rebuild path so the schema catches up to db/schema.ts (which
+    // declares `name: text('name').unique()`). Pre-fix the probe only
+    // checks column presence; this state silently passes and stays
+    // detached from the schema contract. Post-fix the probe also checks
+    // that some unique index covers `name`, so the rebuild fires.
+    const halfFile = path.join(dir, 'half.db');
+    await buildHalfMigratedDb(halfFile);
+    process.env.DATABASE_URL = `file:${halfFile}`;
+    vi.resetModules();
+    const { loadStats } = await import('@/lib/db');
+    // Counters must round-trip through the rebuild (same invariant as
+    // the no-name-column case — INSERT...SELECT 共有列 covers them).
+    await expect(loadStats()).resolves.toEqual({
+      totalGames: 7,
+      xWins: 3,
+      oWins: 2,
+      draws: 2,
+      currentStreak: -2,
+    });
+    // UNIQUE proof: after the rebuild, two inserts under the same `name`
+    // must trip the SQLite UNIQUE constraint.
+    const { createClient } = await import('@libsql/client');
+    const probe = createClient({ url: `file:${halfFile}` });
+    try {
+      const insertDup = `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+      await probe.execute({
+        sql: insertDup,
+        args: [99, 1, 1, 0, 0, 1, 'unique-c', 0],
+      });
+      let threw = false;
+      try {
+        await probe.execute({
+          sql: insertDup,
+          args: [100, 0, 0, 1, 0, -1, 'unique-c', 0],
+        });
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+    } finally {
+      probe.close();
+    }
+    // Restore env so the next test sees the legacy file from beforeEach.
+    process.env.DATABASE_URL = `file:${legacyFile}`;
+    vi.resetModules();
+    await import('@/lib/db');
+  });
+
+  it('reconcile probe hits on a fresh DB (name+UNIQUE both present) and skips rebuild (P1-1 fresh-skipped)', async () => {
+    // RC-drift §1 P1-1 (inverse side): the extended probe must NOT
+    // over-eagerly rebuild when the bootstrap DDL has already declared
+    // `name TEXT UNIQUE`. Evidence probe skipped rebuild: no orphan
+    // `game_stats_new` table after getDb() runs against a brand-new
+    // file. If the extended probe ever silently dropped the
+    // column-presence check (or returned empty rows for any reason),
+    // this assertion would catch it.
+    const freshFile = path.join(dir, 'fresh-skip.db');
+    process.env.DATABASE_URL = `file:${freshFile}`;
+    vi.resetModules();
+    const { loadStats } = await import('@/lib/db');
+    const stats = await loadStats();
+    expect(stats).toEqual({
+      totalGames: 0,
+      xWins: 0,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 0,
+    });
+    const { createClient } = await import('@libsql/client');
+    const probe = createClient({ url: `file:${freshFile}` });
+    try {
+      const rs = await probe.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='game_stats_new'",
+      );
+      expect(rs.rows).toHaveLength(0);
+      // Cross-check: a fresh DB has a unique index on `name` (because the
+      // bootstrap DDL declares `name TEXT UNIQUE`). Pinning this protects
+      // the test from false-positives where `game_stats_new` happens not
+      // to exist for an unrelated reason (e.g. someone removes the
+      // RENAME step entirely).
+      const idxList = await probe.execute(
+        "SELECT name FROM pragma_index_list('game_stats') WHERE [unique] = 1",
+      );
+      let hasUniqueOnName = false;
+      for (const row of idxList.rows) {
+        const idxName = String(row.name);
+        const info = await probe.execute(
+          "SELECT name FROM pragma_index_info(?) WHERE name = 'name'",
+          [idxName],
+        );
+        if (info.rows.length > 0) {
+          hasUniqueOnName = true;
+          break;
+        }
+      }
+      expect(hasUniqueOnName).toBe(true);
+    } finally {
+      probe.close();
+    }
+    // Restore env so afterEach cleans up the right file.
+    process.env.DATABASE_URL = `file:${legacyFile}`;
+    vi.resetModules();
+    await import('@/lib/db');
   });
 });
