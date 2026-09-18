@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import {
-  accumulateSoloRecord,
   ensureSoloRecord,
   loadSoloRecord,
 } from '@/lib/db';
@@ -12,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Player-name whitelist (mirrored on the client at lib/player-name.ts so
-// POST cannot sneak through a value the GET would reject). Trim, then
+// Solo-name whitelist: trim → 1-24 chars → no control chars. Mirrored on the client at lib/player-name.ts so a PUT cannot sneak through a value the GET would reject). Trim, then
 // 1–24 visible characters, then reject anything below U+0020 or in the
 // DEL/U+007F..U+009F control range. Allowing the rest of Unicode (CJK,
 // accents, emoji) keeps the door open for non-ASCII names without
@@ -61,49 +60,9 @@ export async function GET(request: Request): Promise<Response> {
   }
 }
 
-function isSoloBody(
-  v: unknown,
-): v is { name: string; outcome: 'X' | 'O' | 'draw' } {
-  if (typeof v !== 'object' || v === null) return false;
-  const r = v as Record<string, unknown>;
-  if (typeof r.name !== 'string') return false;
-  if (r.outcome !== 'X' && r.outcome !== 'O' && r.outcome !== 'draw') {
-    return false;
-  }
-  return true;
-}
-
-export async function POST(request: Request): Promise<Response> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'invalid json' }, { status: 400 });
-  }
-  if (!isSoloBody(body)) {
-    return NextResponse.json(
-      { error: 'invalid request shape' },
-      { status: 422 },
-    );
-  }
-  const name = normalizeName(body.name);
-  if (name === null) {
-    return NextResponse.json(
-      { error: 'invalid player name' },
-      { status: 422 },
-    );
-  }
-  try {
-    const next = await accumulateSoloRecord(name, body.outcome);
-    return NextResponse.json({ stats: next });
-  } catch {
-    return NextResponse.json({ error: 'db unavailable' }, { status: 500 });
-  }
-}
-
 /**
  * Body shape for PUT: just { name }. The whitelist is the same
- * normalizeName() used by GET / POST so a name that GETs cleanly can
+ * normalizeName() used by GET / PUT so a name that GETs cleanly can
  * also be PUT to create its row. We accept nothing else in the body
  * — clients must never PUT a full stats row (AGENTS.md 反模式:
  * “客户端禁手动 PUT solo 全行” preserves the server's

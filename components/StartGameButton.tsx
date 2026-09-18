@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { fetchSoloStats, postSoloSync, putSoloName } from '@/lib/solo-net';
+import { postSoloSync, putSoloName } from '@/lib/solo-net';
 import {
   clearSoloStats,
   clearSyncedServerTotal,
@@ -93,13 +93,9 @@ export function StartGameButton({ href, label, mode, variant = 'primary', testid
     clearSoloStats();
     clearSyncedServerTotal();
     persistSyncedServerTotal(r.value.stats.totalGames);
-    // Mirror the server's canonical row into the panel state if the
-    // panel happens to be mounted somewhere on the page (it isn't on
-    // the home page today, but the contract is the same).
-    void fetchSoloStats(name);
-    useGameStore.setState({
-      soloSync: { pending: null, inflight: false, error: null },
-    });
+    // W2: the soloSync zombie state is gone from the store. The
+    // panel state on /solo is mounted only by the user opening the
+    // stats view there; the home page does not render a SoloStatsPanel.
   }
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>): void {

@@ -306,6 +306,87 @@ try {
     );
     await shoot(page, "A3-direct-nav.png");
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // A4 (W2 纯净化): preset playerName in localStorage + mount /solo →
+  // 全程 /api/ 请求计数 = 0，断言 stale testid 不再渲染
+  //   - solo-sync / sync-confirm-dialog / PlayerNameForm 必须不在 /solo
+  //   - 清空 localStorage 后刷新仍零请求（持久化不触发 GET）
+  // ─────────────────────────────────────────────────────────────────
+  await step("A4-named-mount-zero-network-no-stale-testid", async () => {
+    const NAME_A4 = `purelocal-a4-${RUN_SUFFIX}`;
+    // Seed name + a non-empty local row so the panel has something
+    // to render.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
+    await page.evaluate(
+      ({ key, value }) => window.localStorage.setItem(key, value),
+      { key: PLAYER_KEY, value: NAME_A4 },
+    );
+    await page.evaluate(
+      ({ key, value }) => window.localStorage.setItem(key, value),
+      { key: LOCAL_SOLO_KEY, value: JSON.stringify({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }) },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+
+    // Reset request counter, navigate to /solo, mount the stats view.
+    writeCalls.length = 0;
+    await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="view-toggle"]');
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="solo-stats"]');
+    // Allow any hypothetical hydration effect to fire.
+    await page.waitForTimeout(500);
+
+    // /api/* requests must be ZERO on mount even with a preset name.
+    const apiWrites = writeCalls.filter((c) => c.url.includes("/api/"));
+    assert.equal(
+      apiWrites.length,
+      0,
+      `preset name + /solo mount must NOT issue any /api/* request; saw ${apiWrites.length}: ${JSON.stringify(apiWrites)}`,
+    );
+
+    // Stale W1 testid nodes must be absent from the /solo surface.
+    const stale = await page.evaluate(() => ({
+      syncButton: !!document.querySelector('[data-testid="solo-sync"]'),
+      syncDialog: !!document.querySelector('[data-testid="sync-confirm-dialog"]'),
+      mergeNote: !!document.querySelector('[data-testid="solo-stats-merge-note"]'),
+      statsError: !!document.querySelector('[data-testid="solo-stats-error"]'),
+      playerNameForm: !!document.querySelector('[data-testid="player-name-section"]'),
+    }));
+    assert.equal(stale.syncButton, false, "solo-sync button must be absent on /solo (W2 纯净化)");
+    assert.equal(stale.syncDialog, false, "sync-confirm-dialog must be absent on /solo (W2 纯净化)");
+    assert.equal(stale.mergeNote, false, "solo-stats-merge-note must be absent on /solo (W2 纯净化)");
+    assert.equal(stale.statsError, false, "solo-stats-error must be absent on /solo (W2 纯净化)");
+    assert.equal(stale.playerNameForm, false, "PlayerNameForm must NOT render on /solo (W2 纯净化)");
+
+    // Heading should still be the anonymous 「单机战绩」 (no name suffix).
+    const heading = await page.textContent('[data-testid="solo-stats-heading"]');
+    assert.equal(
+      heading?.trim(),
+      "单机战绩",
+      `heading must be the anonymous 「单机战绩」 (no name suffix on /solo); got ${heading}`,
+    );
+
+    // After clearing localStorage and reloading, the panel must still
+    // have issued zero network requests.
+    await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
+    writeCalls.length = 0;
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click('[data-testid="view-toggle"]');
+    await page.waitForSelector('[data-testid="solo-stats"]');
+    await page.waitForTimeout(500);
+    const apiAfterClear = writeCalls.filter((c) => c.url.includes("/api/"));
+    assert.equal(
+      apiAfterClear.length,
+      0,
+      `after clearing localStorage, /solo reload must NOT issue /api/*; saw ${apiAfterClear.length}: ${JSON.stringify(apiAfterClear)}`,
+    );
+
+    await shoot(page, "A4-named-zero-network.png");
+  });
 } catch (e) {
   console.error("\nQA FAILED:", e.message);
   try {

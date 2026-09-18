@@ -60,33 +60,6 @@ export async function fetchSoloStats(
 }
 
 /**
- * POST /api/solo-stats with { name, outcome } → { stats: GameStats }.
- * The handler is server-authoritative, so the value returned is the
- * canonical row after the accumulation — callers adopt it as the new
- * panel state to avoid the client-side double-count bug solo-stats.ts
- * doc comments name.
- */
-export async function postSoloOutcome(
-  name: string,
-  outcome: 'X' | 'O' | 'draw',
-): Promise<SoloFetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout('/api/solo-stats', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, outcome }),
-    });
-    if (!r.ok) {
-      return { ok: false, reason: 'http-error', status: r.status };
-    }
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: reasonFromError(err) };
-  }
-}
-
-/**
  * PUT /api/solo-stats with { name } → { stats: GameStats }. The
  * handler is idempotent: a fresh name returns the just-inserted empty
  * row, an existing name returns the existing row untouched. Mirrors

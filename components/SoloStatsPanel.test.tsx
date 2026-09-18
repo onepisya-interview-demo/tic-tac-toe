@@ -54,17 +54,31 @@ describe('components/SoloStatsPanel', () => {
     expect(panelValues()).toEqual(['4', '3', '1', '0', 'X 连胜 2']);
   });
 
-  it('re-reads localStorage when the phase settles on won/drawn (store persists before render)', () => {
+  it('mount-only hydration: panel does NOT subscribe to phase changes (single hydration point)', () => {
+    // W2 纯净化 (ulw-name-login-one-truth.md §1 G1): the panel has a
+    // single mount-time hydration point (no phase subscription).
+    // The previous W1 design re-read localStorage in a phase-settle
+    // effect, which the W2 design intentionally removes — the
+    // production app relies on the ViewTransition remounting the
+    // panel when the user toggles board↔stats after a solo win.
+    // A live subscription would also violate AGENTS.md's
+    // 「不要新增第二个水合触发点」 rule.
     render(<SoloStatsPanel />);
     expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
 
-    // Solo settle: the store's solo branch writes localStorage inside
-    // makeMove before the phase change renders; simulate that settled
-    // state and assert the panel picks up the new row.
+    // Settle a solo game underneath the mounted panel: phase flips
+    // to won, store writes localStorage, but the panel MUST stay at
+    // zeros because it does not subscribe to phase.
     seedSoloStats({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 });
     act(() => {
       useGameStore.setState({ phase: 'won', winner: 'X' });
     });
+    expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
+
+    // Once the user remounts the panel (simulated here by unmount +
+    // re-render), the fresh mount hydrates the new row.
+    cleanup();
+    render(<SoloStatsPanel />);
     expect(panelValues()).toEqual(['1', '1', '0', '0', 'X 连胜 1']);
   });
 
@@ -96,41 +110,3 @@ describe('components/SoloStatsPanel', () => {
   });
 });
 
-describe('B-T3/B-T4 sync confirm flow', () => {
-  it('playerName + empty localStorage: 同步 钮退化为纯 GET（无 dialog，无 POST）', async () => {
-    const user = userEvent.setup();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    useGameStore.setState({ playerName: 'syncflow-A' });
-    render(<SoloStatsPanel />);
-    await user.click(screen.getByTestId('solo-sync'));
-    // Dialog stays closed (no `open` attribute): sync button
-    // degraded to pure GET per wave-2 §A5 contract.
-    expect(screen.getByTestId('sync-confirm-dialog').hasAttribute('open')).toBe(false);
-    // No POST /sync fired (PUT is the only allowed POST-shaped write).
-    const writes = fetchSpy.mock.calls.filter((c) => {
-      const init = (c[1] ?? {}) as RequestInit;
-      const m = (init.method ?? 'GET').toUpperCase();
-      return m !== 'GET' && m !== 'HEAD';
-    });
-    expect(writes.length).toBe(0);
-    fetchSpy.mockRestore();
-  });
-
-  it('playerName + localStorage 有局 → 同步 钮打开 dialog；保留本地 零网络写', async () => {
-    const user = userEvent.setup();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    useGameStore.setState({ playerName: 'syncflow-B' });
-    seedSoloStats({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 });
-    render(<SoloStatsPanel />);
-    await user.click(screen.getByTestId('solo-sync'));
-    // Dialog opened with the pending count surfaced.
-    const dialog = screen.getByTestId('sync-confirm-dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(screen.getByTestId('sync-confirm-desc')).toHaveTextContent('将上传本机 3 局');
-    // Click "保留本地" → onReject, no network writes.
-    fetchSpy.mockClear();
-    await user.click(screen.getByTestId('sync-confirm-reject'));
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
-  });
-});

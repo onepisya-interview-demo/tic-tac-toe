@@ -227,8 +227,7 @@ export async function resetStats(): Promise<GameStats> {
 
 /**
  * Load a per-player solo record by name. Returns null when the row is
- * absent so callers (the /api/solo-stats GET handler, accumulateSoloRecord
- * on its read step) can branch on "fresh name" without sentinel values.
+ * absent so callers (the /api/solo-stats GET handler) can branch on "fresh name" without sentinel values.
  */
 export async function loadSoloRecord(name: string): Promise<GameStats | null> {
   const db = await getDb();
@@ -279,23 +278,6 @@ export async function upsertSoloRecord(
     .run();
 }
 
-/**
- * Server-authoritative solo accumulation for one finished game: read the
- * current row (or emptyStats when absent), apply the outcome via the pure
- * `recordOutcome` rule (lib/game.ts), and write the new full row back.
- * Returns the new stats. Mirrors `recordAndSave` (single-row server
- * ledger) so the two ledgers share the load → record → save invariant.
- */
-export async function accumulateSoloRecord(
-  name: string,
-  outcome: 'X' | 'O' | 'draw',
-): Promise<GameStats> {
-  const current = (await loadSoloRecord(name)) ?? emptyStats();
-  const next = recordOutcome(current, outcome);
-  await upsertSoloRecord(name, next);
-  return next;
-}
-
 /** Close the cached client (used by tests / shutdown). */
 /**
  * Pure per-field addition for the cross-device merge path
@@ -329,7 +311,7 @@ export function accumulateMergeStats(
  * B-T2). Reads the per-name row (or emptyStats when absent), folds
  * the client-supplied totals via the pure accumulateMergeStats,
  * upserts the result, and returns the new row. Mirrors
- * accumulateSoloRecord’s load → mutate → upsert shape so the
+ * load → mutate → upsert so the
  * caller (POST /api/solo-stats/sync) can adopt the server’s
  * authoritative answer without an extra GET.
  */
@@ -347,10 +329,8 @@ export async function mergeSoloRecord(
  * Idempotent empty-row bootstrap for "save a name on device A, pick it up
  * on device B" vertical slice (ulw-solo-sync-rebuild.md B-T1). Reads the
  * row; if absent, upserts emptyStats() under the trimmed name and returns
- * the resulting row. Mirrors the read-before-write shape of
- * accumulateSoloRecord so a future race window (two PUTs in flight) still
- * converges on one canonical row, never silently overwrites existing
- * stats. Single Node process serializes callers within an instance;
+ * the resulting row. Read-before-write so a future race window (two PUTs in flight) still
+ * converges on one canonical row, never silently overwrites existing stats. Single Node process serializes callers within an instance;
  * cross-instance last-write-wins is documented in the multi-user-stats
  * future-work note and out of scope here.
  */
@@ -373,7 +353,7 @@ export async function ensureSoloRecord(name: string): Promise<GameStats> {
  * UNIQUE constraint on game_stats.name. The catch block re-reads the row
  * so the loser surfaces the winner’s stats instead of throwing — callers
  * (the route handler) see the same response shape regardless of timing.
- * Mirrors the load → mutate → upsert shape of accumulateSoloRecord so
+ * Mirrors the load → mutate → upsert shape so
  * loadStats / saveStats / recordAndSave behavior is untouched
  * (constraint: W1 keeps those three untouched).
  *

@@ -63,20 +63,6 @@ export interface GameState {
    * SoloStatsPanel 「同步」 button.
    */
   playerName: string | null;
-  /**
-   * Solo sync state — W1 pure-local: solo never auto-POSTs, so
-   * pending/inflight/error are permanently null. The shape is kept
-   * for compatibility with setPlayerName's reset (which still writes
-   * { pending: null, inflight: false, error: null }) and any panel
-   * that may still subscribe to it. The cross-device persistence
-   * story lives entirely in SoloStatsPanel + lib/solo-stats +
-   * lib/solo-net — see ulw-solo-pure-local-closeout.md §1 悬案一.
-   */
-  soloSync: {
-    pending: 'X' | 'O' | 'draw' | null;
-    inflight: boolean;
-    error: 'aborted' | 'network-error' | 'http-error' | null;
-  };
 }
 
 export interface GameActions {
@@ -140,7 +126,6 @@ const initial: GameState = {
   winLine: null,
   lastWriteAt: null,
   playerName: null,
-  soloSync: { pending: null, inflight: false, error: null },
 };
 
 // Internal stats cache (NOT in GameState type). RSC pages hydrate this via
@@ -228,21 +213,6 @@ async function apiDeleteStats(): Promise<StoreFetchResult<GameStats>> {
     return { ok: false, reason: err instanceof DOMException && err.name === 'TimeoutError' ? 'aborted' : 'network-error' };
   }
 }
-
-/**
- * Server-authoritative solo outcome accumulator (no longer called from
- * the store — kept as a documentation breadcrumb for the W1 pure-local
- * change). The /api/solo-stats route still exists (D2 preserved in
- * .omo/plans/ulw-solo-pure-local-closeout.md §3) and is reachable
- * through lib/solo-net.ts:postSoloOutcome, which the SoloStatsPanel
- * 「合并并清空」 path uses during the manual sync.
- *
- * The store used to call this from makeMove's solo branch and from
- * retrySoloSync (both removed in W1). The sentinel
- * persistSyncedServerTotal is now written by the panel's
- * SoloStatsPanel.confirmSync on a successful POST /sync, not from
- * inside the store.
- */
 
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
@@ -423,12 +393,6 @@ export const useGameStore = create<GameStore>((set) => ({
     } else {
       setPlayerNameLocal(name);
     }
-    set({
-      playerName: name,
-      // Name change clears any stale pending sync — the previous name
-      // belongs to a different row on the server, retrying it under a
-      // new name would 422. The new name's pending state starts clean.
-      soloSync: { pending: null, inflight: false, error: null },
-    });
+    set({ playerName: name });
   },
 }));

@@ -66,7 +66,6 @@ function resetStore(): void {
     winLine: null,
     lastWriteAt: null,
     playerName: null,
-    soloSync: { pending: null, inflight: false, error: null },
   });
   useGameStore.getState().__resetInternalForTests();
 }
@@ -803,7 +802,9 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ outcome: 'X' });
     expect(window.localStorage.getItem(SOLO_STATS_KEY)).toBeNull();
     restore();
-  });  it('loadSoloStats rejects extra fields (strict whitelist, including __proto__/constructor)', () => {
+  });
+
+  it('loadSoloStats rejects extra fields (strict whitelist, including __proto__/constructor)', () => {
     // Extra string field: current isGameStats accepts this — must reject.
     window.localStorage.setItem(
       SOLO_STATS_KEY,
@@ -960,99 +961,38 @@ describe('lib/store solo mode (local accumulation + localStorage)', () => {
   });
 });
 
-// ── W1 wave-3 superseded: wave-2 auto-POST + retry ──
-//
-// Wave 2 added playerName + auto-POST + retrySoloSync; W1 wave 3
-// removed auto-POST + retrySoloSync (主公谕: 「单机版本，不需要发送任何
-// 请求，全部存在本地」). The pure-local block below is the new
-// contract. The wave-2 actions still hold at the type level
-// (setPlayerName) — pure-local tests cover the regression surface.
-
-describe('lib/store wave 2 contract remainder (setPlayerName only)', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    resetStore();
-  });
-
-  it('setPlayerName stores a valid name and clears any pending solo sync', () => {
-    useGameStore.setState({
-      soloSync: { pending: 'X', inflight: false, error: 'network-error' },
-    });
-    useGameStore.getState().setPlayerName('alice');
-    expect(useGameStore.getState().playerName).toBe('alice');
-    expect(useGameStore.getState().soloSync).toEqual({
-      pending: null,
-      inflight: false,
-      error: null,
-    });
-  });
-
-  it('setPlayerName(null) clears the stored name', () => {
-    useGameStore.getState().setPlayerName('alice');
-    expect(useGameStore.getState().playerName).toBe('alice');
-    useGameStore.getState().setPlayerName(null);
-    expect(useGameStore.getState().playerName).toBeNull();
-  });
-
-  it('setPlayerName clears any in-flight soloSync state (stale name must not retry)', () => {
-    useGameStore.setState({
-      soloSync: { pending: 'X', inflight: false, error: 'network-error' },
-    });
-    useGameStore.getState().setPlayerName('newplayer');
-    expect(useGameStore.getState().soloSync).toEqual({
-      pending: null,
-      inflight: false,
-      error: null,
-    });
-  });
-});
-describe('lib/store pure-local solo (no auto-POST, no retry action)', () => {
+describe('lib/store pure-local (W2: no soloSync field, no retry action)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
     resetStore();
   });
 
-  it('named solo win: ZERO fetches; soloSync stays clean (pending/inflight/error all null)', async () => {
-    // Mock returns a valid 200 body so any auto-POST (which we expect
-    // to NOT happen) wouldn't crash on undefined body. Failure mode
-    // here is `calls > 0`, not a TypeError.
+  it('store state has no soloSync field (W2 contract)', () => {
+    const state = useGameStore.getState() as unknown as Record<string, unknown>;
+    expect(state.soloSync).toBeUndefined();
+  });
+
+  it('named solo win: ZERO fetches; localStorage accumulates; no lastWriteAt stamp', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
     ]);
     useGameStore.getState().setPlayerName('alice');
     useGameStore.getState().startGame('solo');
-    // Drive a top-row win regardless of which player goes first.
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);
     await useGameStore.getState().makeMove(1);
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
     expect(useGameStore.getState().phase).toBe('won');
-    const winner = useGameStore.getState().winner;
-    expect(winner, 'top-row drive must produce a winner').not.toBeNull();
     expect(calls, 'no fetch should be made for named solo win').toHaveLength(0);
-    const sync = useGameStore.getState().soloSync;
-    expect(sync.pending, 'pure-local must not set pending').toBeNull();
-    expect(sync.inflight, 'pure-local must not set inflight').toBe(false);
-    expect(sync.error, 'pure-local must not set error').toBeNull();
     expect(useGameStore.getState().lastWriteAt, 'pure-local must not stamp lastWriteAt').toBeNull();
-    // Local accumulation + persistence must still work, using whichever
-    // player won (random first-player).
     const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
     expect(stats.totalGames).toBe(1);
-    if (winner === 'X') {
-      expect(stats.xWins).toBe(1);
-      expect(stats.oWins).toBe(0);
-    } else {
-      expect(stats.oWins).toBe(1);
-      expect(stats.xWins).toBe(0);
-    }
-    expect(stats.draws).toBe(0);
     restore();
   });
 
-  it('named solo draw: ZERO fetches; soloSync stays clean', async () => {
+  it('named solo draw: ZERO fetches; localStorage accumulates draws', async () => {
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0 } } },
     ]);
@@ -1064,10 +1004,6 @@ describe('lib/store pure-local solo (no auto-POST, no retry action)', () => {
     }
     expect(useGameStore.getState().phase).toBe('drawn');
     expect(calls, 'no fetch should be made for named solo draw').toHaveLength(0);
-    const sync = useGameStore.getState().soloSync;
-    expect(sync.pending).toBeNull();
-    expect(sync.inflight).toBe(false);
-    expect(sync.error).toBeNull();
     expect(useGameStore.getState().lastWriteAt).toBeNull();
     const stats = JSON.parse(window.localStorage.getItem(SOLO_STATS_KEY)!);
     expect(stats.draws).toBe(1);
@@ -1075,43 +1011,12 @@ describe('lib/store pure-local solo (no auto-POST, no retry action)', () => {
     restore();
   });
 
-  it('retrySoloSync action is gone: the store no longer exposes it', () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
-    useGameStore.getState().setPlayerName('carol');
-    // retrySoloSync is removed in pure-local (W1). The TypeScript
-    // type no longer carries it; at runtime the property is undefined.
-    // We assert that directly (no `as any` needed — the test is the
-    // type-level witness that the action has been deleted).
-    const state = useGameStore.getState() as unknown as Record<string, unknown>;
-    expect(typeof state['retrySoloSync']).toBe('undefined');
-    expect(fetchMock).not.toHaveBeenCalled();
-    fetchMock.mockRestore();
-  });
-
-  it('setPlayerName still produces a clean soloSync (compat with wave 2 reset)', () => {
-    useGameStore.setState({
-      soloSync: { pending: 'X', inflight: true, error: 'http-error' },
-    });
-    useGameStore.getState().setPlayerName('dave');
-    expect(useGameStore.getState().playerName).toBe('dave');
-    expect(useGameStore.getState().soloSync).toEqual({
-      pending: null,
-      inflight: false,
-      error: null,
-    });
-  });
-
   it('two named solo wins: localStorage accumulates to 2; ZERO fetches total', async () => {
-    // The point is: across two named games the localStorage row
-    // accumulates both wins locally, with zero network writes.
-    // Per-player win counts depend on the random first-player draw,
-    // so we just check totalGames=2 + (xWins+oWins)=2.
     const { calls, restore } = mockFetch([
       { status: 200, body: { stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } } },
       { status: 200, body: { stats: { totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 } } },
     ]);
     useGameStore.getState().setPlayerName('erin');
-    // session 1
     useGameStore.getState().startGame('solo');
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);
@@ -1119,7 +1024,6 @@ describe('lib/store pure-local solo (no auto-POST, no retry action)', () => {
     await useGameStore.getState().makeMove(4);
     await useGameStore.getState().makeMove(2);
     expect(useGameStore.getState().phase).toBe('won');
-    // session 2 (reload semantics: startGame reseeds from localStorage)
     useGameStore.getState().startGame('solo');
     await useGameStore.getState().makeMove(0);
     await useGameStore.getState().makeMove(3);

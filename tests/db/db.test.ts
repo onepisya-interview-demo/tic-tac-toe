@@ -600,89 +600,6 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
 
-  it("accumulateSoloRecord('X') on a fresh name seeds from emptyStats and returns xWins:1", async () => {
-    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
-    try {
-      const next = await accumulateSoloRecord('dave', 'X');
-      expect(next).toEqual({
-        totalGames: 1,
-        xWins: 1,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 1,
-      });
-      const read = await loadSoloRecord('dave');
-      expect(read).toEqual(next);
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it('accumulateSoloRecord 累加两次相同 outcome 写入同一行（PK=name）', async () => {
-    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
-    try {
-      await accumulateSoloRecord('erin', 'X');
-      const next = await accumulateSoloRecord('erin', 'X');
-      expect(next).toEqual({
-        totalGames: 2,
-        xWins: 2,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 2,
-      });
-      const read = await loadSoloRecord('erin');
-      expect(read).toEqual(next);
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it("accumulateSoloRecord('draw') resets the streak to 0 on a non-empty row", async () => {
-    const { accumulateSoloRecord, upsertSoloRecord, closeDb } = await import('@/lib/db');
-    try {
-      await upsertSoloRecord('frank', {
-        totalGames: 3,
-        xWins: 3,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 3,
-      });
-      const next = await accumulateSoloRecord('frank', 'draw');
-      expect(next).toEqual({
-        totalGames: 4,
-        xWins: 3,
-        oWins: 0,
-        draws: 1,
-        currentStreak: 0,
-      });
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it("accumulateSoloRecord('O') flips streak polarity +1 to -1", async () => {
-    const { accumulateSoloRecord, upsertSoloRecord, closeDb } = await import('@/lib/db');
-    try {
-      await upsertSoloRecord('gina', {
-        totalGames: 2,
-        xWins: 2,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 2,
-      });
-      const next = await accumulateSoloRecord('gina', 'O');
-      expect(next).toEqual({
-        totalGames: 3,
-        xWins: 2,
-        oWins: 1,
-        draws: 0,
-        currentStreak: -1,
-      });
-    } finally {
-      await closeDb();
-    }
-  });
-
   it('accumulateMergeStats pure function: per-field addition + signed streak sum', async () => {
     // Pure function: no DB needed (lib/db.ts:accumulateMergeStats is
     // a synchronous helper exported specifically for testability).
@@ -725,7 +642,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
   });
 
   it('mergeSoloRecord load → accumulate per-field → upsert (真实 sqlite)', async () => {
-    // End-to-end through the same db used by accumulateSoloRecord.
+    // End-to-end through the same db used by mergeSoloRecord.
     const { mergeSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
     process.env.DATABASE_URL = `file:${os.tmpdir()}/merge-${Math.random()}.db`;
     try {
@@ -759,30 +676,6 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       });
       const reloaded = await loadSoloRecord('merger');
       expect(reloaded).toEqual(next);
-    } finally {
-      await closeDb();
-    }
-  });
-
-  it('accumulateSoloRecord 两个名字写入两行（per-name ledger is the whole point）', async () => {
-    const { accumulateSoloRecord, loadSoloRecord, closeDb } = await import('@/lib/db');
-    try {
-      await accumulateSoloRecord('player1', 'X');
-      await accumulateSoloRecord('player2', 'O');
-      expect(await loadSoloRecord('player1')).toEqual({
-        totalGames: 1,
-        xWins: 1,
-        oWins: 0,
-        draws: 0,
-        currentStreak: 1,
-      });
-      expect(await loadSoloRecord('player2')).toEqual({
-        totalGames: 1,
-        xWins: 0,
-        oWins: 1,
-        draws: 0,
-        currentStreak: -1,
-      });
     } finally {
       await closeDb();
     }

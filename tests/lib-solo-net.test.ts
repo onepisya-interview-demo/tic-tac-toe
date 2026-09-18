@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchSoloStats, postSoloOutcome } from '@/lib/solo-net';
+import { fetchSoloStats } from '@/lib/solo-net';
 
 // lib/solo-net.ts is the browser-side HTTP wrapper for /api/solo-stats.
 // These tests pin the { ok, reason } result contract — successful 2xx,
@@ -101,89 +101,3 @@ describe('lib/solo-net / fetchSoloStats', () => {
   });
 });
 
-describe('lib/solo-net / postSoloOutcome', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('POSTs { name, outcome } and returns the server-authoritative { stats }', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ stats: { totalGames: 3, xWins: 2, oWins: 0, draws: 1, currentStreak: 1 } }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
-    const r = await postSoloOutcome('alice', 'X');
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.value.stats).toEqual({
-        totalGames: 3,
-        xWins: 2,
-        oWins: 0,
-        draws: 1,
-        currentStreak: 1,
-      });
-    }
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/solo-stats',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'alice', outcome: 'X' }),
-      }),
-    );
-  });
-
-  it('returns ok:false http-error on a 422', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: 'invalid player name' }), { status: 422 }),
-    );
-    const r = await postSoloOutcome('', 'X');
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.reason).toBe('http-error');
-      expect(r.status).toBe(422);
-    }
-  });
-
-  it('returns ok:false aborted on a TimeoutError', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      throw new DOMException('aborted', 'TimeoutError');
-    });
-    const r = await postSoloOutcome('bob', 'draw');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('aborted');
-  });
-
-  it('returns ok:false network-error on a generic thrown error', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      throw new TypeError('NetworkError when attempting to fetch resource');
-    });
-    const r = await postSoloOutcome('bob', 'draw');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('network-error');
-  });
-
-  it('sends all three outcome values verbatim (X, O, draw)', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ stats: { totalGames: 1, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 } }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
-    for (const outcome of ['X', 'O', 'draw'] as const) {
-      await postSoloOutcome('alice', outcome);
-    }
-    expect(fetchSpy).toHaveBeenCalledTimes(3);
-    for (let i = 0; i < 3; i++) {
-      const call = fetchSpy.mock.calls[i];
-      const init = call?.[1] as RequestInit | undefined;
-      const body = JSON.parse(init?.body as string);
-      expect(body.name).toBe('alice');
-      expect(['X', 'O', 'draw']).toContain(body.outcome);
-    }
-  });
-});
