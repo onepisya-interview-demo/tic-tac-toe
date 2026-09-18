@@ -421,6 +421,336 @@ await step("step 08 fresh context B 玩 solo 从 0 独立累计 (A7 continuation
   }
 });
 
+
+await step("step 09 (W2) logged-in user merge → online card updates ≤2s via event", async () => {
+  const browser = await launchBrowser();
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await resetServer(page);
+    const name = `w2-${RUN_SUFFIX}-loggedin`;
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.fill('[data-testid="player-name-input"]', name);
+    await page.click('[data-testid="player-name-save"]');
+    await page.waitForSelector('[data-testid="online-stats-grid"]', {
+      timeout: 4000,
+    });
+    const initialOnline = await page.getAttribute(
+      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
+      "data-value",
+    );
+    assert.equal(initialOnline, "0", `online card initial = 0 (got ${initialOnline})`);
+    // Play 1 solo game locally.
+    await reloadSoloUntilXFirst(page);
+    await driveTopRowWin(page);
+    await page.waitForFunction(
+      () => {
+        try {
+          const v = window.localStorage.getItem("ttt.solo.stats.v1");
+          return v ? JSON.parse(v).totalGames >= 1 : false;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5000 },
+    );
+    // Go home → dialog opens with pending=1.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 4000,
+    });
+    await shoot(page, "home-dialog-step09-pre-confirm.png");
+    // Click 合并并清空 — already-registered name, dialog pre-fills it.
+    await page.click('[data-testid="sync-confirm-confirm"]');
+    // ≤2s for online-stats-grid to update from 0 to 1 (server merged).
+    let updated = null;
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      try {
+        updated = await page
+          .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
+          .first()
+          .getAttribute("data-value");
+        if (updated === "1") break;
+      } catch {
+        // selector transient — keep polling
+      }
+      await page.waitForTimeout(100);
+    }
+    await shoot(page, "home-online-card-step09-after-merge.png");
+    assert.equal(
+      updated,
+      "1",
+      `online card data-value updated to 1 within 2s after merge (got ${updated})`,
+    );
+    // A2 red-line: merge cleared local; no localStorage pollution.
+    const localAfter = await captureLocalStorage(page);
+    assert.equal(
+      localAfter[LOCAL_SOLO_KEY],
+      undefined,
+      `A2: ${LOCAL_SOLO_KEY} cleared after merge (got ${localAfter[LOCAL_SOLO_KEY]})`,
+    );
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+await step("step 10 (W2) window focus triggers online card refetch", async () => {
+  const browser = await launchBrowser();
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await resetServer(page);
+    const name = `w2-${RUN_SUFFIX}-focus`;
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.fill('[data-testid="player-name-input"]', name);
+    await page.click('[data-testid="player-name-save"]');
+    await page.waitForSelector('[data-testid="online-stats-grid"]', {
+      timeout: 4000,
+    });
+    const beforeFocus = await page.getAttribute(
+      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
+      "data-value",
+    );
+    assert.equal(beforeFocus, "0", `online card before focus = 0 (got ${beforeFocus})`);
+    // Simulate an external mutation: another device syncs a 5-game row
+    // under the same name. Use the same context's APIRequestContext so
+    // we don't need a second browser.
+    const sync = await ctx.request.post(`${BASE}/api/solo-stats/sync`, {
+      data: {
+        name,
+        stats: { totalGames: 5, xWins: 5, oWins: 0, draws: 0, currentStreak: 5 },
+      },
+    });
+    assert.equal(sync.status(), 200, `external sync 200 (got ${sync.status()})`);
+    // Card is still 0 (no signal). Dispatch focus on the page window.
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    // ≤2s for card to update to 5.
+    let afterFocus = null;
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      try {
+        afterFocus = await page
+          .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
+          .first()
+          .getAttribute("data-value");
+        if (afterFocus === "5") break;
+      } catch {
+        // keep polling
+      }
+      await page.waitForTimeout(100);
+    }
+    await shoot(page, "home-online-card-step10-after-focus.png");
+    assert.equal(
+      afterFocus,
+      "5",
+      `online card data-value updated to 5 within 2s after focus (got ${afterFocus})`,
+    );
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+await step("step 11 (W2) reset button: 文案 + caption + 公共清零 + online/solo 不变", async () => {
+  const browser = await launchBrowser();
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await resetServer(page);
+    const name = `w2-${RUN_SUFFIX}-reset`;
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.fill('[data-testid="player-name-input"]', name);
+    await page.click('[data-testid="player-name-save"]');
+    await page.waitForSelector('[data-testid="online-stats-grid"]', {
+      timeout: 4000,
+    });
+    // External mutation: server solo row gets totalGames=7.
+    await ctx.request.post(`${BASE}/api/solo-stats/sync`, {
+      data: {
+        name,
+        stats: { totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: 1 },
+      },
+    });
+    // Force a focus refetch so the card reflects the 7 before reset.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    let onlineVal = null;
+    const d1 = Date.now() + 3000;
+    while (Date.now() < d1) {
+      onlineVal = await page
+        .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
+        .first()
+        .getAttribute("data-value");
+      if (onlineVal === "7") break;
+      await page.waitForTimeout(100);
+    }
+    assert.equal(onlineVal, "7", `online card shows 7 before reset (got ${onlineVal})`);
+    // Put localStorage solo stats to 3 games + write the declined
+    // sentinel BEFORE reload so HomeDialogMount does not auto-open
+    // the sync-confirm dialog (pending=3 > declined=0 would open it
+    // and intercept the reset-button click that this step verifies).
+    // The sentinel matches what the user would have written if they
+    // picked "保留本地" on a previous home-return — it is the
+    // production way to suppress the dialog without losing data.
+    await page.evaluate(
+      ([soloKey, sentinelKey]) => {
+        window.localStorage.setItem(
+          soloKey,
+          JSON.stringify({
+            totalGames: 3,
+            xWins: 2,
+            oWins: 1,
+            draws: 0,
+            currentStreak: 1,
+          }),
+        );
+        window.sessionStorage.setItem(sentinelKey, "3");
+      },
+      ["ttt.solo.stats.v1", "ttt.solo.sync-declined.v1"],
+    );
+    // Seed 公共 row (id=1) with non-zero stats.
+    const put = await page.request.put(`${BASE}/api/stats`, {
+      data: { totalGames: 4, xWins: 2, oWins: 1, draws: 1, currentStreak: 1 },
+    });
+    assert.equal(put.status(), 200, `seed public 200 (got ${put.status()})`);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="online-stats-grid"]', { timeout: 4000 });
+    // Dialog should be suppressed (declined sentinel == pending).
+    assert.equal(
+      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
+      0,
+      "sync dialog suppressed by declined sentinel before reload",
+    );
+    // Public row totalGames before reset = 4.
+    const pubBefore = await page
+      .locator('[data-testid="stat-value"]')
+      .first()
+      .getAttribute("data-value");
+    assert.equal(pubBefore, "4", `public row before reset = 4 (got ${pubBefore})`);
+    // W2 caption + button text assertions (these FAIL pre-fix).
+    const resetBtn = page.locator('[data-testid="reset-stats"]');
+    const btnText = (await resetBtn.textContent()) ?? "";
+    assert.ok(
+      btnText.includes("重置对战战绩"),
+      `reset button text contains '重置对战战绩' (got ${JSON.stringify(btnText)})`,
+    );
+    const btnAria = await resetBtn.getAttribute("aria-label");
+    assert.equal(
+      btnAria,
+      "重置对战战绩",
+      `reset button aria-label = '重置对战战绩' (got ${JSON.stringify(btnAria)})`,
+    );
+    const captionCount = await page
+      .locator('[data-testid="reset-stats-caption"]')
+      .count();
+    assert.ok(
+      captionCount > 0,
+      `reset button caption element present (got ${captionCount})`,
+    );
+    const captionText =
+      (await page
+        .locator('[data-testid="reset-stats-caption"]')
+        .first()
+        .textContent()) ?? "";
+    assert.ok(
+      captionText.includes("仅清零双人公共战绩"),
+      `caption text contains scope note (got ${JSON.stringify(captionText)})`,
+    );
+    // Capture localStorage solo before reset.
+    const soloBefore = await captureLocalStorage(page);
+    assert.ok(
+      soloBefore[LOCAL_SOLO_KEY],
+      `localStorage ${LOCAL_SOLO_KEY} present before reset`,
+    );
+    // Capture network writes around the reset click so a silent failure
+    // (e.g. request blocked by an open modal) shows up in the log.
+    const writesAroundReset = [];
+    const onReq = (req) => {
+      if (isWriteToApi(req.method(), req.url())) {
+        writesAroundReset.push({ method: req.method(), url: req.url() });
+      }
+    };
+    page.on("request", onReq);
+    // Click reset. The handler awaits DELETE /api/stats then
+    // router.refresh(); wait for the page to reload via
+    // waitForResponse so we know the RSC re-render actually fired
+    // before reading values.
+    const [resp] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes("/api/stats") && r.request().method() === "DELETE",
+        { timeout: 6000 },
+      ),
+      resetBtn.click(),
+    ]);
+    assert.equal(
+      resp.status(),
+      200,
+      `DELETE /api/stats 200 (got ${resp.status()})`,
+    );
+    page.off("request", onReq);
+    // Wait for the RSC refresh (GET / returns the cleared row).
+    await page.waitForResponse(
+      (r) => r.url().endsWith("/") && r.request().resourceType() === "document",
+      { timeout: 6000 },
+    ).catch(() => { /* document may not be re-fetched if Next reuses the shell */ });
+    await page.waitForLoadState("networkidle");
+    // Poll up to 3s for the public row's first stat-value to become 0.
+    let pubValues = null;
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      pubValues = await page.$$eval(
+        '[data-testid="stat-value"]',
+        (els) =>
+          els.slice(0, 5).map((e) => e.getAttribute("data-value") ?? ""),
+      );
+      if (
+        pubValues[0] === "0" &&
+        pubValues[1] === "0" &&
+        pubValues[2] === "0" &&
+        pubValues[3] === "0" &&
+        pubValues[4] === "—"
+      ) break;
+      await page.waitForTimeout(100);
+    }
+    assert.deepEqual(
+      pubValues,
+      ["0", "0", "0", "0", "—"],
+      `public row cleared to zeros (got ${JSON.stringify(pubValues)})`,
+    );
+    assert.ok(
+      writesAroundReset.some(
+        (w) => w.method === "DELETE" && w.url.includes("/api/stats"),
+      ),
+      `DELETE /api/stats request was emitted (got ${JSON.stringify(writesAroundReset)})`,
+    );
+    // Online card unchanged (still 7).
+    const onlineAfter = await page
+      .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
+      .first()
+      .getAttribute("data-value");
+    assert.equal(
+      onlineAfter,
+      "7",
+      `online card unchanged after reset (got ${onlineAfter})`,
+    );
+    // localStorage solo unchanged (still 3 games).
+    const soloAfter = await captureLocalStorage(page);
+    const parsed = JSON.parse(soloAfter[LOCAL_SOLO_KEY]);
+    assert.equal(
+      parsed.totalGames,
+      3,
+      `localStorage solo unchanged after reset (got ${parsed.totalGames})`,
+    );
+    await shoot(page, "home-after-reset-scope.png");
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
 await writeQaLog(EVIDENCE, {
   test: "home-return-qa",
   status: "PASS",

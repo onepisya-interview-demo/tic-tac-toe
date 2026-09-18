@@ -78,7 +78,7 @@ describe('components/ResetStatsButton scope=server (default, home contract uncha
 
     render(<ResetStatsButton onCleared={onCleared} />);
     const btn = screen.getByTestId('reset-stats');
-    expect(btn).toHaveTextContent('重置战绩');
+    expect(btn).toHaveTextContent('重置对战战绩');
 
     await user.click(btn);
 
@@ -87,5 +87,25 @@ describe('components/ResetStatsButton scope=server (default, home contract uncha
     expect(refreshMock).toHaveBeenCalledTimes(1);
     expect(onCleared).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
+  });
+});
+
+
+describe('components/ResetStatsButton caption prop (W2 P2/D1)', () => {
+  it('renders muted caption span below the button when caption is provided', () => {
+    render(
+      <ResetStatsButton caption="仅清零双人公共战绩，不含线上/单机战绩" />,
+    );
+    const caption = screen.getByTestId('reset-stats-caption');
+    expect(caption).toHaveTextContent('仅清零双人公共战绩');
+    expect(caption.className).toMatch(/text-text-muted/);
+    expect(caption.className).toMatch(/text-small/);
+  });
+
+  it('omits the caption span when caption prop is not provided', () => {
+    const { container } = render(<ResetStatsButton />);
+    expect(
+      container.querySelector('[data-testid="reset-stats-caption"]'),
+    ).toBeNull();
   });
 });

@@ -121,6 +121,14 @@ export function HomeDialogMount() {
     if (name && !useGameStore.getState().playerName) {
       setStoreName(name);
     }
+    // W2 P1 fix: signal the OnlineStatsCard to refetch so the merged
+    // row appears ≤2s after the dialog closes. Dispatch is sync; the
+    // listener refetches with in-flight guard. Only the success path
+    // (onConfirm after runMergeSequence resolves) reaches here — the
+    // reject path never invokes handleConfirm. Safe by construction.
+    window.dispatchEvent(
+      new CustomEvent('ttt:solo-stats-changed', { detail: { source: 'merge' } }),
+    );
   }
 
   return (

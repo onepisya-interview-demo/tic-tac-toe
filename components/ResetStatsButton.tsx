@@ -28,9 +28,19 @@ type Props = {
    *  home page to make the ghost reset button full-width on mobile while
    *  keeping its natural width on desktop (`w-full sm:w-auto`). */
   className?: string;
+  /**
+   * Optional muted caption rendered BELOW the button when present.
+   * The home page passes it to spell out the scope (W2 P2 / D1 裁决 —
+   * the server-scope reset only clears the public id=1 row; solo
+   * localStorage and the per-name online row are intentionally left
+   * alone). Rendered via a Tokenised text-text-muted + text-small span
+   * so it matches the design system (no inline hex, no native Tailwind
+   * palette).
+   */
+  caption?: string;
 };
 
-export function ResetStatsButton({ scope = 'server', onCleared, className }: Props) {
+export function ResetStatsButton({ scope = 'server', onCleared, className, caption }: Props) {
   const router = useRouter();
   const resetAll = useGameStore((s) => s.resetAll);
   const resetSoloStats = useGameStore((s) => s.resetSoloStats);
@@ -55,15 +65,25 @@ export function ResetStatsButton({ scope = 'server', onCleared, className }: Pro
   };
 
   return (
-    <Button
-      variant="ghost"
-      onClick={handleClick}
-      className={className}
-      loading={pending}
-      data-testid={isLocal ? 'reset-solo-stats' : 'reset-stats'}
-      aria-label={isLocal ? '清空单机战绩' : '重置战绩'}
-    >
-      {isLocal ? '清空战绩' : pending ? '重置中…' : '重置战绩'}
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        onClick={handleClick}
+        className={className}
+        loading={pending}
+        data-testid={isLocal ? 'reset-solo-stats' : 'reset-stats'}
+        aria-label={isLocal ? '清空单机战绩' : '重置对战战绩'}
+      >
+        {isLocal ? '清空战绩' : pending ? '重置中…' : '重置对战战绩'}
+      </Button>
+    {caption ? (
+      <span
+        className="text-small text-text-muted"
+        data-testid="reset-stats-caption"
+      >
+        {caption}
+      </span>
+    ) : null}
+  </>
   );
 }

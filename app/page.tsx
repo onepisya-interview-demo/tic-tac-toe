@@ -53,7 +53,7 @@ export default async function HomePage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />
         <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />
-        <ResetStatsButton className="w-full sm:w-auto" />
+        <ResetStatsButton className="w-full sm:w-auto" caption="仅清零双人公共战绩，不含线上/单机战绩" />
       </div>
 
       <HomeDialogMount />

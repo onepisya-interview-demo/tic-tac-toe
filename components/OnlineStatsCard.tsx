@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { fetchSoloStats } from '@/lib/solo-net';
 import { emptyStats, type GameStats } from '@/lib/game';
@@ -9,13 +9,23 @@ import { StatsGrid } from '@/components/ui/StatsGrid';
 
 /**
  * Read-only online-stats card on the home page
- * (ulw-name-login-one-truth W3 contract).
+ * (ulw-name-login-one-truth W3 contract + W2 P1 fix).
  *
  * Pure display surface. The component reads `playerName` from the
  * store and, when set, GETs the matching row from
  * `/api/solo-stats?name=`. The response lives ONLY in component
  * state — it is never written to localStorage, the solo store
  * cache, or anywhere else (W3 A2 red-line: 线上永不进本地).
+ *
+ * W2 P1 fix: the card now refetches on (a) the
+ * `ttt:solo-stats-changed` custom event — dispatched by HomeDialogMount
+ * after a successful merge so the user sees the merged row ≤2s after
+ * the dialog closes — and (b) window focus — cross-device read
+ * recovery (the user lands on / from another device that just synced
+ * under the same name). Initial mount + playerName-change still
+ * trigger the same refetch path via `useEffect([refetch])`. The
+ * ticket-based in-flight guard prevents a stale focus-during-fetch
+ * from clobbering a fresher result.
  *
  * Logged-out rendering: a low-key prompt inside the same Card slot
  * so the layout doesn't reflow when the user signs in. This keeps
@@ -34,16 +44,25 @@ export function OnlineStatsCard() {
   const playerName = useGameStore((s) => s.playerName);
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  useEffect(() => {
+  // W2 P1 fix: refetch on merge success (HomeDialogMount dispatches
+  // ttt:solo-stats-changed after clearing local + sentinel) and on
+  // window focus (cross-device read recovery, mirrors the same signal
+  // the home-return dialog uses). In-flight guard via ticket ref
+  // prevents a stale focus-during-fetch from clobbering a fresher
+  // result. Response lives in component state only — A2 red-line.
+  const ticketRef = useRef<{ cancelled: boolean } | null>(null);
+
+  const refetch = useCallback(() => {
     if (!playerName) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ kind: 'idle' });
       return;
     }
-    let cancelled = false;
+    if (ticketRef.current) ticketRef.current.cancelled = true;
+    const ticket = { cancelled: false };
+    ticketRef.current = ticket;
     setState({ kind: 'loading' });
     void fetchSoloStats(playerName).then((r) => {
-      if (cancelled) return;
+      if (ticket.cancelled) return;
       if (!r.ok) {
         setState({
           kind: 'error',
@@ -60,10 +79,31 @@ export function OnlineStatsCard() {
         setState({ kind: 'ok', stats: r.value.stats });
       }
     });
-    return () => {
-      cancelled = true;
-    };
   }, [playerName]);
+
+  // Initial fetch + playerName-change refetch.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch() sets loading + ok/error state synchronously to drive the in-flight lifecycle
+    refetch();
+    return () => {
+      if (ticketRef.current) ticketRef.current.cancelled = true;
+    };
+  }, [refetch]);
+
+  // Cross-device signal: window focus + the merge-success custom event.
+  // Cleanup is symmetric (both addEventListener calls are paired).
+  useEffect(() => {
+    if (!playerName) return;
+    const onSignal = (): void => {
+      refetch();
+    };
+    window.addEventListener('ttt:solo-stats-changed', onSignal);
+    window.addEventListener('focus', onSignal);
+    return () => {
+      window.removeEventListener('ttt:solo-stats-changed', onSignal);
+      window.removeEventListener('focus', onSignal);
+    };
+  }, [playerName, refetch]);
 
   return (
     <Card>
