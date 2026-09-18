@@ -64,6 +64,8 @@
 | A5 | online 实时 | 完局 → POST outcomes → `/result` 源码含本局新战绩数字 |
 | A6 | offline 唯一网络写 | 3 局写请求仅 sessions+merge 各 1 |
 | A7 | offline 体验回归 | offline-result-qa 七步全绿 |
+
+  **调度者注（2026-09-19 W4 实测）**：原第七步系 ranked 公共账本断言（GET /api/stats totalGames=0），随 W1 退役语义强制删除，以「全程 offlineWriteCount===0 逐步断言」更强替代；A7 判定按 offline-result-qa 现行六步全绿执行。
 | A8 | 展示页 | hero+双 CTA 指向正确+无公共卡+线上卡刷新行为不变；首页 HTML 含 schema.org JSON-LD（VideoGame/playMode/applicationCategory 断言） |
 | A9 | 双兼容成文 | service 分离约束 lib/db.ts doc + AGENTS.md；README GraphQL 预留节 + 词汇语义说明 |
 | A10 | 门禁 | 六层门禁 × 每 commit 全绿；每波 QA_VIDEO 录像调度者目验后判过 |
