@@ -78,7 +78,7 @@
 | `/` | (no single-line header — home is the score-cards layout) | n/a | n/a |
 | `/online` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "游戏中" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
 | `/offline` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "单机练习" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
-| `/result` | `[ResultBanner h1 | SoundToggle]` | `result-headline` is the h1 | `result-headline` (aria-live=assertive) |
+| `/result` | `[result-headline h1 | SoundToggle]` | `result-headline` is the h1 | `result-headline` (aria-live=assertive) |
 
 Each row is a single `flex flex-row items-center justify-between gap-3` line. The h1
 slot is `text-h2 font-semibold` (compact) on `/online` and `/offline`; on `/result` the

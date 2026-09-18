@@ -4,7 +4,9 @@
 //   1. Home renders the dual CTA (start-online + start-offline).
 //   2. A full offline game (forced X-first top-row win) issues ZERO write
 //      requests (POST /api/stats/outcome, PUT/DELETE /api/stats) and
-//      never navigates to /result — the ResultBanner mounts inline.
+//      never navigates to /result — ResultNavigator was never installed on
+//      /offline (it only pushes /result from /online); the inline
+//      WinConfetti + StatusBar carry the win announcement on /offline.
 //   3. The outcome lands in localStorage 'ttt.offline.stats.v1'
 //      (xWins=1) and survives a reload via OfflineStatsPanel.
 //   4. The local clear button empties the localStorage row instantly

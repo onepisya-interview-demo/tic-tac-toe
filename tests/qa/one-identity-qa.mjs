@@ -163,6 +163,16 @@ try {
       0,
       `anonymous offline must NOT issue any /api/* writes; got ${api.writes.length}: ${JSON.stringify(api.writes)}`,
     );
+    // V7 P2-3: anonymous hint must be visible after offline win so the
+    // user sees the "无名不记" guard explained inline (auto-switched
+    // stats view ≥ WIN_AUTO_SWITCH_MS). The view-toggle testid names
+    // are not asserted here — we only check that the testid the
+    // OfflineStatsPanel testid-contracts on is on screen.
+    const anonVisible = await page.isVisible('[data-testid="offline-stats-anonymous"]');
+    assert.ok(
+      anonVisible,
+      'anonymous offline must show the offline-stats-anonymous hint after win (auto-switch to stats view)',
+    );
     await shoot(page, "a-anonymous-offline.png");
   });
 

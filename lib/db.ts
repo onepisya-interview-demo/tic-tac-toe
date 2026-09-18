@@ -35,7 +35,7 @@ import { emptyStats, recordOutcome, type GameStats } from './game';
  *      problem+json / GraphQL error / gRPC status。
  *    - 不得在 transport 里再写一份「read → mutate → upsert」的业务规则。
  *
- * W2 落地：app/api/players/{name}/stats/{...,outcomes,sync}/route.ts 与
+ * W2 落地：app/api/players/{name}/stats/{...,outcomes,merge}/route.ts 与
  * lib/game-net.ts 的薄壳。GraphQL 双兼容仅需新增 schema + resolver，service
  * 函数零改动。
  *
