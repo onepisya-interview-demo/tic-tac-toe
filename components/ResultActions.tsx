@@ -48,8 +48,14 @@ export function ResultActions() {
         loading={pending}
         data-testid="reset-stats-result"
       >
-        {pending ? '重置中…' : '重置战绩'}
+        {pending ? '重置中…' : '重置对战战绩'}
       </Button>
+      <span
+        className="text-small text-text-muted"
+        data-testid="reset-stats-result-caption"
+      >
+        仅清零双人公共战绩，不含线上/单机战绩
+      </span>
     </div>
   );
 }

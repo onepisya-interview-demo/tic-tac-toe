@@ -131,9 +131,10 @@ export function PlayerNameForm() {
       // (so any subscribed UI sees the new identity in the same tick).
       setStoreName(trimmed);
       setFeedback({ kind: 'success', existed: r.value.existed });
-      // W4 折叠: 提交成功后回到折叠态 (仅显示 readonly+编辑), 反馈由
-      // 只读态旁的下一帧 status pill 替代 (此处直接清掉 feedback 以免
-      // 与折叠态布局冲突).
+      // W4 折叠: 提交成功后回到折叠态 (仅显示 readonly+编辑). 折叠
+      // 分支 line 226-240 仍渲染 success feedback pill ——「登录 vs
+      // 注册」区分是用户首次成功时的核心信号 (DESIGN.md §4b why-not),
+      // 故不在此处 setFeedback({ kind: 'idle' }) 清掉.
       setEditing(false);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ttt:player-name-changed'));

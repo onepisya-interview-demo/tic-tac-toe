@@ -234,6 +234,10 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 | 菲茨定律（Fitts's Law） | W1 弹框主/次 CTA 整行宽（移动端单列 1fr/1fr 堆叠）；按钮 padding 8/12/16 | 触区 ≥44px；遮罩外 click 不关弹框（用 ESC + 显式按钮替代） |
 | 多尔蒂门槛（Doherty Threshold） | W1 弹框显形 ≤100ms + 主 CTA loading + 8s `AbortController.timeout()` | 400ms 内用户必须看见反馈；HAR §P2 实证 30s 卡死反例 |
 | 图底关系（Figure-Ground） | W1 `::backdrop` 选 `bg-base/70` + `backdrop-blur-sm`；W3 sticky `bg-base` 实色 | 禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
+| 反馈环（Feedback Loop） | W2 `ttt:solo-stats-changed` dispatch + OnlineStatsCard focus refetch；W3 win/draw ≤2s 切 stats 视图 + confetti 落位 | 行为 → 状态变化 → 视觉响应 ≤400ms 闭环；不依赖用户主动刷新 |
+| 映射关系（Mapping） | W2 ResetStatsButton caption 显形作用域；aria-pressed ↔ view-toggle 控制-状态同构 | 控件外观 / 文案须与系统状态一一对应；禁「按钮名 ≠ 作用域」歧义（A5） |
+| 图层化（Layering） | W1 `::backdrop` 暗背景层；W3 confetti overlay `z-index: 50` 悬浮于战绩视图 | 视觉层级 = 信息层级；z-index 须 token 化阶梯（globals.css 单一源） |
+| 宽容性（Forgiveness） | W1 弹框 ESC = reject；W4 折叠态「编辑」独占可达面；「保留本地」零网络写 | 撤销 / 退出必须可逆且零代价；禁把破坏性操作伪装成中性操作（D1） |
 
 未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。约束性作为渐进呈现的「操作权限收口」延伸，W4 增列入表。心流 / Zeigarnik 与「紧凑化」无直接对位。
 
