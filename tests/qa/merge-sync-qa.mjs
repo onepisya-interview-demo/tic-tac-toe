@@ -1,4 +1,4 @@
-// merge-sync-qa.mjs — DISABLED for W2 (ulw-name-login-one-truth).
+// merge-sync-qa.mjs — DISABLED for W2 + W3 (ulw-name-login-one-truth).
 //
 // Why disabled: /solo no longer renders the 「同步」 button or
 // SyncConfirmDialog (W2 纯净化 wave). All probe steps depend on
@@ -8,12 +8,17 @@
 // sole caller pending W3) but the UI surface to drive a merge
 // from /solo is gone.
 //
-// Coverage migration plan: W3 ships home-return-qa.mjs which
-// exercises StartGameButton's intercept (pendingSyncCount>0 →
-// SyncConfirmDialog → 「合并并清空」/「保留本地」) from the home
-// page — the only place that surface lives now.
+// Coverage migration plan (W3 final): StartGameButton's intercept
+// is gone (Decision D1 retired it). The home-return SyncConfirmDialog
+// is mounted by HomeDialogMount on the home page itself, triggered
+// when pendingSyncCount() > declinedSentinel (see SessionStorage
+// ttt.solo.sync-declined.v1). The "merge + clear" sequence is
+// exercised by home-return-qa.mjs; this probe is retired alongside
+// the StartGameButton intercept path.
 //
-// Re-enable only when the home-return-qa path is live in W3.
+// Re-enable only when /solo or another route regains a sync
+// affordance that exercises the merge surface outside the
+// home-return dialog flow.
 
 import { ensureDir, writeQaLog } from "./lib/evidence.mjs";
 
@@ -25,5 +30,5 @@ await writeQaLog(EVIDENCE, {
   reason: "W2 retired /solo sync affordances — see header comment",
   findings: [],
 });
-console.log("merge-sync-qa DISABLED (W2 纯净化；W3 home-return-qa 重建)");
+console.log("merge-sync-qa DISABLED (W2 纯净化 + W3 home-return-qa 承接 — 头部注释见上)");
 process.exit(0);

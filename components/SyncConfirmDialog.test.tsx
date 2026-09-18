@@ -1,17 +1,53 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SyncConfirmDialog } from './SyncConfirmDialog';
 
-// SyncConfirmDialog — pure DOM-modal assertions. Covers:
-// - 主 CTA 标「合并并清空」/ 次 CTA 标「保留本地」(no Confirm/OK)
-// - n/24 live 计数器随输入变化
-// - invalid name 阻止 confirm（按钮 disabled + error 行）
-// - ESC 触发 onReject（no network writes）
-// - onConfirm 拿到 trim 后名字
-// - reduced-motion 时 dialog 不挂 animation 类
+// SyncConfirmDialog — W3 (ulw-name-login-one-truth) reframe: the dialog
+// now runs the register/login + merge sequence itself, then forwards
+// the merged row to the caller. Coverage:
+//  - 主/次 CTA 文案保留 (legacy contract)
+//  - 主标题/副标题披露 (legacy contract)
+//  - n/24 计数器 + label (legacy contract)
+//  - 永久锁定 hint 在 name 合法时显形 (R4 §2.2)
+//  - 名字非法时主 CTA disabled (legacy contract)
+//  - P1-5 新分支 (ulw §5 A12): pending>0 → open=true 时弹框出现;
+//    「保留本地」零网络写 + 写 sessionStorage 标记;
+//    「合并并清空」成功 → onConfirm(name, mergedStats) 收到合并行;
+//    fetch 失败 → dialog 不关不触发 onConfirm.
+//
+// Network stubs: postPlayerSession returns {stats, existed:false};
+// postSoloSync returns a merged row.
 
-afterEach(() => cleanup());
+const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+beforeEach(() => {
+  fetchSpy.mockReset();
+  // Default success: 注册 / 合并成功
+  fetchSpy.mockImplementation(async (url) => {
+    const s = String(url);
+    if (s.endsWith('/api/player-session')) {
+      return new Response(
+        '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":false}',
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (s.endsWith('/api/solo-stats/sync')) {
+      return new Response(
+        '{"stats":{"totalGames":3,"xWins":2,"oWins":0,"draws":1,"currentStreak":2}}',
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return new Response('{}', { status: 404 });
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  fetchSpy.mockReset();
+});
 
 describe('components/SyncConfirmDialog', () => {
   it('renders 主 CTA "合并并清空" 与次 CTA "保留本地"（不出现 Confirm/OK 通用动词）', () => {
@@ -26,7 +62,6 @@ describe('components/SyncConfirmDialog', () => {
     );
     expect(screen.getByTestId('sync-confirm-confirm')).toHaveTextContent('合并并清空');
     expect(screen.getByTestId('sync-confirm-reject')).toHaveTextContent('保留本地');
-    // Anti-pattern: never "Confirm" / "OK" / "Yes".
     expect(screen.queryByText(/^Confirm$/i)).toBeNull();
     expect(screen.queryByText(/^OK$/)).toBeNull();
   });
@@ -64,7 +99,6 @@ describe('components/SyncConfirmDialog', () => {
     expect(counter).toHaveTextContent('5 / 24');
     await user.clear(screen.getByTestId('sync-confirm-name'));
     await user.type(screen.getByTestId('sync-confirm-name'), '汉字名');
-    // 「汉字名」 3 chars
     expect(counter).toHaveTextContent('3 / 24');
   });
 
@@ -80,34 +114,19 @@ describe('components/SyncConfirmDialog', () => {
         onReject={vi.fn()}
       />,
     );
-    // Empty name → invalid → disabled.
     const confirm = screen.getByTestId('sync-confirm-confirm');
     expect(confirm).toBeDisabled();
     expect(screen.getByTestId('sync-confirm-name-error')).toBeInTheDocument();
-    // Type a valid name → enabled.
     await user.type(screen.getByTestId('sync-confirm-name'), 'bob');
     expect(confirm).not.toBeDisabled();
-  });
-
-  it('onConfirm 收到 trim 后的名字（whitespace-only trim 不算有效）', async () => {
-    const user = userEvent.setup();
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    render(
-      <SyncConfirmDialog
-        open
-        pendingGamesCount={2}
-        initialName=""
-        onConfirm={onConfirm}
-        onReject={vi.fn()}
-      />,
+    expect(screen.queryByTestId('sync-confirm-name-error')).toBeNull();
+    // Lock hint visible when name is valid (R4 §1.3.3)
+    expect(screen.getByTestId('sync-confirm-lock-hint')).toHaveTextContent(
+      '永久属于你',
     );
-    await user.type(screen.getByTestId('sync-confirm-name'), '   carol   ');
-    await user.click(screen.getByTestId('sync-confirm-confirm'));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm).toHaveBeenCalledWith('carol');
   });
 
-  it('onReject 由「保留本地」按钮触发——零网络写', async () => {
+  it('「保留本地」按钮触发 onReject——零网络写 + 不调 onConfirm', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     const onReject = vi.fn();
@@ -123,11 +142,52 @@ describe('components/SyncConfirmDialog', () => {
     await user.click(screen.getByTestId('sync-confirm-reject'));
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('「合并并清空」成功：onConfirm 收到 (trim-name, merged-row)，并按序触发 postPlayerSession + postSoloSync', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={2}
+        initialName="alice"
+        onConfirm={onConfirm}
+        onReject={vi.fn()}
+      />,
+    );
+    await user.clear(screen.getByTestId('sync-confirm-name'));
+    await user.type(screen.getByTestId('sync-confirm-name'), '   carol   ');
+    await user.click(screen.getByTestId('sync-confirm-confirm'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm).toHaveBeenCalledWith('carol', {
+      totalGames: 3,
+      xWins: 2,
+      oWins: 0,
+      draws: 1,
+      currentStreak: 2,
+    });
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls).toContain('/api/player-session');
+    expect(urls).toContain('/api/solo-stats/sync');
   });
 
   it('onReject 在 onConfirm 抛错时仍能触发（error 留在 dialog 内，不静默关）', async () => {
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (url) => {
+      const s = String(url);
+      if (s.endsWith('/api/player-session')) {
+        // Login succeeds so the dialog reaches /sync; /sync then 409s.
+        return new Response(
+          '{"stats":{"totalGames":5,"xWins":3,"oWins":1,"draws":1,"currentStreak":2},"existed":true}',
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{"error":"player session required"}', { status: 409 });
+    });
     const user = userEvent.setup();
-    const onConfirm = vi.fn().mockRejectedValue(new Error('boom'));
+    const onConfirm = vi.fn();
     const onReject = vi.fn();
     render(
       <SyncConfirmDialog
@@ -139,11 +199,46 @@ describe('components/SyncConfirmDialog', () => {
       />,
     );
     await user.click(screen.getByTestId('sync-confirm-confirm'));
-    // After async rejection resolves, the dialog should still be open
-    // with the error surfaced. Clicking reject closes it.
+    // The dialog swallows the network error → 409 → surfaces it inline.
     const errorRow = await screen.findByTestId('sync-confirm-error');
-    expect(errorRow).toHaveTextContent('同步失败：boom');
+    expect(errorRow).toHaveTextContent('需要先登录该账号');
+    // onConfirm never fires (the network path failed).
+    expect(onConfirm).not.toHaveBeenCalled();
+    // Reject still works (user bails out).
     await user.click(screen.getByTestId('sync-confirm-reject'));
     expect(onReject).toHaveBeenCalledTimes(1);
+  });
+
+  // P1-5 (ulw §5 A12): 「合并并清空」POST /sync 失败 → dialog 留开不导航.
+  it('postSoloSync 抛 network-error：dialog 不关，不调用 onConfirm', async () => {
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (url) => {
+      const s = String(url);
+      if (s.endsWith('/api/player-session')) {
+        return new Response(
+          '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":true}',
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // /sync returns 500 — sync failed after a successful login.
+      return new Response('{"error":"db unavailable"}', { status: 500 });
+    });
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={3}
+        initialName="alice"
+        onConfirm={onConfirm}
+        onReject={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByTestId('sync-confirm-confirm'));
+    const errorRow = await screen.findByTestId('sync-confirm-error');
+    expect(errorRow).toHaveTextContent('同步失败');
+    // Dialog stays open and onConfirm is not called.
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByTestId('sync-confirm-dialog')).toBeInTheDocument();
   });
 });

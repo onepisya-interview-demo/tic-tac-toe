@@ -179,22 +179,20 @@ try {
   // A2a: pending>0 首页点「开始对战」 → 弹框;「保留本地」 → 导航 + 零网络写
   // ─────────────────────────────────────────────────────────────────
   await step("A2a-reject-keeps-local-zero-writes-navigates", async () => {
-    // Seed: localStorage holds 3 games (from A1). Navigate to /.
+    // W3 (ulw-name-login-one-truth): the home-return dialog now opens
+    // automatically via HomeDialogMount when pendingSyncCount() >
+    // declinedSentinel. StartGameButton's intercept is gone — "保留
+    // 本地" is zero network writes + dialog close + manual nav.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-game"]');
-    // pendingSyncCount = local.totalGames - syncedServerTotal = 3 - 0 = 3.
-    // pendingSyncCount is computed inside StartGameButton; we
-    // verify by checking the dialog opens.
     writeCalls.length = 0;
 
-    await page.click('[data-testid="start-game"]');
-    // The intercept must open the dialog.
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 3000 });
+    // The dialog auto-opens because pending = local.totalGames (3) - 0 = 3.
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 4000 });
     await shoot(page, "A2a-dialog-open.png");
 
-    // 「保留本地」 — zero network writes, navigates.
+    // 「保留本地」 — zero network writes. W3 no longer auto-navigates.
     await page.click('[data-testid="sync-confirm-reject"]');
-    await page.waitForURL("**/play", { timeout: 4000 });
     // Allow any rogue async writes to surface.
     await page.waitForTimeout(400);
 
@@ -207,6 +205,12 @@ try {
     // Local must still hold the 3 games.
     const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_SOLO_KEY);
     assert.ok(raw && JSON.parse(raw).totalGames === 3, "local must be preserved after 保留本地");
+    // sessionStorage sentinel records the declined pending.
+    const declined = await page.evaluate(() => window.sessionStorage.getItem("ttt.solo.sync-declined.v1"));
+    assert.equal(declined, "3", `sessionStorage declined sentinel must be 3 (got ${declined})`);
+    // Manually navigate to /play to assert the navigation path still works.
+    await page.click('[data-testid="start-game"]');
+    await page.waitForURL("**/play", { timeout: 4000 });
     await shoot(page, "A2a-after-reject-on-play.png");
   });
 
@@ -226,6 +230,10 @@ try {
     await page.fill('[data-testid="player-name-input"]', NAME_A2);
     await page.click('[data-testid="player-name-save"]');
     await page.waitForTimeout(800);
+    // Clear A2a's declined sentinel so A2b's pending > declined triggers
+    // a fresh dialog open (W3 contract: sentinel survives a hard
+    // reload, but a fresh name + fresh pending should re-open).
+    await page.evaluate(() => window.sessionStorage.removeItem("ttt.solo.sync-declined.v1"));
 
     // Seed local with 3 games (so pending = 3).
     await page.evaluate(([key, value]) => window.localStorage.setItem(key, value), [
@@ -233,18 +241,33 @@ try {
       JSON.stringify({ totalGames: 3, xWins: 3, oWins: 0, draws: 0, currentStreak: 3 }),
     ]);
 
-    await page.waitForTimeout(220);
+    // Reload so HomeDialogMount re-evaluates with pending=3, declined=0
+    // and opens the dialog automatically.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(300);
 
     writeCalls.length = 0;
-    await page.click('[data-testid="start-game"]');
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 3000 });
+    // The dialog auto-opens because pending > declined (= 0).
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 4000 });
     await shoot(page, "A2b-dialog-open.png");
 
-    // 「合并并清空」
+    // 「合并并清空」 runs the postPlayerSession + postSoloSync sequence.
     await page.click('[data-testid="sync-confirm-confirm"]');
-    // Dialog should close and navigation should fire.
+    // W3: dialog closes on success, but no auto-nav. Wait for the
+    // dialog's [open] attribute to be removed; use state:'attached'
+    // so we don't race the dlg.close() visibility transition.
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"]', {
+      timeout: 8000,
+      state: "attached",
+    });
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      { timeout: 8000 },
+    );
+    await page.waitForTimeout(400);
+    await page.click('[data-testid="start-game"]');
     await page.waitForURL("**/play", { timeout: 8000 });
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(400);
 
     // The merge writes a single POST /sync (and possibly a PUT if the
     // name was new). Both are EXPECTED — that's the merge flow.

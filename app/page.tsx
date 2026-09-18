@@ -5,6 +5,8 @@ import { SoundToggle } from '@/components/SoundToggle';
 import { ResetStatsButton } from '@/components/ResetStatsButton';
 import { StartGameButton } from '@/components/StartGameButton';
 import { PlayerNameForm } from '@/components/PlayerNameForm';
+import { OnlineStatsCard } from '@/components/OnlineStatsCard';
+import { HomeDialogMount } from '@/components/HomeDialogMount';
 import { StatsHydrator } from '@/components/StatsHydrator';
 import { loadStats } from '@/lib/db';
 
@@ -46,11 +48,15 @@ export default async function HomePage() {
         </div>
       </Card>
 
+      <OnlineStatsCard />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <StartGameButton href="/play" label="开始对战" mode="ranked" variant="primary" testid="start-game" />
         <StartGameButton href="/solo" label="单机练习" mode="solo" variant="secondary" testid="start-solo" />
         <ResetStatsButton className="w-full sm:w-auto" />
       </div>
+
+      <HomeDialogMount />
     </main>
     </ViewTransition>
   );

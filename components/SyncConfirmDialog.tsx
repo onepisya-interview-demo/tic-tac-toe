@@ -3,52 +3,65 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { isPlayerName } from '@/lib/player-name';
+import { postPlayerSession, postSoloSync } from '@/lib/solo-net';
+import { loadSoloStats } from '@/lib/solo-stats';
+import type { GameStats } from '@/lib/game';
 
 const NAME_MAX = 24;
+export const SYNC_DECLINED_KEY = 'ttt.solo.sync-declined.v1';
 
 /**
- * SyncConfirmDialog — modal that gates the cross-device merge
- * write (ulw-solo-sync-rebuild.md B-T3 / B-T4).
+ * Home-return sync dialog (ulw-name-login-one-truth W3 contract).
  *
- * Frame contract (rux.md 决议 3/4/7):
- *  - 主标题「合并战绩」(正框架，不说「清空本机」)
- *  - 副标「将上传本机 N 局；同步后本机清零以防重复」(披露后果)
- *  - 未命名时弹框内含名字输入 (label 前置规则「1-24 字符」 + n/24
- *    live 计数 — rux.md 决议 1)
- *  - 主 CTA「合并并清空」(具体动词, brand-color 实心) / 次 CTA「保留
- *    本地」(outline) — 禁 Confirm/OK 通用词 (rux.md 决议 7)
- *  - ESC 关 (原生 <dialog> 提供) / reduced-motion 瞬时
+ * Decision D1: the dialog now lives on the home page, opened by the
+ * home page's mount effect when `pendingSyncCount() > declinedSentinel`
+ * (the sentinel is a sessionStorage value written when the user picks
+ * "保留本地" — see writeDeclinedPending below). Start-game buttons no
+ * longer gate the flow (StartGameButton has zero intercept after W3).
  *
- * Native <dialog> + showModal() so the browser owns focus trap,
- * inert background, and ESC. No animation library, no portal library —
- * the project explicitly excludes those (AGENTS.md 反模式).
+ * Two CTA branches:
+ *  - "保留本地"  → onReject fires → caller writes the sentinel → zero
+ *    network writes, dialog closes.
+ *  - "合并并清空" → onConfirm receives the chosen name + the server's
+ *    merged row (post-merge). The dialog internally runs the
+ *    register/login + merge sequence so the caller only needs to
+ *    clear local + sentinel on success.
+ *
+ * Frame contract (R4 §2.2):
+ *  - 主标题「合并战绩」 + 副标题「将上传本机 N 局；同步后本机清零以防重复」
+ *  - 弹框内 name 输入框（label 前置规则 + n/24 计数 + 永久锁定 hint）
+ *  - 主 CTA「合并并清空」 / 次 CTA「保留本地」
+ *  - 错误就地展示 + ESC = 「保留本地」(零网络写)
+ *
+ * F3 fix (carried forward from prior wave): showModal() focus defaults
+ * to the dialog itself; we explicitly focus the primary CTA so Enter
+ * confirms by default and the keyboard affordance is unambiguous.
  */
 export interface SyncConfirmDialogProps {
   open: boolean;
-  /** Local stats count to surface in the copy as "本机 N 局". */
+  /** Local stats count surfaced in the copy as "本机 N 局". */
   pendingGamesCount: number;
   /**
-   * Pre-filled name when the panel already has one; the input is
-   * editable in both branches so the user can change names here
-   * without bouncing back to PlayerNameForm. Empty string when no
-   * name is set yet.
+   * Pre-filled name from store.playerName when the player already
+   * registered / logged in. Empty when no name is set yet — the
+   * user must type a name inside the dialog to register / log in
+   * before the merge can proceed (the home-return flow guarantees
+   * the dialog only opens when there ARE pending games, and the
+   * sync endpoint rejects absent rows with 409).
    */
   initialName: string;
   /**
-   * Fired when the user picks "合并并清空". The handler receives
-   * the chosen name (post-trim, post-validate) and is expected to
-   * run the B-T4 sequence: PUT (if changed) → POST /sync → clear
-   * local → adopt server stats → close this dialog. Errors stay
-   * inside the dialog so the user can retry or bail.
+   * Fired when the user picks "合并并清空". Receives the chosen name
+   * (post-trim, post-validate) and the server's merged row (after
+   * the register-or-login + merge sequence succeeded). The caller
+   * uses the merged row's totalGames to update the local sentinel
+   * so the next home-return has pending = 0 and won't re-open.
    */
-  onConfirm: (name: string) => Promise<void> | void;
+  onConfirm?: (name: string, mergedStats: GameStats) => Promise<void> | void;
   /**
-   * Fired AFTER `onConfirm` resolves successfully. Used by the home
-   * page's StartGameButton (W1) to continue navigation to /play
-   * after a successful merge. Not passed by SoloStatsPanel (its
-   * dialog close already happens inside `onConfirm` via
-   * `setDialogOpen(false)`); failure inside `onConfirm` keeps the
-   * dialog open so this hook does NOT fire on failure.
+   * Fired AFTER `onConfirm` resolves successfully (currently unused —
+   * kept for future "navigate after merge" callers; the dialog
+   * closes itself on success).
    */
   onAfterConfirm?: () => void;
   /** Fired when the user picks "保留本地" or hits ESC. Zero network writes. */
@@ -74,8 +87,6 @@ export function SyncConfirmDialog({
   // Keep the input in sync when the dialog reopens with a fresh name
   // (PlayerNameForm save fires while the dialog was closed).
   useEffect(() => {
-    // Sync the input when the dialog reopens with a fresh name
-    // (PlayerNameForm save fires while the dialog was closed).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setName(initialName);
   }, [open, initialName]);
@@ -87,9 +98,6 @@ export function SyncConfirmDialog({
     if (!dlg) return;
     if (open && !dlg.open) {
       dlg.showModal();
-      // Focus the primary CTA so Enter confirms by default; the
-      // browser will already have focused the dialog itself, but
-      // the button focus makes the keyboard affordance explicit.
       primaryRef.current?.focus();
     } else if (!open && dlg.open) {
       dlg.close();
@@ -114,20 +122,48 @@ export function SyncConfirmDialog({
   const nameOk = isPlayerName(trimmed);
   const canConfirm = nameOk && !busy;
 
+  async function runMergeSequence(): Promise<GameStats> {
+    // Two-step sequence: (1) postPlayerSession guarantees the row
+    // exists (注册 if fresh, 登录 if existing); (2) postSoloSync
+    // merges the local snapshot into the row. The server answers
+    // 409 on sync if the row vanished in between; we surface that
+    // verbatim so the user knows to retry after re-logging in.
+    const session = await postPlayerSession(trimmed);
+    if (!session.ok) {
+      if (session.reason === 'http-error' && session.status === 422) {
+        throw new Error('名字含不允许的字符');
+      }
+      if (session.reason === 'aborted') {
+        throw new Error('登录超时，请稍后重试（战绩仍在本地）');
+      }
+      throw new Error('登录失败，请稍后重试（战绩仍在本地）');
+    }
+    const localSnapshot = loadSoloStats();
+    const r = await postSoloSync(trimmed, localSnapshot);
+    if (!r.ok) {
+      throw new Error(
+        r.reason === 'http-error' && r.status === 409
+          ? '需要先登录该账号才能同步（请重新输入名字）'
+          : r.reason === 'http-error'
+            ? `同步失败 (HTTP ${r.status ?? '?'})`
+            : `同步失败 (${r.reason})`,
+      );
+    }
+    return r.value.stats;
+  }
+
   async function handleConfirm(): Promise<void> {
     if (!canConfirm) return;
     setBusy(true);
     setError(null);
     try {
-      await onConfirm(trimmed);
-      // Success path: if the caller provided a follow-up hook (e.g.
-      // StartGameButton navigating to /play after a successful merge),
-      // fire it now. Failure path keeps the dialog open via setError()
-      // so this hook MUST NOT run on throw.
+      const mergedStats = await runMergeSequence();
+      if (onConfirm) await onConfirm(trimmed, mergedStats);
+      // Success path: fire the (currently unused) onAfterConfirm
+      // hook. Failure path keeps the dialog open via setError() so
+      // this hook MUST NOT run on throw.
       onAfterConfirm?.();
     } catch (e) {
-      // Surface the failure inside the dialog so the user can retry
-      // or bail — never silently close (would hide a stuck sync).
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -135,7 +171,6 @@ export function SyncConfirmDialog({
   }
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>): void {
-    // Backdrop click counts as "保留本地" (the same contract as ESC).
     if (e.target === dialogRef.current) onReject();
   }
 
@@ -176,7 +211,12 @@ export function SyncConfirmDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={NAME_MAX}
-            className="flex-1 bg-bg-base border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong"
+            disabled={busy}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className="flex-1 bg-bg-base border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong disabled:opacity-60"
             data-testid="sync-confirm-name"
             aria-label="玩家名"
             aria-invalid={!nameOk}
@@ -196,7 +236,14 @@ export function SyncConfirmDialog({
           >
             名字需 1-24 字符，不含控制字符。
           </p>
-        ) : null}
+        ) : (
+          <p
+            className="text-small text-text-muted"
+            data-testid="sync-confirm-lock-hint"
+          >
+            这个名字将永久属于你，注册后不可修改。
+          </p>
+        )}
       </div>
       {error ? (
         <p
@@ -240,4 +287,52 @@ export function SyncConfirmDialog({
       </div>
     </dialog>
   );
+}
+
+/**
+ * Read the most recent "保留本地" rejection value (pending count at
+ * the moment the user rejected the dialog). SSR-safe. Used by the
+ * home-return effect to decide whether to re-open the dialog.
+ */
+export function loadDeclinedPending(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.sessionStorage.getItem(SYNC_DECLINED_KEY);
+    if (raw === null) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Write the declined sentinel. Called from the home page's onReject
+ * handler so a same-session re-mount doesn't re-open the dialog
+ * with the same pending count (D3 决策: 「保留本地」零网络写 + 同会话
+ * pending 无增量不重弹).
+ */
+export function writeDeclinedPending(pending: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(SYNC_DECLINED_KEY, String(pending));
+  } catch {
+    // Private mode: degrade to in-memory only (sessionStorage throws).
+  }
+}
+
+/**
+ * Clear the declined sentinel after a successful merge. Mirrors
+ * `clearSoloStats()` / `persistSyncedServerTotal` symmetry — once
+ * the merge succeeds, the next visit has pending = 0 and the dialog
+ * wouldn't re-open anyway, but clearing the sentinel makes the
+ * next-play loop's behaviour deterministic.
+ */
+export function clearDeclinedPending(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(SYNC_DECLINED_KEY);
+  } catch {
+    // Nothing to recover.
+  }
 }

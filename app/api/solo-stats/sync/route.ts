@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { mergeSoloRecord } from '@/lib/db';
+import { loadSoloRecord, mergeSoloRecord } from '@/lib/db';
 import { emptyStats, type GameStats } from '@/lib/game';
 
 // Same Node.js runtime rationale as the parent /api/solo-stats route.
@@ -58,14 +58,22 @@ function isSyncBody(
 
 /**
  * POST /api/solo-stats/sync — server-authoritative cross-device merge
- * (ulw-solo-sync-rebuild.md B-T2 / B-T4). Body { name, stats } carries
+ * (ulw-name-login-one-truth W3 contract). Body { name, stats } carries
  * the local solo ledger the user just opted to push; the server folds
  * it into the per-name row via mergeSoloRecord (load → accumulate per-
  * field → upsert) and returns the merged row so the client can adopt
  * it as the new panel state and clear its local copy. Reject path
- * (“保留本地”) does NOT touch this endpoint — the dialog only opens
- * the network call after the user picks “合并并清空” so a rejected
+ * ("保留本地") does NOT touch this endpoint — the dialog only opens
+ * the network call after the user picks "合并并清空" so a rejected
  * sync is a guaranteed zero-write for the V7 contract.
+ *
+ * 409 name-row-absent: W3 changed semantics to "先注册/登录才能
+ * 同步". The dialog flow ensures the caller just hit
+ * POST /api/player-session for the same name before reaching this
+ * endpoint; a 409 means the row vanished between the two calls (a
+ * concurrent admin deleted it, or the caller forged the request) —
+ * we refuse to silently re-create the row here so a forged merge
+ * cannot resurrect a wiped account.
  */
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -88,6 +96,13 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   try {
+    const existing = await loadSoloRecord(name);
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'player session required' },
+        { status: 409 },
+      );
+    }
     const stats = await mergeSoloRecord(name, body.stats);
     return NextResponse.json({ stats });
   } catch {
@@ -96,5 +111,5 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 // Re-export the empty-stats sentinel so the client can compute the
-// “线上 a + 本机 b = 共 c” breakdown without importing from lib.
+// "线上 a + 本机 b = 共 c" breakdown without importing from lib.
 export { emptyStats };
