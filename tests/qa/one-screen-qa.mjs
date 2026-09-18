@@ -181,10 +181,10 @@ async function main() {
     if (s.stage === 'result' || s.stage === 'home') {
       // /result carries the celebration + actions row (plan §4 A6 allows
       // best-effort here); /home shows the full StatsGrid (5 cards) +
-      // PlayerNameForm, structurally tall on mobile, so it's also
-      // INFO-only — the brief explicitly cites /result as the
-      // "content naturally exceeds one-screen" exemplar and the same
-      // applies to home's stats + name-form combo.
+      // PlayerNameForm (W4 折叠后: 已登录 = token pill + 编辑按钮, 高度
+      // 显著缩; 未登录 = input + 保存 + 计数器, 与 W3 几乎一致), 仍
+      // INFO-only — 移动端 stats ledger + name-form 组合本质上易超 375
+      // 一屏, 即便折叠也无法降至 ≤ viewport, 按 V3 home 例外路径入档.
       findings.push({
         assertion: 'A6-one-screen-INFO',
         stage: s.stage,

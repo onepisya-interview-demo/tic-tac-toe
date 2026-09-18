@@ -131,6 +131,35 @@ why-not: 为什么 `::backdrop` 的 `bg-base/70` 走显式 CSS 而非 `backdrop:
 why-not: 为什么 `::backdrop` 用 `bg-base/70 + backdrop-blur-sm` 而非 `bg-black/60`
   → DESIGN.md §图底关系行已明文禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255，破坏暗色背景下的边界感知）；`bg-base/70` 既守住图底关系又维持品牌调性，`backdrop-blur-sm` 提一点层次（与 sticky header 不用 blur 是因为 `bg-base` 暗色下 12px blur 几乎不可见，徒增合成成本；modal 后景是页面整体而非一行，blur 收益更高）。
 
+### PlayerNameForm（components/PlayerNameForm.tsx）
+
+W4 折叠 contract（`.omo/plans/ulw-ux-refresh-pass.md` §3 W4）——已登录折叠为只读态，编辑动作折叠在「编辑」按钮后展开。
+
+| 状态 | 触发 | 渲染 | 关键 testid |
+| --- | --- | --- | --- |
+| `!hydrated` | SSR / 首帧 | 骨架：仅 label 行 | `player-name-section`（div） |
+| `hasSaved && !editing`（折叠） | hydration 完成 + 持久层有名字 + 未点编辑 | 只读名字 token + 「编辑」按钮；input/登录/清除/取消/计数器/格式错误/锁定 hint 全隐藏；`feedback.kind==='success'` 时折叠行下方仍展示「登录/注册」反馈 pill | `player-name-readonly`、`player-name-edit` |
+| `hasSaved && editing` | 用户点「编辑」 | 既有 input + 「登录」 + 「清除」 + 新增「取消」 + 计数器 + 反馈块；input 预填 `playerName` | `player-name-input`、`player-name-save`、`player-name-clear`、`player-name-cancel`、`player-name-counter` |
+| `!hasSaved` | hydration 完成 + 持久层无名字 | input + 「保存」 + 计数器 + 反馈块（与 W3 完全一致） | 同上无 `clear`/`cancel` |
+
+**状态转换**
+
+- 折叠 → 编辑：`setEditing(true)` + `setName(playerName)` + reset touched/feedback。
+- 编辑 → 折叠（取消）：`setEditing(false)` + `setName(playerName)` + reset touched/feedback；不写任何持久层。
+- 编辑 → 折叠（提交成功）：`setStoreName(trimmed)` + `setFeedback({kind:'success',existed})` + `setEditing(false)`；localStorage 与 store 在写之前不动。
+- 任意编辑态 → !hasSaved（清除）：`setStoreName(null)` + `setEditing(false)` + reset touched/feedback。
+
+**约束性映射**：已登录不再出现裸 input（保存/登录歧义消除），编辑动作折叠在「编辑」按钮之后；与 W1 SyncConfirmDialog「pending>0 才弹」同根渐进呈现但更进一层——不只是「不弹」，而是「按钮都不在」。未登录路径不受影响。
+
+why-not: 为什么折叠态保留 success feedback pill 而不是提交完立刻隐藏
+  → 「登录 vs 注册」区分是用户首次成功时的核心信号（"已为你登录，欢迎回来" vs "注册成功"）；折叠后保留一帧反馈等价于「折叠 + 短反馈」，符合 `prefers-reduced-motion` 下零动画但仍传达结果语义。
+
+why-not: 为什么取消按钮用 `variant="ghost"` 而非 `secondary`
+  → 取消语义是「撤回本次编辑意图」，不可见的破坏性最低；ghost 与「编辑」按钮同款，符合「次级动作低权重」原则；与 SyncConfirmDialog「保留本地」按钮同源（次 CTA = ghost）。
+
+why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 inline 文本
+  → 「已锁定」语义需要视觉容器（与 §1 status-pill 同源），让用户一眼看出「这是不可改的值」而非「普通文字」；与 sticky header `bg-base` 实色同构但层级不同——readonly 是 token pill，header 是 layout bar。
+
 ## 5. Motion
 
 | Interaction | Property | Duration | Easing |
@@ -200,12 +229,13 @@ why-not: 为什么 `::backdrop` 用 `bg-base/70 + backdrop-blur-sm` 而非 `bg-b
 | 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框 | 弹框文案须显形「将上传 N 局 / 本机清零」（W3 弹框文案决策 3/4 既约） |
 | 信噪比（Signal-To-Noise Ratio） | W1 收窄默认路径请求面（零网络写）；W2 sync-qa 唯一名 `syncprobe-<ts>` 复位 | 端点本身保留为公开 API 面（D2 决议），不是「删净」而是「挪走」 |
 | 渐进呈现（Progressive Disclosure） | W1 `pendingSyncCount > 0` 才弹 SyncConfirmDialog；零态静默直行 | 禁发明「始终弹一次以教育用户」的常驻噪音（验收 A3 硬约束） |
+| 约束性（Constraints / 渐进呈现进阶） | W4 `PlayerNameForm` 已登录折叠：只读 + 编辑；点编辑才展开 input/登录/清除/取消；未登录直接展开 | 折叠 = 编辑按钮独占可达面；已登录不该有裸输入语义（避免「保存」歧义） |
 | 留白感知（Horror Vacui） | W3 一屏收紧（19px 溢出 → 80px 节省）；sticky header 紧凑 ≤56px | 仍守 `bg-elevated` 与 `bg-base` ≥12px 呼吸间隔；战绩非空 /home 允许轻量滚动 |
 | 菲茨定律（Fitts's Law） | W1 弹框主/次 CTA 整行宽（移动端单列 1fr/1fr 堆叠）；按钮 padding 8/12/16 | 触区 ≥44px；遮罩外 click 不关弹框（用 ESC + 显式按钮替代） |
 | 多尔蒂门槛（Doherty Threshold） | W1 弹框显形 ≤100ms + 主 CTA loading + 8s `AbortController.timeout()` | 400ms 内用户必须看见反馈；HAR §P2 实证 30s 卡死反例 |
 | 图底关系（Figure-Ground） | W1 `::backdrop` 选 `bg-base/70` + `backdrop-blur-sm`；W3 sticky `bg-base` 实色 | 禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
 
-未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。心流 / Zeigarnik 与「紧凑化」无直接对位。
+未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。约束性作为渐进呈现的「操作权限收口」延伸，W4 增列入表。心流 / Zeigarnik 与「紧凑化」无直接对位。
 
 
 ## 6. Accessibility

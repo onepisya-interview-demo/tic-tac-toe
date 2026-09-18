@@ -173,4 +173,96 @@ describe('components/PlayerNameForm', () => {
       expect(useGameStore.getState().playerName).toBe('pre-existing'),
     );
   });
+
+  // W4 (ulw-ux-refresh-pass): hasSaved 折叠态 — 默认只读 + 编辑
+  // 按钮，input/登录/清除/计数器全部隐藏；点编辑才展开；取消
+  // 不写任何持久层。
+  it('W4 已登录折叠态：默认只显名字+编辑，隐藏 input/登录/清除/计数器/错误', async () => {
+    useGameStore.setState({ playerName: 'pname-folded' });
+    window.localStorage.setItem('ttt.player.name.v1', 'pname-folded');
+    render(<PlayerNameForm />);
+    // 只读态可见
+    expect(screen.getByTestId('player-name-readonly')).toHaveTextContent('pname-folded');
+    expect(screen.getByTestId('player-name-edit')).toBeInTheDocument();
+    // 编辑/输入/清除/计数器/反馈块全部不渲染（折叠契约）
+    expect(screen.queryByTestId('player-name-input')).toBeNull();
+    expect(screen.queryByTestId('player-name-save')).toBeNull();
+    expect(screen.queryByTestId('player-name-clear')).toBeNull();
+    expect(screen.queryByTestId('player-name-counter')).toBeNull();
+    expect(screen.queryByTestId('player-name-feedback')).toBeNull();
+    expect(screen.queryByTestId('player-name-error')).toBeNull();
+    expect(screen.queryByTestId('player-name-hint')).toBeNull();
+    // 持久层不被改写
+    expect(window.localStorage.getItem('ttt.player.name.v1')).toBe('pname-folded');
+    expect(useGameStore.getState().playerName).toBe('pname-folded');
+  });
+
+  it('W4 点编辑展开：input/登录/清除/取消/计数器全部出现，名字预填当前值', async () => {
+    const user = userEvent.setup();
+    useGameStore.setState({ playerName: 'pname-edit' });
+    window.localStorage.setItem('ttt.player.name.v1', 'pname-edit');
+    render(<PlayerNameForm />);
+    // 默认折叠
+    expect(screen.queryByTestId('player-name-input')).toBeNull();
+    await user.click(screen.getByTestId('player-name-edit'));
+    // 编辑态展开
+    const input = screen.getByTestId('player-name-input');
+    expect(input).toBeInTheDocument();
+    expect((input as HTMLInputElement).value).toBe('pname-edit');
+    expect(screen.getByTestId('player-name-save')).toHaveTextContent('登录');
+    expect(screen.getByTestId('player-name-clear')).toBeInTheDocument();
+    expect(screen.getByTestId('player-name-cancel')).toBeInTheDocument();
+    expect(screen.getByTestId('player-name-counter')).toHaveTextContent('10 / 24');
+    // 只读态隐藏
+    expect(screen.queryByTestId('player-name-readonly')).toBeNull();
+    expect(screen.queryByTestId('player-name-edit')).toBeNull();
+  });
+
+  it('W4 取消：编辑态按取消回折叠态，不写任何持久层', async () => {
+    const user = userEvent.setup();
+    useGameStore.setState({ playerName: 'pname-cancel' });
+    window.localStorage.setItem('ttt.player.name.v1', 'pname-cancel');
+    render(<PlayerNameForm />);
+    await user.click(screen.getByTestId('player-name-edit'));
+    // 编辑态：模拟用户在 input 里改了字但没保存
+    const input = screen.getByTestId('player-name-input');
+    await user.clear(input);
+    await user.type(input, '临时草稿');
+    await user.click(screen.getByTestId('player-name-cancel'));
+    // 回到折叠态
+    expect(screen.getByTestId('player-name-readonly')).toHaveTextContent('pname-cancel');
+    expect(screen.queryByTestId('player-name-input')).toBeNull();
+    // 持久层零变化（localStorage 仍是旧名；store 仍是旧名；无网络写）
+    expect(window.localStorage.getItem('ttt.player.name.v1')).toBe('pname-cancel');
+    expect(useGameStore.getState().playerName).toBe('pname-cancel');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('W4 提交成功（注册/登录）后自动退出编辑态回折叠态', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":false}',
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const user = userEvent.setup();
+    // 先无名字 → 输入 → 保存
+    expect(useGameStore.getState().playerName).toBeNull();
+    render(<PlayerNameForm />);
+    await user.type(screen.getByTestId('player-name-input'), 'pname-newfold');
+    await user.click(screen.getByTestId('player-name-save'));
+    // 提交成功 → 折叠态 (input/登录/清除/取消全部消失)
+    await waitFor(() =>
+      expect(screen.getByTestId('player-name-readonly')).toHaveTextContent('pname-newfold'),
+    );
+    expect(screen.queryByTestId('player-name-input')).toBeNull();
+    expect(screen.queryByTestId('player-name-save')).toBeNull();
+    expect(screen.queryByTestId('player-name-clear')).toBeNull();
+    expect(screen.queryByTestId('player-name-cancel')).toBeNull();
+    // 成功反馈仍显形在折叠态下方 (登录/注册区分保留)
+    const fb = screen.getByTestId('player-name-feedback');
+    expect(fb).toHaveTextContent('注册成功');
+    expect(fb.getAttribute('data-feedback-kind')).toBe('register');
+  });
+
 });
