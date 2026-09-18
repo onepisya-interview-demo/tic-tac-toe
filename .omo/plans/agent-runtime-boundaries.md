@@ -52,6 +52,14 @@
       第 ⑥ 层按门禁定义不适用。
 - [x] 提交带全套 lore trailer + Plan footer，过 commit-msg hook（0 violations）。
 
+## 修订（2026-09-18 · v1.0.1）
+
+主公纠正：视觉能力模型都有（多模态），浏览器控制在仓库内已有集成代码
+（tests/qa/ Playwright 探针 + launchQA）。决策 2 原文「无浏览器 runtime 禁派
+视觉验证……才需要带浏览器的 runtime 或人类」过严，修正为：**视觉/UI 验证 =
+bash 跑仓库内探针拿断言 + 截图由模型直读**，无浏览器工具不构成障碍；禁的是
+不跑探针、不看截图的凭空「样式确认」。全局真源同步升 v1.0.1。
+
 ## 撤销
 
 `git revert` 本提交即可；AGENTS.md 小节整体删除 + 本 plan 移档归档，无代码面影响。

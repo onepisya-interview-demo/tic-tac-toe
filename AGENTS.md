@@ -150,7 +150,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - 任何委派先匹配「任务类型 ↔ 运行时工具面」；真源 `~/.hermes/references/ag-agent-runtime-capability-boundaries.md`（Router 镜像 `~/.hermes/AGENTS.md` § 2 第 21 条）。速查：Pi（0 插件 = bash/read/write/edit）只接单文件小修 / 脚本验证 / 小样板，禁派跨文件重构（无 LSP）；omp（LSP+DAP+哈希锚定）接跨文件重构 / DAP 排错 / 调用链追溯；宏大长程目标先拆解，不直派任何单会话 runtime。
 - 验收与 runtime 解耦：不管谁执行，§验证门禁六层全绿才准提交；能力差异只影响「谁来写」，不影响「怎么验」。
-- 无浏览器 runtime 的 UI 契约验证走 tests/qa/*.mjs headless 探针（断言 data-testid 与网络行为），不需要肉眼；「看渲染效果」才需要带浏览器的 runtime 或人类（仍用生产构建，见 §反模式）。
+- 视觉/UI 验证走仓库内 tests/qa/*.mjs headless 探针（断言 data-testid 与网络行为）+ 截图由多模态模型直读——默认态无浏览器工具不构成障碍（模型视觉能力 + 仓库内 Playwright 集成已覆盖）；禁的是不跑探针、不看截图的凭空「确认样式」（浏览器 QA 仍用生产构建，见 §本项目反模式）。
 - lib/game.ts / lib/store.ts 高危面任务优先派带 LSP 与完整测试工具面的 runtime，或由调度者代跑 on-demand 三层（coverage / mutation / property-based）；低能力 runtime 不得以「语法正确」宣布完成。
 - .omo/plans/ 设计记录先行 + wave 拆解与 wayfinder「地图 + 工单」同构：plan = 地图，wave/task = 工单；每个子任务新开干净 session（见 §herdr 多代理 session 卫生）。设计记录：.omo/plans/agent-runtime-boundaries.md。
 
