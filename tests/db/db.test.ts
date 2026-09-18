@@ -823,3 +823,254 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
 });
+
+// ── W1 (ulw-hotfix-db-schema-drift): legacy DB migration reconcile ──
+// Pre-W1 (ulw-name-login-one-truth) databases were bootstrapped by an
+// older version of getDb() whose CREATE TABLE IF NOT EXISTS did not
+// include the `name` column on game_stats and which spawned a separate
+// `solo_records` table. The current bootstrap DDL is a no-op on those
+// tables — getDb() now reconciles the schema on first connect so
+// fresh-session users inherit a working DB without manual intervention.
+//
+// Legacy physical shape (verified against data/scratch-test.db on
+// 2026-09-17, prior to W1):
+//   CREATE TABLE game_stats (
+//     id INTEGER PRIMARY KEY,
+//     total_games/x_wins/o_wins/draws/current_streak INTEGER NOT NULL DEFAULT 0,
+//     updated_at INTEGER NOT NULL
+//   );
+//   CREATE TABLE solo_records (
+//     name TEXT PRIMARY KEY,
+//     total_games/x_wins/o_wins/draws/current_streak INTEGER NOT NULL DEFAULT 0,
+//     updated_at INTEGER NOT NULL
+//   );
+
+describe('legacy DB migration (ulw-hotfix-db-schema-drift)', () => {
+  // Build a fresh legacy DB at a tmpfile path: matches the shape
+  // .env.local pointed to before W1 (no name column on game_stats, plus
+  // the standalone solo_records table). Pure raw client; lib/db.ts must
+  // not have been imported yet so the production bootstrap does not run.
+  const buildLegacyDb = async (filePath: string): Promise<void> => {
+    const { createClient } = await import('@libsql/client');
+    const client = createClient({ url: `file:${filePath}` });
+    try {
+      await client.executeMultiple(`
+        CREATE TABLE game_stats (
+          id INTEGER PRIMARY KEY,
+          total_games INTEGER NOT NULL DEFAULT 0,
+          x_wins INTEGER NOT NULL DEFAULT 0,
+          o_wins INTEGER NOT NULL DEFAULT 0,
+          draws INTEGER NOT NULL DEFAULT 0,
+          current_streak INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE solo_records (
+          name TEXT PRIMARY KEY,
+          total_games INTEGER NOT NULL DEFAULT 0,
+          x_wins INTEGER NOT NULL DEFAULT 0,
+          o_wins INTEGER NOT NULL DEFAULT 0,
+          draws INTEGER NOT NULL DEFAULT 0,
+          current_streak INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+      // Seed: id=1 ranked row with non-default counters + a solo_records
+      // row. Non-default values so a regression that drops the row or
+      // resets counters trips the assertion immediately.
+      const seedNow = Date.now();
+      await client.batch([
+        {
+          sql: `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          args: [1, 7, 3, 2, 2, -2, seedNow],
+        },
+        {
+          sql: `INSERT INTO solo_records (name, total_games, x_wins, o_wins, draws, current_streak, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          args: ['legacy-solo', 5, 2, 1, 2, 1, seedNow],
+        },
+      ], 'write');
+    } finally {
+      client.close();
+    }
+  };
+
+  let dir: string;
+  let legacyFile: string;
+
+  beforeEach(async () => {
+    dir = tmpDbDir();
+    legacyFile = path.join(dir, 'legacy.db');
+    await buildLegacyDb(legacyFile);
+    process.env.DATABASE_URL = `file:${legacyFile}`;
+    delete process.env.DATABASE_AUTH_TOKEN;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    try {
+      const { closeDb } = await import('@/lib/db');
+      await closeDb();
+    } catch {
+      /* module may not have loaded */
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_AUTH_TOKEN;
+  });
+
+  // ── red reproduction (proves the bug exists pre-fix; after the fix it
+  //    also serves as a regression guard so removing the reconcile
+  //    surfaces the column-missing failure rather than silently corrupting
+  //    data) ──
+  it('loadStats throws "no such column" on a legacy DB before reconcile', async () => {
+    // This test pins the bug as observed in
+    // .omo/plans/ulw-hotfix-db-schema-drift.md §0: legacy DB has no
+    // `name` column on game_stats. Pre-fix, drizzle's SELECT tripped
+    // "no such column: name" on the first loadStats. Post-fix, the
+    // reconcile adds the column before loadStats runs, so this assertion
+    // must pass (i.e. loadStats must NOT throw) to demonstrate the heal.
+    const { loadStats } = await import('@/lib/db');
+    await expect(loadStats()).resolves.toEqual({
+      totalGames: 7,
+      xWins: 3,
+      oWins: 2,
+      draws: 2,
+      currentStreak: -2,
+    });
+  });
+
+  // ── green migrations (each individually named) ──
+  it('reconcile preserves the seeded ranked row (id=1, totalGames=7)', async () => {
+    const { loadStats } = await import('@/lib/db');
+    const stats = await loadStats();
+    expect(stats).toEqual({
+      totalGames: 7,
+      xWins: 3,
+      oWins: 2,
+      draws: 2,
+      currentStreak: -2,
+    });
+  });
+
+  it('reconcile adds the `name` column with UNIQUE on game_stats', async () => {
+    const { loadStats } = await import('@/lib/db');
+    await loadStats();
+    const { createClient } = await import('@libsql/client');
+    const probe = createClient({ url: `file:${legacyFile}` });
+    try {
+      const cols = await probe.execute("SELECT name FROM pragma_table_info('game_stats')");
+      const names = cols.rows.map((row) => String(row.name));
+      expect(names).toContain('name');
+      // UNIQUE proof: two inserts under the same `name` must trip the
+      // SQLite UNIQUE constraint (the migration's CREATE TABLE included
+      // `name TEXT UNIQUE`, so this assertion verifies the column was
+      // created with its UNIQUE clause intact).
+      const insertDup = `INSERT INTO game_stats (id, total_games, x_wins, o_wins, draws, current_streak, name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+      await probe.execute({
+        sql: insertDup,
+        args: [99, 1, 1, 0, 0, 1, 'unique-a', 0],
+      });
+      let threw = false;
+      try {
+        await probe.execute({
+          sql: insertDup,
+          args: [100, 0, 0, 1, 0, -1, 'unique-a', 0],
+        });
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+    } finally {
+      probe.close();
+    }
+  });
+
+  it('reconcile drops the legacy solo_records table', async () => {
+    const { loadStats } = await import('@/lib/db');
+    await loadStats();
+    const { createClient } = await import('@libsql/client');
+    const probe = createClient({ url: `file:${legacyFile}` });
+    try {
+      const rs = await probe.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='solo_records'",
+      );
+      expect(rs.rows).toHaveLength(0);
+    } finally {
+      probe.close();
+    }
+  });
+
+  it('reconcile is idempotent: closeDb() + re-open still reports the seeded row', async () => {
+    const { loadStats, closeDb } = await import('@/lib/db');
+    await loadStats();
+    await closeDb();
+    // Second session: pragma_table_info already includes `name`, so the
+    // rebuild branch is skipped. Data must survive the close/reopen cycle.
+    const second = await loadStats();
+    expect(second).toEqual({
+      totalGames: 7,
+      xWins: 3,
+      oWins: 2,
+      draws: 2,
+      currentStreak: -2,
+    });
+    await closeDb();
+  });
+
+  it('reconciled DB schema equals a fresh-DB schema (no forked reality)', async () => {
+    // Phase 1 — legacy reconcile via lib/db.ts.
+    const { loadStats, closeDb } = await import('@/lib/db');
+    await loadStats();
+    const { createClient } = await import('@libsql/client');
+    const legacyProbe = createClient({ url: `file:${legacyFile}` });
+    let legacyCols: string[];
+    try {
+      const rs = await legacyProbe.execute(
+        "SELECT name FROM pragma_table_info('game_stats') ORDER BY cid",
+      );
+      legacyCols = rs.rows.map((row) => String(row.name));
+    } finally {
+      legacyProbe.close();
+    }
+    await closeDb();
+
+    // Phase 2 — bootstrap a fresh DB through lib/db.ts (no legacy state).
+    const freshFile = path.join(dir, 'fresh.db');
+    process.env.DATABASE_URL = `file:${freshFile}`;
+    vi.resetModules();
+    const { loadStats: loadFresh, closeDb: closeFresh } = await import('@/lib/db');
+    await loadFresh();
+    await closeFresh();
+    const freshProbe = createClient({ url: `file:${freshFile}` });
+    let freshCols: string[];
+    try {
+      const rs = await freshProbe.execute(
+        "SELECT name FROM pragma_table_info('game_stats') ORDER BY cid",
+      );
+      freshCols = rs.rows.map((row) => String(row.name));
+    } finally {
+      freshProbe.close();
+    }
+
+    // Restore env so afterEach cleans up the legacy client and rmSync
+    // does not race a cached connection on the fresh path.
+    process.env.DATABASE_URL = `file:${legacyFile}`;
+    vi.resetModules();
+    // Touch import so afterEach has a module reference to closeDb from.
+    await import('@/lib/db');
+
+    expect(legacyCols).toEqual(freshCols);
+    // Stronger than just "same set" — same ordinal positions. If the
+    // reconcile ever inserted `name` at a different cid, this assertion
+    // breaks immediately.
+    expect(legacyCols).toEqual([
+      'id',
+      'total_games',
+      'x_wins',
+      'o_wins',
+      'draws',
+      'current_streak',
+      'name',
+      'updated_at',
+    ]);
+  });
+});

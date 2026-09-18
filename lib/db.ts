@@ -142,6 +142,51 @@ export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
       updated_at INTEGER NOT NULL
     );
   `);
+  // Reconcile legacy schemas (ulw-hotfix-db-schema-drift W1).
+  // Pre-W1 (ulw-name-login-one-truth) bootstrap DDL did not include the
+  // `name` column on game_stats and also spawned a separate `solo_records`
+  // table. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing legacy
+  // table, so without this branch a fresh session would hit
+  // `no such column: "name"` on the first SELECT. `pragma_table_info`
+  // works identically on the local sqlite (file:) driver and the Turso
+  // HTTP (libsql://) driver — both speak SQLite under the hood and the
+  // pragma returns the actual columns the table holds. If the column is
+  // missing we rebuild the table inside a single transaction (CREATE →
+  // INSERT...SELECT shared cols → DROP → RENAME) and retire the orphan
+  // `solo_records` table; this is the only `getDb` path that touches the
+  // shape of `game_stats`, so the contract (single-row id=1 ranked,
+  // per-player rows under `name`) stays lock-step with `db/schema.ts`.
+  const probe = await cachedClient.execute(
+    "SELECT name FROM pragma_table_info('game_stats') WHERE name = 'name'",
+  );
+  if (probe.rows.length === 0) {
+    await cachedClient.batch(
+      [
+        `CREATE TABLE game_stats_new (
+           id INTEGER PRIMARY KEY,
+           total_games INTEGER NOT NULL DEFAULT 0,
+           x_wins INTEGER NOT NULL DEFAULT 0,
+           o_wins INTEGER NOT NULL DEFAULT 0,
+           draws INTEGER NOT NULL DEFAULT 0,
+           current_streak INTEGER NOT NULL DEFAULT 0,
+           name TEXT UNIQUE,
+           updated_at INTEGER NOT NULL
+         )`,
+        // Carry every legacy column except `name`. SQLite allows multiple
+        // NULLs under UNIQUE, so the ranked shared row keeps id=1
+        // (name=NULL) untouched and any future per-player row lands under
+        // its UNIQUE `name`.
+        `INSERT INTO game_stats_new (id, total_games, x_wins, o_wins, draws, current_streak, updated_at)
+           SELECT id, total_games, x_wins, o_wins, draws, current_streak, updated_at FROM game_stats`,
+        `DROP TABLE game_stats`,
+        `ALTER TABLE game_stats_new RENAME TO game_stats`,
+        // Retire the pre-W1 `solo_records` table — solo data migrated to
+        // game_stats under `name` since ulw-name-login-one-truth.
+        `DROP TABLE IF EXISTS solo_records`,
+      ],
+      'write',
+    );
+  }
   cachedDb = drizzle(cachedClient, { schema });
   return cachedDb;
 }
