@@ -9,6 +9,16 @@
 //      (xWins=1) and survives a reload via SoloStatsPanel.
 //   4. The local clear button empties the localStorage row instantly
 //      (panel follows) while the ranked (server) ledger is untouched.
+//   5. After the win, the page auto-switches from board to stats view
+//      within ≤2s (Ulw W3 result-paginated; view-toggle aria-pressed
+//      flips to true, [data-testid="solo-stats"] appears). The
+//      confetti mount target stays stable across the transition
+//      (Bug B). The stats view exposes 「再来一局」
+//      (data-testid="play-again-solo") which returns to the board
+//      with phase=idle for a new game (V3 supersedes the original
+//      "stats view has no restart button" assertion — the new
+//      affordance replaces it, see plan .omo/plans/ulw-ux-refresh-pass
+//      §3 W3).
 //
 // Usage:
 //   node tests/qa/solo-mode-qa.mjs          (needs pnpm build && pnpm start)
@@ -271,64 +281,96 @@ try {
     );
   });
 
-  // === W-A: Bug B stability (ulw-solo-sync-rebuild W-A, V1) ===
-  // After the win in step 07, toggle board→stats→board and assert
-  // [data-testid="confetti"] stays mounted exactly once (no
-  // unmount/remount across toggles).
-  await step("08 confetti span stays mounted across view toggles (Bug B)", async () => {
-    const before = await page.evaluate(() =>
-      document.querySelectorAll('[data-testid="confetti"]').length,
-    );
-    await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="solo-stats"]');
-    await page.waitForTimeout(150);
+  // === W3: auto-switch + Bug B stability (ulw-ux-refresh-pass §3 W3 + §5 A6/A7)
+  // After the win in step 07, the page itself (app/solo/page.tsx phase
+  // subscription) flips view from board→stats within ≤2s. The confetti
+  // span must stay mounted exactly once across the transition (Bug B:
+  // the celebration fires once per win, not once per view-toggle).
+  await step("08 auto-switch board→stats after win + confetti恒 1 (Bug B + W3 A6)", async () => {
+    // We're still on the board view right after step 07's win. The
+    // auto-switch timer (1200ms) should have either already fired or
+    // be in-flight; wait for solo-stats to appear within the A6 budget.
+    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+    // view-toggle aria-pressed must be true on the stats view (the
+    // toggle button drives the aria state in GameShell).
+    const pressed = await page.getAttribute('[data-testid="view-toggle"]', "aria-pressed");
+    assert.equal(pressed, "true", `expected view-toggle aria-pressed=true after auto-switch, got ${pressed}`);
+    // URL must NOT change — solo never navigates to /result.
+    assert.ok(page.url().endsWith("/solo"), `URL must stay on /solo after auto-switch, got ${page.url()}`);
+    // Confetti span still mounted exactly once on the stats view (Bug
+    // B stability — no remount, no second burst).
     const onStats = await page.evaluate(() =>
       document.querySelectorAll('[data-testid="confetti"]').length,
     );
+    assert.equal(onStats, 1, `expected confetti count 1 on auto-switched stats, got ${onStats}`);
+    // Now manually toggle back to board to prove the confetti count
+    // still stays at 1 — toggling must not retrigger the burst.
     await page.click('[data-testid="view-toggle"]');
     await page.waitForSelector('[data-testid="board"]');
     await page.waitForTimeout(150);
-    const after = await page.evaluate(() =>
+    const onBoard = await page.evaluate(() =>
       document.querySelectorAll('[data-testid="confetti"]').length,
     );
-    findings.push({ name: "confetti-mounts", before, onStats, after });
-    assert.equal(before, 1, `expected confetti count 1 on board, got ${before}`);
-    assert.equal(onStats, 1, `expected confetti count 1 on stats (no unmount), got ${onStats}`);
-    assert.equal(after, 1, `expected confetti count 1 back on board, got ${after}`);
+    findings.push({ name: "auto-switch+confetti", onStats, onBoard });
+    assert.equal(onBoard, 1, `expected confetti count 1 after manual toggle-back, got ${onBoard}`);
   });
 
-  // === W-A: A-T4 restart button conditional (V3) + Bug C height (V2) ===
-  // On the stats view, the restart button must NOT be in the DOM.
-  // On the board view, it must be present. Plus card height must stay
-  // stable across the two views (< 8px delta).
-  await step("09 restart button conditional + card height stable (V3 + V2)", async () => {
+  // === W3: A7 dual-view entry (replaces V3 statsRestart===0) + Bug C height (V2) ===
+  // The board view keeps its 重新开局 button (data-testid="restart"); the
+  // stats view exposes 再来一局 (data-testid="play-again-solo") which
+  // restarts the game (phase=idle) AND switches back to the board view.
+  // The legacy V3 assertion 「stats view has NO restart button」 is
+  // SUPERSEDED — the new affordance replaces it (see plan
+  // .omo/plans/ulw-ux-refresh-pass.md §3 W3 + §5 A7). The card-height
+  // stability (V2) assertion still holds across the larger stats-view
+  // action row (the Card itself pins minH="28rem" in app/solo/page.tsx).
+  await step("09 dual-view entry + card height stable (W3 A7 + V2)", async () => {
     await page.goto(`${BASE}/solo`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="view-toggle"]');
-    // board view: restart present, height measured
+    // board view: restart present, no play-again-solo (no win yet).
     const boardRestart = await page.locator('[data-testid="restart"]').count();
+    const boardPlayAgain = await page.locator('[data-testid="play-again-solo"]').count();
     const boardH = await page.evaluate(() => {
       const main = document.querySelector("main.page-shell");
       const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
       return card?.getBoundingClientRect().height ?? 0;
     });
-    // toggle to stats
-    await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="solo-stats"]');
-    await page.waitForTimeout(220);
+    assert.equal(boardRestart, 1, `expected 重新开局 on board view, got ${boardRestart}`);
+    assert.equal(boardPlayAgain, 0, `expected NO play-again-solo on idle board, got ${boardPlayAgain}`);
+    // Drive a top-row win so the page auto-switches to stats, then
+    // assert the play-again affordance exists in the result surface.
+    await driveTopRowWin(page, { clickGapMs: 50 });
+    await page.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+    await page.waitForSelector('[data-testid="play-again-solo"]', { timeout: 1500 });
     const statsRestart = await page.locator('[data-testid="restart"]').count();
+    const statsPlayAgain = await page.locator('[data-testid="play-again-solo"]').count();
+    const statsBackHome = await page.locator('[data-testid="back-home-solo"]').count();
     const statsH = await page.evaluate(() => {
       const main = document.querySelector("main.page-shell");
       const card = Array.from(main?.children ?? []).find((c) => c.classList.contains("rounded-lg"));
       return card?.getBoundingClientRect().height ?? 0;
     });
-    // toggle back to board
-    await page.click('[data-testid="view-toggle"]');
-    await page.waitForSelector('[data-testid="board"]');
+    assert.equal(statsRestart, 0, `expected NO 重新开局 on stats view (W3 A7), got ${statsRestart}`);
+    assert.equal(statsPlayAgain, 1, `expected play-again-solo on stats view (W3 A7), got ${statsPlayAgain}`);
+    assert.equal(statsBackHome, 1, `expected back-home-solo on stats view, got ${statsBackHome}`);
+    // Click 再来一局 — must return to board view with a fresh game
+    // (board testid present, status text is 轮到 / 准备开始).
+    await page.click('[data-testid="play-again-solo"]');
+    await page.waitForSelector('[data-testid="board"]', { timeout: 2000 });
+    const statusText = await page.textContent('[data-testid="status-text"]');
+    assert.match(
+      statusText ?? "",
+      /轮到|准备开始/,
+      `expected fresh-game status text after play-again, got "${statusText}"`,
+    );
     const boardRestartAgain = await page.locator('[data-testid="restart"]').count();
-    findings.push({ name: "restart-conditional", boardRestart, statsRestart, boardRestartAgain, boardH, statsH });
-    assert.equal(boardRestart, 1, `expected restart button on board view, got ${boardRestart}`);
-    assert.equal(statsRestart, 0, `expected NO restart button on stats view (V3 acceptance), got ${statsRestart}`);
-    assert.equal(boardRestartAgain, 1, `expected restart button back on board, got ${boardRestartAgain}`);
+    assert.equal(boardRestartAgain, 1, `expected 重新开局 back on board after play-again, got ${boardRestartAgain}`);
+    findings.push({
+      name: "dual-view-entry+A7",
+      boardRestart, boardPlayAgain, boardH,
+      statsRestart, statsPlayAgain, statsBackHome, statsH,
+      boardRestartAgain,
+    });
     const heightDelta = Math.abs(boardH - statsH);
     assert.ok(
       heightDelta < 8,

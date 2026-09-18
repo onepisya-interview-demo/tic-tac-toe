@@ -1,10 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { emptyStats, type GameStats } from '@/lib/game';
 import { loadSoloStats } from '@/lib/solo-stats';
 import { StatsGrid } from '@/components/ui/StatsGrid';
 import { ResetStatsButton } from '@/components/ResetStatsButton';
+
+type Props = {
+  /**
+   * Optional action row rendered below the local-clear button. /solo
+   * passes the result-view actions (再来一局 + 返回首页) so the user
+   * sees a coherent "leave or replay" affordance at the bottom of the
+   * same card they are reviewing data on. When omitted (legacy test
+   * renders, future non-result mounts), the panel renders only
+   * heading + StatsGrid + ResetStatsButton — the W2 pure-local contract.
+   */
+  actions?: ReactNode;
+};
 
 /**
  * Solo-mode stats surface on /solo. W2 pure-purification (ulw-name-login-one-truth.md §1 G1):
@@ -24,8 +36,15 @@ import { ResetStatsButton } from '@/components/ResetStatsButton';
  * clear. testid nodes the QA probes contract on (`solo-stats`,
  * `solo-stats-heading`, `stat-value`, `reset-solo-stats`) stay;
  * everything that gated on the removed network/sync paths is gone.
+ *
+ * W3 result-paginated (ulw-ux-refresh-pass §3): when the page passes an
+ * `actions` prop (only on the stats view after a win/draw), the panel
+ * renders the action row below ResetStatsButton so the user can play
+ * again or leave the route without scrolling. The actions are
+ * page-owned (the page wires restart() + setView('board')) to keep
+ * the panel agnostic of view state.
  */
-export function SoloStatsPanel() {
+export function SoloStatsPanel({ actions }: Props = {}) {
   const [stats, setStats] = useState<GameStats>(emptyStats);
 
   const refreshLocal = useCallback(() => {
@@ -53,6 +72,11 @@ export function SoloStatsPanel() {
       </div>
       <StatsGrid stats={stats} />
       <ResetStatsButton scope="local" onCleared={refreshLocal} />
+      {actions ? (
+        <div className="flex flex-col gap-3" data-testid="solo-result-actions">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }

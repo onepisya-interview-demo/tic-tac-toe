@@ -110,3 +110,41 @@ describe('components/SoloStatsPanel', () => {
   });
 });
 
+
+describe('components/SoloStatsPanel — W3 result actions prop', () => {
+  it('renders no actions row when the `actions` prop is omitted (legacy / pure-local mount)', () => {
+    render(<SoloStatsPanel />);
+    expect(screen.queryByTestId('solo-result-actions')).toBeNull();
+    expect(screen.queryByTestId('play-again-solo')).toBeNull();
+    expect(screen.queryByTestId('back-home-solo')).toBeNull();
+  });
+
+  it('renders the actions row when `actions` is provided (stats-view result surface)', () => {
+    render(
+      <SoloStatsPanel
+        actions={
+          <>
+            <button type="button" data-testid="play-again-solo">
+              再来一局
+            </button>
+            <span data-testid="back-home-solo">返回首页</span>
+          </>
+        }
+      />,
+    );
+    expect(screen.getByTestId('solo-result-actions')).toBeInTheDocument();
+    expect(screen.getByTestId('play-again-solo')).toBeInTheDocument();
+    expect(screen.getByTestId('back-home-solo')).toBeInTheDocument();
+  });
+
+  it('still hydrates from localStorage when actions are provided (result surface is not a re-mount trap)', () => {
+    seedSoloStats({ totalGames: 3, xWins: 2, oWins: 0, draws: 1, currentStreak: 1 });
+    render(
+      <SoloStatsPanel
+        actions={<button data-testid="play-again-solo">再来一局</button>}
+      />,
+    );
+    expect(panelValues()).toEqual(["3", "2", "0", "1", "X 连胜 1"]);
+    expect(screen.getByTestId('play-again-solo')).toBeInTheDocument();
+  });
+});

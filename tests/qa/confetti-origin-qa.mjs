@@ -201,17 +201,19 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
 }
 
 // ---------------------------------------------------------------------------
-// Bug B / V1 (ulw-solo-sync-rebuild W-A): on /solo, the view-toggle
-// (board↔stats) must NOT replay the win-confetti burst. Hoisted
-// SoloConfetti keeps the burst target stable across toggles; the only
-// acceptance is that [data-testid="confetti"] stays mounted exactly
-// once and the burst does not fire a second time.
+// Bug B / V1 (ulw-solo-sync-rebuild W-A) + W3 (ulw-ux-refresh-pass §3):
+// on /solo, both the manual view-toggle (board↔stats) AND the W3
+// auto-switch (phase→won ⇒ setView('stats') after 1.2s) must keep
+// [data-testid="confetti"] mounted exactly once — the burst fires once
+// per win, never replayed by view changes.
 //
-// Run shape: desktop viewport, drive top-row win on /solo, toggle to
-// stats, then back to board, assert confetti count == 1 at each
-// observation point. The count being 1 throughout (NOT 1→0→1 like the
-// pre-fix behaviour) is the load-bearing assertion — it proves the
-// hoisted mount target is stable.
+// Run shape: desktop viewport, drive top-row win on /solo, wait for
+// the W3 auto-switch to land on stats, then manually toggle back to
+// board, assert confetti count == 1 at each observation point. The
+// count being 1 throughout (NOT 1→0→1 like the pre-fix behaviour, and
+// NOT 1→2 like a stale auto-switch burst) is the load-bearing
+// assertion — it proves the hoisted mount target is stable and the
+// W3 phase subscription never retriggers burstConfetti().
 {
   const { browser: b2, ctx: c2, page: p2 } = await launchQA({
     viewport: { width: 1280, height: 900 },
@@ -239,16 +241,20 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
       findings.push({ name: 'solo-bugb-initial', status: 'INFO', ...before });
     });
 
-    await step('solo-bugb: toggle board→stats, confetti stays mounted (no unmount)', async () => {
-      await p2.click('[data-testid="view-toggle"]');
-      await p2.waitForSelector('[data-testid="solo-stats"]');
-      await p2.waitForTimeout(200);
+    await step('solo-bugb: W3 auto-switch lands on stats within ≤2s, confetti stays at 1', async () => {
+      // The phase→won trigger in app/solo/page.tsx schedules
+      // startTransition(setView('stats')) after WIN_AUTO_SWITCH_MS
+      // (1200ms). Wait for the stats view to mount; confetti count must
+      // still be 1 (Bug B + W3: stable mount target across auto-switch).
+      await p2.waitForSelector('[data-testid="solo-stats"]', { timeout: 2000 });
+      await p2.waitForTimeout(150);
       const onStats = await p2.evaluate(() => ({
         count: document.querySelectorAll('[data-testid="confetti"]').length,
       }));
       // Acceptance: count stays at 1. Pre-fix this was 0 (DOM unmounted
       // when view switched to stats) — the visual bug was the new
-      // mount on toggle-back firing burstConfetti() again.
+      // mount on toggle-back firing burstConfetti() again. Post-W3
+      // this also proves the auto-switch never replays the burst.
       assert.equal(onStats.count, 1, `expected confetti count 1 on stats (no unmount), got ${onStats.count}`);
       findings.push({ name: 'solo-bugb-onstats', status: 'INFO', ...onStats });
     });
