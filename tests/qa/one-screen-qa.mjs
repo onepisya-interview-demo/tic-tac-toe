@@ -70,15 +70,22 @@ async function main() {
 
   // 1. Home
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(220);
   await shoot(page, '01-home.png');
   report.stages.push({ stage: 'home', path: '/', ...await snapshot(page) });
 
-  // 2. /play — click start-game on home to navigate (preserves state flow)
+  // 2. /play — click start-online on home to navigate (preserves state flow).
+  // Seed a name so the W3 online entry gate passes.
+  await page.evaluate(() => {
+    window.localStorage.setItem("ttt.player.name.v1", "one-screen-qa-user");
+    window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
   await Promise.all([
     page.waitForURL(`${BASE}/play`),
-    page.click('[data-testid="start-game"]'),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
@@ -100,12 +107,21 @@ async function main() {
   report.stages.push({ stage: 'solo-stats', path: '/solo', ...await snapshot(page) });
 
   // 5. /result — drive a ranked win (top-row); records actual overshoot
-  // as INFO rather than failing on it.
-  await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+  // as INFO rather than failing on it. W3 /result is a per-name
+  // RSC reading the row from lib/db.ts:loadSoloRecord; navigation
+  // carries ?name=<player> (ResultNavigator pushes it).
+  //
+  // We navigate via the home start-online CTA so the page click
+  // carries the store-bound playerName forward (the W3 online
+  // entry gate requires it; doing a fresh page.goto to /play
+  // would lose the Zustand playerName hydration).
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.click('[data-testid="start-online"]');
+  await page.waitForURL(`${BASE}/play`);
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
-  await page.waitForURL(`${BASE}/result`);
-  await page.waitForSelector('[data-testid="result-headline"]');
+  await page.waitForURL(/\/result\?/);
+  await page.waitForSelector('[data-testid="result-page"]');
   await page.waitForTimeout(220);
   await shoot(page, '05-result.png');
   report.stages.push({ stage: 'result', path: '/result', ...await snapshot(page) });

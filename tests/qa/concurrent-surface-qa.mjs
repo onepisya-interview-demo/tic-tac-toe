@@ -61,7 +61,7 @@ async function deleteStats(page) {
 async function driveContext(ctx, label) {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.click('[data-testid="start-game"]');
+  await page.click('[data-testid="start-online"]');
   await page.waitForURL("**/play");
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);

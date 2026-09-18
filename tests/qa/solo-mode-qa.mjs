@@ -1,7 +1,7 @@
 // solo-mode-qa.mjs — Integration probe for the solo practice mode
 // (ulw-solo-mode-split-view-transitions C4). One real Chromium +
 // production build. Proves the solo contract end to end:
-//   1. Home renders the dual CTA (start-game + start-solo).
+//   1. Home renders the dual CTA (start-online + start-offline).
 //   2. A full solo game (forced X-first top-row win) issues ZERO write
 //      requests (POST /api/stats/outcome, PUT/DELETE /api/stats) and
 //      never navigates to /result — the ResultBanner mounts inline.
@@ -122,30 +122,52 @@ page.on("request", (req) => {
 });
 
 try {
-  await step("01 home dual CTA (start-game + start-solo)", async () => {
+  await step("01 home dual CTA (start-online + start-offline)", async () => {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="start-game"]');
-    await page.waitForSelector('[data-testid="start-solo"]');
+    await page.waitForSelector('[data-testid="start-online"]');
+    await page.waitForSelector('[data-testid="start-offline"]');
     // The testid sits on the <a> (Link) itself; the anchor must
     // carry href=/solo. (Previously sat on a child Button before
     // W1 added the intercept-handler refactor — selector updated.)
-    const soloHref = await page.getAttribute('[data-testid="start-solo"]', "href");
-    assert.equal(soloHref, "/solo", `expected start-solo link href=/solo, got ${soloHref}`);
+    const soloHref = await page.getAttribute('[data-testid="start-offline"]', "href");
+    assert.equal(soloHref, "/solo", `expected start-offline link href=/solo, got ${soloHref}`);
     await Promise.all([
       page.waitForURL("**/solo", { timeout: 6000 }),
-      page.click('[data-testid="start-solo"]'),
+      page.click('[data-testid="start-offline"]'),
     ]);
     await page.waitForSelector('[data-testid="board"]');
     assert.ok(page.url().endsWith("/solo"), `expected to land on /solo, got ${page.url()}`);
   });
 
-  await step("02 ranked ledger reset (baseline for isolation check)", async () => {
-    await deleteStats(page);
-    const stats = await getStats(page);
-    assert.equal(stats.totalGames, 0, `expected clean ranked ledger, got ${stats.totalGames}`);
+  await step("02 baseline: server reachable (no per-name row expected)", async () => {
+    // W1 retired /api/stats; W3 has no per-name DELETE so the
+    // isolation baseline is the empty per-name table (this probe
+    // uses /tmp/ulw-og2v/w3.db, recreated fresh per run). A bare
+    // GET on /api/sessions returning a list-shape 200 confirms
+    // the server is reachable; the rank / no-row assertion is
+    // implicit in the DB being unused.
+    const r = await page.evaluate(async (base) => {
+      const x = await fetch(`${base}/api/sessions`, { method: "GET", cache: "no-store" });
+      return x.status;
+    }, BASE);
+    // /api/sessions is POST-only in W2; GET may be 404 or 405 —
+    // either way the server is up. Accept anything in 2xx-4xx
+    // except 5xx (which would mean DB unreachable).
+    assert.ok(r < 500, `expected non-5xx server response, got ${r}`);
   });
 
   await step("03 solo win: zero write requests, inline banner, localStorage xWins=1", async () => {
+    // Seed the player name before driving the solo win — the W2
+    // pure-local contract (`store.ts:makeMove` isAnonymous guard)
+    // skips localStorage writes for anonymous offline play, so a
+    // name is required to exercise the offline accumulation path.
+    // Use localStorage (not the form) so the probe stays focused
+    // on the offline-mode contract; the form POST /api/sessions
+    // roundtrip is covered by home-return-qa.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "solo-mode-qa-user");
+    });
     soloWriteCount = 0;
     await openSoloAsXFirst(page);
     await driveTopRowWin(page);
@@ -227,22 +249,30 @@ try {
     await shoot(page, "solo-cleared.png");
   });
 
-  await step("06 ranked ledger untouched by the solo session", async () => {
+  await step("06 no per-name row mutated by the solo session", async () => {
+    // W1 retired the /api/stats chain. The solo session only
+    // wrote to localStorage (assertion above). This step pins the
+    // inverse: the server-side per-name row for the seeded name
+    // either does not exist (404 → stats: null) or is unchanged
+    // from the pre-session baseline. Either branch satisfies the
+    // "solo did not touch server-side state" contract.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="start-game"]');
-    const stats = await getStats(page);
-    assert.equal(
-      stats.totalGames,
-      0,
-      `ranked ledger changed during solo session: ${JSON.stringify(stats)}`,
-    );
-    const domTotal = await page
-      .locator('[data-testid="stat-value"]')
-      .first()
-      .getAttribute("data-value");
-    assert.equal(domTotal, "0", `expected home DOM total=0, got ${domTotal}`);
+    await page.waitForSelector('[data-testid="start-online"]');
+    const stats = await page.evaluate(async (base) => {
+      const r = await fetch(`${base}/api/players/solo-mode-qa-user/stats`, { cache: "no-store" });
+      if (r.status === 404) return null;
+      return await r.json();
+    }, BASE);
+    if (stats !== null) {
+      assert.equal(
+        stats.stats.totalGames,
+        0,
+        `per-name row changed during solo session: ${JSON.stringify(stats)}`,
+      );
+    }
     await shoot(page, "home-after-solo.png");
   });
+
 
   // === W-A: Bug C width stability (ulw-solo-sync-rebuild W-A, V2) ===
   // Drive a fresh solo win and measure view-toggle button width at

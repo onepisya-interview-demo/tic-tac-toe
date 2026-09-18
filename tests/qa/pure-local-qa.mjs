@@ -185,7 +185,7 @@ try {
     // declinedSentinel. StartGameButton's intercept is gone — "保留
     // 本地" is zero network writes + dialog close + manual nav.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="start-game"]');
+    await page.waitForSelector('[data-testid="start-online"]');
     writeCalls.length = 0;
 
     // The dialog auto-opens because pending = local.totalGames (3) - 0 = 3.
@@ -210,7 +210,7 @@ try {
     const declined = await page.evaluate(() => window.sessionStorage.getItem("ttt.solo.sync-declined.v1"));
     assert.equal(declined, "3", `sessionStorage declined sentinel must be 3 (got ${declined})`);
     // Manually navigate to /play to assert the navigation path still works.
-    await page.click('[data-testid="start-game"]');
+    await page.click('[data-testid="start-online"]');
     await page.waitForURL("**/play", { timeout: 4000 });
     await shoot(page, "A2a-after-reject-on-play.png");
   });
@@ -266,7 +266,7 @@ try {
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);
-    await page.click('[data-testid="start-game"]');
+    await page.click('[data-testid="start-online"]');
     await page.waitForURL("**/play", { timeout: 8000 });
     await page.waitForTimeout(400);
 
@@ -307,10 +307,10 @@ try {
     await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_SOLO_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), SYNCED_KEY);
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="start-game"]');
+    await page.waitForSelector('[data-testid="start-online"]');
 
     writeCalls.length = 0;
-    await page.click('[data-testid="start-game"]');
+    await page.click('[data-testid="start-online"]');
     // Wait briefly — the navigation must fire before any dialog can
     // appear. If the intercept were buggy, the dialog would mount
     // within ~50ms of the click.

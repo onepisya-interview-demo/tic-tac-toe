@@ -97,9 +97,14 @@ async function reloadSoloUntilXFirst(page, maxAttempts = 12) {
   throw new Error("could not get an X-first solo game within 12 attempts");
 }
 
-// Hard-reset the shared server row and the DB so / renders empty.
-async function resetServer(page) {
-  await page.request.delete(`${BASE}/api/sessions`);
+// Server reset helper.
+// W1 retired /api/stats; W2 ships POST /api/sessions with no DELETE
+// counterpart. The hermetic test DB lives at /tmp/ulw-og2v/w3.db
+// (recreated once per run), so steps that need a clean baseline
+// use unique names via seedSoloRowViaApi. This helper is now a
+// no-op for symmetry with the rest of the W3 probe surface.
+async function resetServer(_page) {
+  // intentionally empty — see comment above
 }
 
 async function seedSoloRowViaApi(ctx, name, stats) {
@@ -114,13 +119,17 @@ async function seedSoloRowViaApi(ctx, name, stats) {
   assert.equal(merge.status(), 200, `seed merge 200, got ${merge.status()}`);
 }
 
-await step("step 01 reset server + verify home empty-state visible", async () => {
+await step("step 01 reset server + verify home landing renders", async () => {
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="empty-state"]');
-    await shoot(page, "home-empty-warm.png");
+    // W1 retired empty-state testid; W3 landing renders the dual
+    // CTA + identity region instead. Verify the new surface.
+    await page.waitForSelector('[data-testid="start-online"]');
+    await page.waitForSelector('[data-testid="start-offline"]');
+    await page.waitForSelector('[data-testid="home-page"]');
+    await shoot(page, "home-landing-empty-warm.png");
     // No dialog on initial load (no pending games).
     assert.equal(
       await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
@@ -136,6 +145,12 @@ await step("step 02 solo → 回首页 + pending>0 → 弹框现 (A3 first branc
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
+    // Seed a name so the W2 pure-local 守卫 (store.ts:makeMove
+    // isAnonymous branch) actually writes to localStorage on win.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     // Play 1 solo game via UI on /solo.
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
@@ -160,8 +175,26 @@ await step("step 03 pending=0 首页直接起战不弹不拦 (A3 second branch)"
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // No pending → no dialog → click "开始对战" → navigates to /play.
+    // Seed the name via localStorage on the same origin so the
+    // page first frame carries the value. PlayerNameForm's mount
+    // effect (post-hydration) rehydrates the store from localStorage,
+    // which the StartGameButton's requireName gate reads.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+      window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    // Wait for the PlayerNameForm's post-hydration reverse hydration
+    // to set the store. The folded testid confirms it landed.
+    // Wait for the PlayerNameForm post-hydration reverse hydration
+    // to set the store. The folded testid (player-name-readonly)
+    // confirms it landed.
+    await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
+    await page.waitForFunction(
+      () => !!document.querySelector('[data-testid="player-name-readonly"]'),
+      { timeout: 4000 },
+    );
     assert.equal(
       await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
       0,
@@ -169,10 +202,10 @@ await step("step 03 pending=0 首页直接起战不弹不拦 (A3 second branch)"
     );
     await Promise.all([
       page.waitForURL(/\/play$/),
-      page.click('[data-testid="start-game"]'),
+      page.click('[data-testid="start-online"]'),
     ]);
     await page.waitForSelector('[data-testid="status-bar"]');
-    await shoot(page, "start-game-direct.png");
+    await shoot(page, "start-online-direct.png");
   } finally {
     await browser.close();
   }
@@ -182,7 +215,18 @@ await step("step 04 「保留本地」: 零网络写 + sessionStorage 标记写 
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
+    // Seed a name so the W2 pure-local 守卫 actually writes to
+    // localStorage on win.
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     // Seed 1 pending game.
+// Seed player name so W2 pure-local 守卫 writes localStorage.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
@@ -232,6 +276,11 @@ await step("step 05 同会话 pending 无增量不重弹 (含刷新) (A3 fourth 
   const { browser, ctx, page } = await launchQA();
   try {
     await resetServer(page);
+// Seed player name so W2 pure-local 守卫 writes localStorage.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
@@ -267,6 +316,11 @@ await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fi
   try {
     await resetServer(page);
     // 1 game → declined sentinel = 1.
+// Seed player name so W2 pure-local 守卫 writes localStorage.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.solo.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
@@ -277,6 +331,11 @@ await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fi
     await page.click('[data-testid="sync-confirm-reject"]');
     await page.waitForTimeout(200);
     // Play 1 more → pending=2 > declined=1 → re-opens.
+// Seed player name so W2 pure-local 守卫 writes localStorage.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForTimeout(200);
@@ -384,7 +443,9 @@ await step("step 08 fresh context B 玩 solo 从 0 独立累计 (A7 continuation
     await page.waitForSelector('[data-testid="online-stats-grid"]', {
       timeout: 4000,
     });
-    // Play 1 solo game — local starts at 0.
+    // Play 1 solo game — local starts at 0. PlayerNameForm's
+    // submit handler wrote `hrqa-${RUN_SUFFIX}-b` to localStorage
+    // above; nothing else needed.
     await reloadSoloUntilXFirst(page);
     const localBefore = await captureLocalStorage(page);
     const before = localBefore[LOCAL_SOLO_KEY] ? JSON.parse(localBefore[LOCAL_SOLO_KEY]) : null;
@@ -441,6 +502,11 @@ await step("step 09 (W2) logged-in user merge → online card updates ≤2s via 
     );
     assert.equal(initialOnline, "0", `online card initial = 0 (got ${initialOnline})`);
     // Play 1 solo game locally.
+// Seed player name so W2 pure-local 守卫 writes localStorage.
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => {
+      window.localStorage.setItem("ttt.player.name.v1", "home-return-qa-user");
+    });
     await reloadSoloUntilXFirst(page);
     await driveTopRowWin(page);
     await page.waitForFunction(
@@ -554,200 +620,26 @@ await step("step 10 (W2) window focus triggers online card refetch", async () =>
   }
 });
 
-await step("step 11 (W2) reset button: 文案 + caption + 公共清零 + online/solo 不变", async () => {
+await step("step 11 (W3) reset button + public ledger retired — verify clean home", async () => {
   const browser = await launchBrowser();
   try {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await resetServer(page);
-    const name = `w2-${RUN_SUFFIX}-reset`;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.fill('[data-testid="player-name-input"]', name);
-    await page.click('[data-testid="player-name-save"]');
-    await page.waitForSelector('[data-testid="online-stats-grid"]', {
-      timeout: 4000,
-    });
-    // External mutation: server solo row gets totalGames=7.
-    await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
-      data: {
-        stats: { totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: 1 },
-      },
-    });
-    // Force a focus refetch so the card reflects the 7 before reset.
-    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    let onlineVal = null;
-    const d1 = Date.now() + 3000;
-    while (Date.now() < d1) {
-      onlineVal = await page
-        .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
-        .first()
-        .getAttribute("data-value");
-      if (onlineVal === "7") break;
-      await page.waitForTimeout(100);
-    }
-    assert.equal(onlineVal, "7", `online card shows 7 before reset (got ${onlineVal})`);
-    // Put localStorage solo stats to 3 games + write the declined
-    // sentinel BEFORE reload so HomeDialogMount does not auto-open
-    // the sync-confirm dialog (pending=3 > declined=0 would open it
-    // and intercept the reset-button click that this step verifies).
-    // The sentinel matches what the user would have written if they
-    // picked "保留本地" on a previous home-return — it is the
-    // production way to suppress the dialog without losing data.
-    await page.evaluate(
-      ([soloKey, sentinelKey]) => {
-        window.localStorage.setItem(
-          soloKey,
-          JSON.stringify({
-            totalGames: 3,
-            xWins: 2,
-            oWins: 1,
-            draws: 0,
-            currentStreak: 1,
-          }),
-        );
-        window.sessionStorage.setItem(sentinelKey, "3");
-      },
-      ["ttt.solo.stats.v1", "ttt.solo.sync-declined.v1"],
-    );
-    // Seed 公共 row (id=1) with non-zero stats.
-    const put = await page.request.put(`${BASE}/api/stats`, {
-      data: { totalGames: 4, xWins: 2, oWins: 1, draws: 1, currentStreak: 1 },
-    });
-    assert.equal(put.status(), 200, `seed public 200 (got ${put.status()})`);
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="online-stats-grid"]', { timeout: 4000 });
-    // Dialog should be suppressed (declined sentinel == pending).
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "sync dialog suppressed by declined sentinel before reload",
-    );
-    // Public row totalGames before reset = 4.
-    const pubBefore = await page
-      .locator('[data-testid="stat-value"]')
-      .first()
-      .getAttribute("data-value");
-    assert.equal(pubBefore, "4", `public row before reset = 4 (got ${pubBefore})`);
-    // W2 caption + button text assertions (these FAIL pre-fix).
-    const resetBtn = page.locator('[data-testid="reset-stats"]');
-    const btnText = (await resetBtn.textContent()) ?? "";
-    assert.ok(
-      btnText.includes("重置对战战绩"),
-      `reset button text contains '重置对战战绩' (got ${JSON.stringify(btnText)})`,
-    );
-    const btnAria = await resetBtn.getAttribute("aria-label");
-    assert.equal(
-      btnAria,
-      "重置对战战绩",
-      `reset button aria-label = '重置对战战绩' (got ${JSON.stringify(btnAria)})`,
-    );
-    const captionCount = await page
-      .locator('[data-testid="reset-stats-caption"]')
-      .count();
-    assert.ok(
-      captionCount > 0,
-      `reset button caption element present (got ${captionCount})`,
-    );
-    const captionText =
-      (await page
-        .locator('[data-testid="reset-stats-caption"]')
-        .first()
-        .textContent()) ?? "";
-    assert.ok(
-      captionText.includes("仅清零双人公共战绩"),
-      `caption text contains scope note (got ${JSON.stringify(captionText)})`,
-    );
-    // Capture localStorage solo before reset.
-    const soloBefore = await captureLocalStorage(page);
-    assert.ok(
-      soloBefore[LOCAL_SOLO_KEY],
-      `localStorage ${LOCAL_SOLO_KEY} present before reset`,
-    );
-    // Capture network writes around the reset click so a silent failure
-    // (e.g. request blocked by an open modal) shows up in the log.
-    const writesAroundReset = [];
-    const onReq = (req) => {
-      if (isWriteToApi(req.method(), req.url())) {
-        writesAroundReset.push({ method: req.method(), url: req.url() });
-      }
-    };
-    page.on("request", onReq);
-    // Click reset. The handler awaits DELETE /api/stats then
-    // router.refresh(); wait for the page to reload via
-    // waitForResponse so we know the RSC re-render actually fired
-    // before reading values.
-    const [resp] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes("/api/stats") && r.request().method() === "DELETE",
-        { timeout: 6000 },
-      ),
-      resetBtn.click(),
-    ]);
-    assert.equal(
-      resp.status(),
-      200,
-      `DELETE /api/stats 200 (got ${resp.status()})`,
-    );
-    page.off("request", onReq);
-    // Wait for the RSC refresh (GET / returns the cleared row).
-    await page.waitForResponse(
-      (r) => r.url().endsWith("/") && r.request().resourceType() === "document",
-      { timeout: 6000 },
-    ).catch(() => { /* document may not be re-fetched if Next reuses the shell */ });
-    await page.waitForLoadState("networkidle");
-    // Poll up to 3s for the public row's first stat-value to become 0.
-    let pubValues = null;
-    const deadline = Date.now() + 3000;
-    while (Date.now() < deadline) {
-      pubValues = await page.$$eval(
-        '[data-testid="stat-value"]',
-        (els) =>
-          els.slice(0, 5).map((e) => e.getAttribute("data-value") ?? ""),
-      );
-      if (
-        pubValues[0] === "0" &&
-        pubValues[1] === "0" &&
-        pubValues[2] === "0" &&
-        pubValues[3] === "0" &&
-        pubValues[4] === "—"
-      ) break;
-      await page.waitForTimeout(100);
-    }
-    assert.deepEqual(
-      pubValues,
-      ["0", "0", "0", "0", "—"],
-      `public row cleared to zeros (got ${JSON.stringify(pubValues)})`,
-    );
-    assert.ok(
-      writesAroundReset.some(
-        (w) => w.method === "DELETE" && w.url.includes("/api/stats"),
-      ),
-      `DELETE /api/stats request was emitted (got ${JSON.stringify(writesAroundReset)})`,
-    );
-    // Online card unchanged (still 7).
-    const onlineAfter = await page
-      .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
-      .first()
-      .getAttribute("data-value");
-    assert.equal(
-      onlineAfter,
-      "7",
-      `online card unchanged after reset (got ${onlineAfter})`,
-    );
-    // localStorage solo unchanged (still 3 games).
-    const soloAfter = await captureLocalStorage(page);
-    const parsed = JSON.parse(soloAfter[LOCAL_SOLO_KEY]);
-    assert.equal(
-      parsed.totalGames,
-      3,
-      `localStorage solo unchanged after reset (got ${parsed.totalGames})`,
-    );
-    await shoot(page, "home-after-reset-scope.png");
-    await ctx.close();
+    // W1 retired /api/stats; W4 moved ResetStatsButton to /solo
+    // (scope='local'). The home page therefore carries neither.
+    // Pin the W3 contract: the reset button testid is NOT on /.
+    const resetCount = await page.locator('[data-testid="reset-stats"]').count();
+    assert.equal(resetCount, 0, `reset-stats testid absent on / (got ${resetCount})`);
+    // Public ledger endpoints are 404.
+    const put = await page.request.put(`${BASE}/api/stats`, { data: {} });
+    assert.equal(put.status(), 404, `legacy /api/stats PUT 404 (got ${put.status()})`);
+    await shoot(page, "home-no-reset-no-public.png");
   } finally {
     await browser.close();
   }
 });
+
 
 await writeQaLog(EVIDENCE, {
   test: "home-return-qa",

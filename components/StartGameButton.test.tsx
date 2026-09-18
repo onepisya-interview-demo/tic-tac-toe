@@ -39,8 +39,8 @@ vi.mock('next/link', () => ({
 
 // Mock next/navigation so StartGameButton's useRouter() doesn't blow up
 // in jsdom (which has no app router mounted). The router's push() is a
-// no-op here — the test cares about the click → startGame(mode) contract,
-// not Next.js routing.
+// no-op here — the test cares about the click → startGame(mode) + gate
+// contract, not Next.js routing.
 const routerPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: routerPush }),
@@ -66,40 +66,91 @@ afterEach(() => {
   useGameStore.getState().__resetInternalForTests();
 });
 
-describe('components/StartGameButton (parameterized CTA)', () => {
+describe('components/StartGameButton (W3 landing CTAs)', () => {
   it('renders href, label, variant and the caller testid', () => {
     render(
-      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-solo" />,
+      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-offline" />,
     );
-    // W1: the testid now sits on the Link (<a>) itself — the dialog
-    // and intercept logic attach directly to the anchor so probe
-    // selectors like [data-testid="start-solo"] land on the link.
-    const link = screen.getByTestId('start-solo');
+    // W3 testid lands on the <a> directly (W1 contract preserved).
+    const link = screen.getByTestId('start-offline');
     expect(link.tagName).toBe('A');
     expect(link).toHaveAttribute('href', '/solo');
     expect(link).toHaveClass('flex-1');
     expect(link).toHaveTextContent('单机练习');
   });
 
-  it('starts an online game on the /play CTA (default mode contract unchanged)', async () => {
+  it('offline CTA passes through without a name (pure-local contract preserved)', async () => {
     const user = userEvent.setup();
     render(
-      <StartGameButton href="/play" label="开始对战" mode="online" variant="primary" testid="start-game" />,
+      <StartGameButton href="/solo" label="单机练习 · 离线可玩" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
     );
-    await user.click(screen.getByTestId('start-game'));
+    await user.click(screen.getByTestId('start-offline'));
+    expect(routerPush).toHaveBeenCalledWith('/solo');
+    const s = useGameStore.getState();
+    expect(s.mode).toBe('offline');
+    expect(s.phase).toBe('playing');
+  });
+
+  it('online CTA starts an online game and navigates when playerName is set', async () => {
+    const user = userEvent.setup();
+    useGameStore.setState({ playerName: 'alice' });
+    render(
+      <StartGameButton href="/play" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
+    );
+    await user.click(screen.getByTestId('start-online'));
+    expect(routerPush).toHaveBeenCalledWith('/play');
     const s = useGameStore.getState();
     expect(s.mode).toBe('online');
     expect(s.phase).toBe('playing');
   });
 
-  it('starts an offline game on the /solo CTA', async () => {
+  it('online CTA blocks navigation + dispatch ttt:player-name-required when playerName is empty', async () => {
     const user = userEvent.setup();
-    render(
-      <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-solo" />,
-    );
-    await user.click(screen.getByTestId('start-solo'));
-    const s = useGameStore.getState();
-    expect(s.mode).toBe('offline');
-    expect(s.phase).toBe('playing');
+    const dispatchSpy = vi.fn();
+    const originalDispatch = window.dispatchEvent;
+    window.dispatchEvent = ((event: Event) => {
+      dispatchSpy(event);
+      return originalDispatch.call(window, event);
+    }) as typeof window.dispatchEvent;
+    try {
+      render(
+        <StartGameButton href="/play" label="在线对战 · 战绩实时云端" mode="online" variant="primary" testid="start-online" />,
+      );
+      await user.click(screen.getByTestId('start-online'));
+      expect(routerPush).not.toHaveBeenCalled();
+      const s = useGameStore.getState();
+      expect(s.phase).toBe('idle');
+      expect(s.mode).toBe('online');
+      // CustomEvent (not the synthetic re-throw) lands once.
+      const required = dispatchSpy.mock.calls
+        .map((c) => c[0] as Event)
+        .filter((e) => e.type === 'ttt:player-name-required');
+      expect(required).toHaveLength(1);
+    } finally {
+      window.dispatchEvent = originalDispatch;
+    }
+  });
+
+  it('offline CTA ignores an empty playerName and never requires a name', async () => {
+    const user = userEvent.setup();
+    const dispatchSpy = vi.fn();
+    const originalDispatch = window.dispatchEvent;
+    window.dispatchEvent = ((event: Event) => {
+      dispatchSpy(event);
+      return originalDispatch.call(window, event);
+    }) as typeof window.dispatchEvent;
+    try {
+      render(
+        <StartGameButton href="/solo" label="单机练习" mode="offline" variant="secondary" testid="start-offline" requireName={false} />,
+      );
+      await user.click(screen.getByTestId('start-offline'));
+      expect(routerPush).toHaveBeenCalledWith('/solo');
+      const required = dispatchSpy.mock.calls
+        .map((c) => c[0] as Event)
+        .filter((e) => e.type === 'ttt:player-name-required');
+      expect(required).toHaveLength(0);
+    } finally {
+      window.dispatchEvent = originalDispatch;
+    }
   });
 });

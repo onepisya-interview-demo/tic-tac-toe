@@ -46,7 +46,7 @@ await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => window.localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0', `expected '0' after unmute, got ${mutedFlag}`);
 
-await page.click('[data-testid="start-game"]');
+await page.click('[data-testid="start-online"]');
 await page.waitForURL('**/play');
 await page.waitForSelector('[data-testid="board"]');
 

@@ -255,7 +255,7 @@ try {
   // ────────────────────────────────────────────────────────────────
   await step('05 ranked ledger untouched by solo session (W2 contract)', async () => {
     await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('[data-testid="start-game"]');
+    await page.waitForSelector('[data-testid="start-online"]');
     const stats = await getStats(page);
     assert.equal(stats.totalGames, 0, `ranked ledger changed during solo: ${JSON.stringify(stats)}`);
   });

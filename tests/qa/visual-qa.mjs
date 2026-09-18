@@ -99,7 +99,15 @@ async function mobileOverflow(page) {
 async function desktopPass(page, shoot, log) {
   // ---- 1. Home / ----
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  // Seed a player name so the W3 online entry gate (StartGameButton
+  // requireName=true default for online) passes.
+  await page.evaluate(() => {
+    window.localStorage.setItem("ttt.player.name.v1", "visual-qa-user");
+    window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
+  await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(300); // settle font preload
   const homeShot = await shoot(page, '01-home.png');
   const homeSnap = await snapshot(page);
@@ -108,7 +116,7 @@ async function desktopPass(page, shoot, log) {
   // ---- 2. Click 开始游戏 → /play ----
   await Promise.all([
     page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
-    page.click('[data-testid="start-game"]'),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(200);
@@ -119,8 +127,8 @@ async function desktopPass(page, shoot, log) {
   // ---- 3. Play a winning game: whoever goes first wins the top row ----
   // (First player is randomized; driveTopRowWin adapts to either.)
   await driveTopRowWin(page);
-  await page.waitForURL(`${BASE}/result`, { timeout: 5000 });
-  await page.waitForSelector('[data-testid="result-headline"]');
+  await page.waitForURL(/\/result\?/, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="result-page"]');
   await page.waitForTimeout(300);
   const resultShot = await shoot(page, '03-result.png');
   const resultSnap = await snapshot(page);
@@ -128,15 +136,15 @@ async function desktopPass(page, shoot, log) {
 
   // ---- 4. Reload home to verify stats persisted via DB ----
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(300);
   const reloadShot = await shoot(page, '04-home-after-game.png');
   const reloadSnap = await snapshot(page);
   log.push({ stage: 'home-after-game', shot: reloadShot, snapshot: reloadSnap });
 
-  // ---- 5. Verify API stats endpoint ----
+  // ---- 5. Verify API stats endpoint (W2 per-name endpoint) ----
   const apiResp = await page.evaluate(async () => {
-    const r = await fetch('/api/stats');
+    const r = await fetch('/api/players/visual-qa-user/stats', { cache: 'no-store' });
     return { status: r.status, body: await r.json() };
   });
   log.push({ stage: 'api-stats', response: apiResp });
@@ -144,7 +152,7 @@ async function desktopPass(page, shoot, log) {
   // ---- 6. Play again flow ----
   await Promise.all([
     page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
-    page.click('[data-testid="start-game"]'),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(200);
@@ -179,7 +187,7 @@ async function mobilePass(page, shoot, log) {
   // Home: reset stats first so we capture a clean empty-state home.
   await page.request.delete(`${BASE}/api/stats`);
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(220);
   await shoot(page, 'm1-home.png');
   const homeOverflow = await mobileOverflow(page);
@@ -188,7 +196,7 @@ async function mobilePass(page, shoot, log) {
   // /play
   await Promise.all([
     page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
-    page.click('[data-testid="start-game"]'),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(220);
@@ -213,13 +221,16 @@ async function mobilePass(page, shoot, log) {
   stages.push({ stage: 'm-solo-stats', overflow: soloStatsOverflow });
 
   // /result — drive a ranked win on /play then navigate. The previous
-  // step left us on /solo (stats view) which has no start-game button,
-  // so navigate directly via goto rather than click.
-  await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+  // step left us on /solo (stats view) which has no start-online button,
+  // so go via home (carry the store-bound playerName) rather than
+  // direct goto (would lose the Zustand hydration).
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.click('[data-testid="start-online"]');
+  await page.waitForURL(`${BASE}/play`, { timeout: 5000 });
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
-  await page.waitForURL(`${BASE}/result`, { timeout: 5000 });
-  await page.waitForSelector('[data-testid="result-headline"]');
+  await page.waitForURL(/\/result\?/, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="result-page"]');
   await page.waitForTimeout(300);
   await shoot(page, 'm4-result.png');
   const resultOverflow = await mobileOverflow(page);

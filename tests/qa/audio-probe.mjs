@@ -20,7 +20,7 @@ assert.equal(mutedFlag, '0');
 
 // 2. Navigate to /play (this reloads the page, so install the probe
 //    AFTER navigation — the mute flag is in localStorage so it persists).
-await page.click('[data-testid="start-game"]');
+await page.click('[data-testid="start-online"]');
 await page.waitForURL('**/play');
 await page.waitForSelector('[data-testid="board"]');
 await page.waitForTimeout(200);

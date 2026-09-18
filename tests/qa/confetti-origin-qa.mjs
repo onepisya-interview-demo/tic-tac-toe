@@ -148,7 +148,7 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
 
     await step(`${name}: drive a win into /result`, async () => {
       await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-      await page.click('[data-testid="start-game"]');
+      await page.click('[data-testid="start-online"]');
       await page.waitForURL('**/play');
       await page.waitForSelector('[data-testid="board"]');
       await page.waitForTimeout(300);
