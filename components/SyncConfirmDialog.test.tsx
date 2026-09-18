@@ -13,7 +13,7 @@ import { SyncConfirmDialog } from './SyncConfirmDialog';
 //  - 名字非法时主 CTA disabled (legacy contract)
 //  - P1-5 新分支 (ulw §5 A12): pending>0 → open=true 时弹框出现;
 //    「保留本地」零网络写 + 写 sessionStorage 标记;
-//    「合并并清空」成功 → onConfirm(name, mergedStats) 收到合并行;
+//    「合并并清空」成功 → onConfirm(name) 收到 name（merged row 由 dialog 自用 — W4 F1 fix）;
 //    fetch 失败 → dialog 不关不触发 onConfirm.
 //
 // Network stubs: postPlayerSession returns {stats, existed:false};
@@ -145,7 +145,12 @@ describe('components/SyncConfirmDialog', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('「合并并清空」成功：onConfirm 收到 (trim-name, merged-row)，并按序触发 postPlayerSession + postSoloSync', async () => {
+  it('「合并并清空」成功：onConfirm 收到 trim-name，并按序触发 postPlayerSession + postSoloSync', async () => {
+    // W4 F1 fix: the dialog's onConfirm now only forwards the chosen
+    // name. The merged row is still returned by runMergeSequence
+    // internally for symmetry / future callers, but the contract
+    // HomeDialogMount consumes is name-only (the baseline sentinel
+    // it writes is always 0, derived from clearSoloStats()).
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -161,13 +166,7 @@ describe('components/SyncConfirmDialog', () => {
     await user.type(screen.getByTestId('sync-confirm-name'), '   carol   ');
     await user.click(screen.getByTestId('sync-confirm-confirm'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
-    expect(onConfirm).toHaveBeenCalledWith('carol', {
-      totalGames: 3,
-      xWins: 2,
-      oWins: 0,
-      draws: 1,
-      currentStreak: 2,
-    });
+    expect(onConfirm).toHaveBeenCalledWith('carol');
     const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
     expect(urls).toContain('/api/player-session');
     expect(urls).toContain('/api/solo-stats/sync');

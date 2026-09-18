@@ -247,7 +247,23 @@ try {
     // immutable cache (or the local Next start) satisfies the request
     // directly, the SW stays out of the way, and the preload entry is
     // consumed by the matching @font-face.
-    const fontUrl = "http://localhost:3000/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2";
+    // F5 (W4): read the actual font URL from the page preload link
+    // so the probe works against any BASE_URL (default :3000 in dev,
+    // :3101 in QA). The hash probe is the source of truth for which
+    // asset to inspect; the origin was hard-coded before and would
+    // always FAIL on :3101.
+    const fontUrl = await page.evaluate((base) => {
+      const link = document.querySelector('link[rel="preload"][as="font"]');
+      if (link) {
+        const href = link.getAttribute('href') ?? '';
+        if (href.startsWith('http')) return href;
+        return new URL(href, base).toString();
+      }
+      // Fall back to the production hash if the page has no preload
+      // link (older builds / font preloads disabled). Source of
+      // truth: production HTML observed at commit 31d56f6.
+      return `${base}/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2`;
+    }, BASE);
     let fromSw = null;
     let status = null;
     const onResp = async (resp) => {

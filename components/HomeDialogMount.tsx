@@ -10,14 +10,12 @@ import {
 } from '@/components/SyncConfirmDialog';
 import { useGameStore } from '@/lib/store';
 import {
+  SOLO_LAST_MERGED_LOCAL_KEY,
   SOLO_STATS_KEY,
-  SOLO_SYNCED_SERVER_KEY,
   clearSoloStats,
-  loadSyncedServerTotal,
   pendingSyncCount,
-  persistSyncedServerTotal,
+  persistLastMergedLocal,
 } from '@/lib/solo-stats';
-import type { GameStats } from '@/lib/game';
 
 /**
  * Home-return sync dialog mount
@@ -25,9 +23,17 @@ import type { GameStats } from '@/lib/game';
  *
  * The home page renders this client component once. Its mount effect
  * decides whether to open the SyncConfirmDialog based on:
- *   pending = max(0, local.totalGames - synced_server_total)
+ *   pending = max(0, local.totalGames - lastMergedLocal)
  *   declined = sessionStorage[ttt.solo.sync-declined.v1]
  *   → open when pending > declined (D3 决策 + A3 验收)
+ *
+ * W4 F1: the `lastMergedLocal` baseline is 0 right after a successful
+ * merge (clearSoloStats() already ran), so `pending === local`. The
+ * dialog text "本机 N 局" therefore always matches the snapshot
+ * that postSoloSync will actually send. (Pre-F1 the sentinel stored
+ * the server's absolute totalGames, leaving a catch-up window where
+ * pending < local and the text under-reported the payload — see
+ * V4 MINOR-F1 and lib/solo-stats.ts:SOLO_LAST_MERGED_LOCAL_KEY.)
  *
  * Trigger coverage (A3 / B-T4):
  *  - Initial mount after a soft-navigation return to `/` (Next App
@@ -72,7 +78,7 @@ export function HomeDialogMount() {
     const onStorage = (e: StorageEvent): void => {
       if (
         e.key === SOLO_STATS_KEY ||
-        e.key === SOLO_SYNCED_SERVER_KEY
+        e.key === SOLO_LAST_MERGED_LOCAL_KEY
       ) {
         evaluate();
       }
@@ -95,20 +101,18 @@ export function HomeDialogMount() {
     setOpen(false);
   }
 
-  async function handleConfirm(
-    name: string,
-    mergedStats: GameStats,
-  ): Promise<void> {
+  async function handleConfirm(name: string): Promise<void> {
     // SyncConfirmDialog has already completed the postPlayerSession +
     // postSoloSync sequence and forwarded the server-merged row.
-    // Here we adopt the sentinel so the next home-return has
-    // pending = 0 and won't re-open the dialog.
-    const previousSynced = loadSyncedServerTotal();
-    const expectedSynced = previousSynced + (mergedStats.totalGames - previousSynced);
-    // Use the server-merged totalGames directly — the server is
-    // authoritative for the post-sync sentinel value.
-    void expectedSynced;
-    persistSyncedServerTotal(mergedStats.totalGames);
+    // The F1 baseline model (W4) sets the post-merge local baseline
+    // to 0, the canonical value right after clearSoloStats() runs.
+    // pendingSyncCount() now reads this baseline, so the next
+    // home-return has pending = local - 0 = local — the dialog
+    // text "本机 N 局" always matches the data the next merge
+    // would actually send. (Pre-F1 the sentinel stored the server's
+    // absolute totalGames, leaving a catch-up window where the
+    // text under-reported the payload — see V4 MINOR-F1.)
+    persistLastMergedLocal(0);
     clearSoloStats();
     clearDeclinedPending();
     setOpen(false);

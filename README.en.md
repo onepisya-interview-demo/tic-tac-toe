@@ -43,12 +43,19 @@ Turso HTTP on Vercel).
   (pass-and-play), scores persist server-side; **solo** — single-player
   practice, **100% local** regardless of whether you set a player
   name. The store never auto-POSTs an outcome; `localStorage` is the
-  only write path. Saving a name (`PUT /api/solo-stats`) merely
-  registers an empty row on the server so a future device can pull
-  stats back; merging local results to the server is **explicit** —
-  press "sync" on `/solo`, or click "start" on the home page while
-  local is ahead and confirm the merge dialog. Concurrent same-name
-  writes are last-write-wins.
+  only write path. Identity is registration or login: saving a name
+  POSTs to `/api/player-session` and the server returns
+  `{stats, existed}` — `existed:false` means fresh registration,
+  `existed:true` means same-name login (the name row is permanently
+  bound; UNIQUE constraint + no rename endpoint are belt-and-braces).
+  Cross-device merging is **explicit** — return to the home page with
+  unsynced games and confirm the "合并战绩 / 合并并清空" dialog
+  (driven by `HomeDialogMount`'s pathname / focus / visibility /
+  storage event listeners; `pendingSyncCount() > declinedSentinel`
+  opens the dialog, otherwise the home page stays silent). `/solo`
+  is pure-local: no name form, no sync button, no `PlayerNameForm`
+  — start-game clicks navigate directly. Concurrent same-name writes
+  are last-write-wins per-field accumulation.
 - 💾 **Score persistence (ranked)**: wins / losses / draws / streaks land in
   a single-row `game_stats` table — file: sqlite locally, Turso HTTP on
   Vercel (@libsql/client).
@@ -77,16 +84,17 @@ Turso HTTP on Vercel).
 | --- | --- |
 | `/` | Home: stats card + start game + reset stats |
 | `/play` | Game: 3x3 board + current player indicator + restart |
-| `/solo` | Solo practice: 3x3 board + solo stats panel (named → 100% local, no auto-POST; manual "sync" button or home-page intercept dialog merges to server on user intent) + clear local stats |
+| `/solo` | Solo practice: 3x3 board + solo stats panel (named / unnamed → 100% local, zero network writes; cross-device merge via `HomeDialogMount` dialog on home page; no sync button) + clear local stats |
 | `/result` | Result: outcome + play again + back home + reset stats |
 | `GET /api/stats` | Read stats (Node runtime) |
 | `PUT /api/stats` | Write stats seed / admin (@deprecated; clients use POST outcome) |
 | `DELETE /api/stats` | Reset stats |
 | `POST /api/stats/outcome` | Client submits an outcome: body `{outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
 | `GET /api/solo-stats?name=...` | Read per-name solo stats (row missing → `{stats:null}`) |
-| `PUT /api/solo-stats` | Save name = upsert empty row: body `{name}` idempotent → 200 `{stats:GameStats}` |
-| `POST /api/solo-stats` | Per-outcome accumulation (endpoint retained; client no longer auto-calls): body `{name, outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}`. Pure-local clients reach the server only via `/sync`. |
-| `POST /api/solo-stats/sync` | Cross-device merge: body `{name, stats:GameStats}` → server reads, per-field sums, upserts → 200 `{stats:GameStats}` (must be triggered from the merge-confirm dialog; no silent "POST while I'm at it") |
+| `PUT /api/solo-stats` | **Retired (405)**: idempotent save-name bootstrap replaced by `POST /api/player-session` |
+| `POST /api/solo-stats` | **Retired (405)**: per-outcome accumulation endpoint removed (client no longer auto-POSTs); only `POST /sync` is in the merge path |
+| `POST /api/player-session` | Register / login: body `{name}` → 200 `{stats:GameStats, existed:boolean}` (fresh name = `existed:false`, creates an empty row; existing name = `existed:true`, login; `name` column is UNIQUE with no rename endpoint) |
+| `POST /api/solo-stats/sync` | Cross-device merge: body `{name, stats:GameStats}` → server first calls `loadSoloRecord(name)` (row missing → 409 anti-silent-create, caller must have hit `/api/player-session` first), then `accumulateMergeStats` per-field sums, upserts → 200 `{stats:GameStats}` (must be triggered from the home-page merge-confirm dialog) |
 
 ## Local development
 

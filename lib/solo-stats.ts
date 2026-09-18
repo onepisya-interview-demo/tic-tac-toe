@@ -75,7 +75,13 @@ export function clearSoloStats(): void {
 }
 
 /**
- * Sentinel for the most recent server-confirmed totalGames value.
+ * @deprecated W4 F1 fix: superseded by SOLO_LAST_MERGED_LOCAL_KEY.
+ * The old sentinel stored the server’s absolute totalGames, which produced a
+ * catch-up window where the dialog text and the actual /sync payload
+ * diverged. See SOLO_LAST_MERGED_LOCAL_KEY below; new callers must use it.
+ * Kept for backward-compat reads (older localStorage values are simply
+ * ignored by the new pendingSyncCount) and for the test surface that
+ * still asserts the old helpers exist.
  * Written by the store after every successful solo POST (auto or
  * manual merge) and by the manual-sync-confirm handler; read by the
  * panel to compute the unsynced-diff = local.totalGames - synced.
@@ -108,9 +114,67 @@ export function persistSyncedServerTotal(totalGames: number): void {
   }
 }
 
-/** Remove the sentinel — used after a successful merge so the next
- *  sync-button click re-evaluates against the now-cleared local row.
+/**
+ * Baseline sentinel: the local totalGames value AT the most recent
+ * successful merge (W4 F1 fix).  Captured right after
+ * `clearSoloStats()` runs — the post-clear local is emptyStats()
+ * with totalGames=0, so the canonical post-merge value is `0`.
+ * `pendingSyncCount()` now reads THIS sentinel instead of
+ * `SOLO_SYNCED_SERVER_KEY` so the dialog text “本机 N 局” matches the
+ * data that `postSoloSync` actually sends (the entire current
+ * `loadSoloStats()` snapshot, not a server-relative diff).
+ *
+ * Why not keep the old sentinel: after a merge the server’s absolute
+ * totalGames was used as the baseline, so any local games played
+ * before the next merge appeared as `local - server = 0` for the
+ * entire catch-up window. The dialog either stayed silent (n ≤
+ * server) or under-reported the count (n > server). The baseline
+ * model — track the post-merge LOCAL count (always 0 after clear)
+ * — eliminates the window: `pending = local - 0 = local`, the text
+ * always matches the request, and the existing
+ * `per-field server accumulation + local clear` invariant
+ * (server never double-counts) is unchanged.
  */
+export const SOLO_LAST_MERGED_LOCAL_KEY = 'ttt.solo.last-merged-local.v1';
+
+/** Read the most-recent post-merge local totalGames (0 on first load). SSR-safe. */
+export function loadLastMergedLocal(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(SOLO_LAST_MERGED_LOCAL_KEY);
+    if (raw === null) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Persist the post-merge local baseline. Failures are swallowed. */
+export function persistLastMergedLocal(totalGames: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SOLO_LAST_MERGED_LOCAL_KEY, String(totalGames));
+  } catch {
+    // Degrade to in-memory only.
+  }
+}
+
+/** Remove the baseline — used after a successful merge so the next
+ *  dialog open sees the canonical post-clear state (baseline = 0).
+ *  Equivalent to `persistLastMergedLocal(0)` for the new model, but
+ *  removing the key keeps the post-merge localStorage footprint
+ *  symmetric (no key + no stats key = same shape as fresh context).
+ */
+export function clearLastMergedLocal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(SOLO_LAST_MERGED_LOCAL_KEY);
+  } catch {
+    // Nothing to recover.
+  }
+}
+
 export function clearSyncedServerTotal(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -121,13 +185,22 @@ export function clearSyncedServerTotal(): void {
 }
 
 /**
- * Compute the unsynced-diff = local.totalGames - serverSynced.
+ * Compute the unsynced-diff = local.totalGames - lastMergedLocal.
  * Positive = there are unsynced games pending push; zero = local
- * already matches the last known server state; negative = impossible
- * under LWW semantics (clamped to 0).
+ * already matches the last successful merge point; negative = the
+ * baseline is ahead of local (impossible under the W4 model since
+ * baseline is set to 0 right after a merge that also clears local,
+ * but the clamp is kept for safety).
+ *
+ * W4 F1: the dialog now reads this value verbatim as “本机 N 局”
+ * (the count the user is about to push). The previous
+ * server-absolute sentinel left a catch-up window where the text
+ * under-reported the actual payload. The baseline sentinel — the
+ * post-merge local totalGames, always 0 right after a clear — makes
+ * `pending === local` and the text matches the request.
  */
 export function pendingSyncCount(): number {
   const local = loadSoloStats();
-  const synced = loadSyncedServerTotal();
-  return Math.max(0, local.totalGames - synced);
+  const baseline = loadLastMergedLocal();
+  return Math.max(0, local.totalGames - baseline);
 }

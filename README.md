@@ -39,10 +39,13 @@ Turso HTTP）。
 - 🎯 **双模式**：**ranked 对战**——两人同设备 pass-and-play 轮流下，战绩经服务端持久化；
   **solo 单机练习**——**100% 纯本地**：无论是否命名、无论在线还是离线，局终战绩只落
   localStorage，store 不发任何 fetch（主公谕：「单机版本，不需要发送任何请求，全部存在
-  本地」）。跨设备同步：保存名 → server 立即建空行（PUT `/{name}` 幂等），但战绩需要用户
-  主动点「同步」按钮才上行；首页「开始对战」/「单机练习」点击时若本地有未推局，会拦截
-  弹合并确认框（主「合并战绩」+ 副「将上传本机 N 局；同步后本机清零以防重复」，选项
-  「合并并清空」/「保留本地」）；无未推局时无弹框直行，「同步」按钮退化为纯 GET 刷新。
+  本地」）。跨设备同步：保存名 → POST `/api/player-session` 注册/登录（重名即登录、不可
+  改名；返回 `{stats, existed}` 区分两种语义）；战绩只能通过回首页时弹出的「合并战绩」
+  确认框（主「合并并清空」/ 副「保留本地」；弹框内嵌 name 流，未设名直接输）上行到服务端，
+  server 端 per-field 累加 + 本机清零（合并前 `localStorage` 始终是真源）。`/solo` 页纯净化
+  ——零 name 展示、零同步按钮、零 PlayerNameForm；起战路径完全零拦截。同步触发只在
+  `HomeDialogMount`（mount 在 `app/page.tsx` 末尾）监听 `pathname='/'` + focus + visibility +
+  storage 事件，`pendingSyncCount() > declinedSentinel` 时打开 dialog，否则静默直行。
 - 💾 **战绩持久化（ranked）**：胜 / 负 / 平 / 连胜通过单行 game_stats 表落盘，本地走
   file: sqlite，Vercel 走 Turso HTTP（@libsql/client）。
 - 🌒 **暗色优先**：基于 Tailwind v4 设计令牌，桌面优先，移动端可用但非目标。
@@ -62,16 +65,17 @@ Turso HTTP）。
 | --- | --- |
 | `/` | 首页：战绩卡片 + 开始游戏 + 重置战绩 |
 | `/play` | 游戏页：3x3 棋盘 + 当前玩家指示 + 重新开局 |
-| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板（命名/未命名一律纯本地 0 网络写；跨设备走首页拦截弹框或手动「同步」按钮）+ 清空本地战绩 |
+| `/solo` | 单机练习：3x3 棋盘 + 单机战绩面板（命名/未命名一律纯本地 0 网络写；跨设备合并走首页 HomeDialogMount 弹框，无「同步」按钮）+ 清空本地战绩 |
 | `/result` | 结算页：胜负结果 + 再来一局 + 返回首页 + 重置战绩 |
 | `GET /api/stats` | 读战绩 (Node runtime) |
 | `PUT /api/stats` | 写战绩 seed / admin（@deprecated；客户端走 POST outcome） |
 | `DELETE /api/stats` | 重置战绩 |
 | `POST /api/stats/outcome` | 客户端落局：body `{outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}` |
 | `GET /api/solo-stats?name=...` | 读按名 solo 战绩（row 不存在 → `{stats:null}`） |
-| `PUT /api/solo-stats` | 存名即落库：body `{name}` 幂等 upsert 空战绩行 → 200 `{stats:GameStats}` |
-| `POST /api/solo-stats` | 单局累加（保留端点，客户端不再自动调用）：body `{name, outcome:'X'\|'O'\|'draw'}` → 200 `{stats:GameStats}`。客户端纯本地路线下仅 `POST /sync` 会上行 |
-| `POST /api/solo-stats/sync` | 跨设备合并：body `{name, stats:GameStats}` server 端 read → per-field 相加 → upsert → 200 `{stats:GameStats}`（必须经合并确认弹框，不允许「顺手 POST」） |
+| `PUT /api/solo-stats` | **已退役（405）**：body `{name}` 幂等 upsert 路径废弃，注册/登录改走 `POST /api/player-session` |
+| `POST /api/solo-stats` | **已退役（405）**：单局累加端点删除（client 不再 auto-POST），合并单路径只走 `POST /sync` |
+| `POST /api/player-session` | 注册/登录：body `{name}` → 200 `{stats:GameStats, existed:boolean}`（新名 existed=false 立即建空行；同名 existed=true 登录；`name` 列 UNIQUE + 无改名端点双保险） |
+| `POST /api/solo-stats/sync` | 跨设备合并：body `{name, stats:GameStats}` server 端先 `loadSoloRecord(name)`（row 不存在 → 409 防静默建档，必须先 hit `/api/player-session`）→ `accumulateMergeStats` per-field 相加 → upsert → 200 `{stats:GameStats}`（必须经首页合并确认弹框） |
 
 ## 本地开发
 

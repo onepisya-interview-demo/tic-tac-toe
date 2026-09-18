@@ -19,6 +19,10 @@ const eslintConfig = defineConfig([
     ".vitest-tmp/**",
     // Stryker sandbox + reports (transitive node_modules tests get scanned otherwise):
     ".stryker-tmp/**",
+    // Stray worktree sandboxes from `git worktree add` + heavy meta
+    // tools live here. Without this, eslint surfaces dozens of
+    // stale warnings that block the 0-warnings gate (V4 F8).
+    ".delta/**",
     "reports/**",
     // Playwright QA scripts (plain JS, not part of app source):
     "tests/qa/**",

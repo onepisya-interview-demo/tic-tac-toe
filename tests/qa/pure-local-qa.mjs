@@ -23,7 +23,7 @@ const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/pure-local-qa";
 const PLAYER_KEY = "ttt.player.name.v1";
 const LOCAL_SOLO_KEY = "ttt.solo.stats.v1";
-const SYNCED_KEY = "ttt.solo.server.synced.v1";
+const SYNCED_KEY = "ttt.solo.last-merged-local.v1";
 const findings = [];
 
 // Unique-per-run names (plan §1.3 F3): pure-local-qa re-runs leave

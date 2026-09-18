@@ -90,6 +90,38 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 
 **Implementation rule**: every primitive MUST use the tokens above; no inline hex.
 
+## 4b. OnlineStatsCard & SyncConfirmDialog (W3 增补)
+
+`/solo` 纯净化后身份与跨设备同步上首页，新增两个组件；写明动效与契约以免后人重发明。
+
+### OnlineStatsCard（components/OnlineStatsCard.tsx）
+
+| 维度 | 契约 |
+| --- | --- |
+| 数据源 | `GET /api/solo-stats?name=...`（仅读） |
+| 触发 | `useEffect([playerName])`：store.playerName 由空变非空时拉取；同 store 字段变化（PlayerNameForm 改）会重拉 |
+| 状态机 | `idle → loading → ok / empty / error`（组件内 `useState<LoadState>`） |
+| 渲染 | 三态共用 `Card` 槽位（登录前「设置名字后在此查看」+ 登录后「StatsGrid / 该名字尚无战绩记录 / 加载失败」），避免空/有态布局跳变守 375 一屏 |
+| 持久层 | 严禁写 localStorage / `useGameStore.soloStats` —— A2 红线，home-return-qa step 07 逐字节快照断言 |
+| 错误处理 | 网络/超时/404 等行内展示，不污染持久层 |
+
+### SyncConfirmDialog（components/SyncConfirmDialog.tsx）
+
+| 维度 | 契约 |
+| --- | --- |
+| 触发 | `HomeDialogMount` mount effect：`pendingSyncCount() > declinedSentinel` 时开 |
+| 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局；同步后本机清零以防重复」+ name 输入 + 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
+| 焦点 | showModal 后主 CTA「合并并清空」初焦（rAF 延后到 re-render settle 之后；F3 fix） |
+| 关键路径 | 内部 `runMergeSequence`: `postPlayerSession`（注册/登录）→ `loadSoloStats()` 快照 → `postSoloSync`（合并）；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm |
+| 退路 | ESC / 点击遮罩 / 次 CTA「保留本地」= `onReject`；`HomeDialogMount` 写 sessionStorage `ttt.solo.sync-declined.v1` 避免同会话重弹 |
+| reduced-motion | 弹框内无连续动画；ESC/click 关 dialog 即时 |
+
+why-not: 为什么不做「合并并清空」按钮的 loading spinner 旋转动画
+  → 弹框已经 `aria-busy={busy}` + 主按钮文字切换「同步中…」+ 全输入框 + 次按钮 disabled；spinner 是装饰性，无信息增量为冗余。`prefers-reduced-motion` 路径下 spinner 更不该存在（即使非旋转，CPU 也在画）。`button-spinner` 样式仍保留给未来其它场景，本 dialog 故意不消费。
+
+why-not: 为什么主次按钮用 `flex-col-reverse sm:flex-row sm:justify-end` 而非 modal library
+  → 库引入违「禁 UI/动画/路由/数据访问库」项目约束；原生 `<dialog>` 自带 focus trap / ESC / inert 背景三件套，足够。
+
 ## 5. Motion
 
 | Interaction | Property | Duration | Easing |
@@ -109,6 +141,7 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
 | /solo Card morph | `view-transition-name: solo-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
 | view-toggle button width | grid-stack 双图层（StatusBar 4 态 `grid-area: 1/1` 同格叠放，visibility 切换可见态）+ button `min-width: max-content` 锁宽 | — (静态) | — |
+| SyncConfirmDialog 打开 | `<dialog>.showModal()` 平台 API（无 enter 动画；原生 `::backdrop` 由浏览器绘制）| — (静态) | — |
 
 - **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
 - **In-page view switch**: 同上平台 API 的 `update` 路径（React 19 `<ViewTransition update="view-swap">` + `useTransition` 驱动），仅 `/solo` 顶栏切换棋盘↔战绩时启用；CSS 关键帧 `translate` + `opacity`，GPU-only，不动布局属性；`prefers-reduced-motion` 归零；不动 `prefers-reduced-motion` 既有全局 `*` 兜底
@@ -123,6 +156,12 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 ### Why-not-the-other notes for new motion rules
 
 (sanyam 克制原则：每个新动效必须有「为什么不选另一条」注释)
+
+- **W3 弹框 (SyncConfirmDialog) 为什么不加 enter 动画（W4 终校：仍无新增动效）**
+  原生 `<dialog>.showModal()` 自带 ::backdrop 渐入 + 焦点 trap，但这是浏览器实现而非项目动画；本项目无 enter transition 自定义 CSS（`dialog` 上无 `animation`/`transition` 属性）。why-not: 加 enter 动画 = 「确认性操作」类装饰（Fitts's Law 已经在遮罩 1.5 click 关 + 主 CTA 大字 + 主操作 8s loading 这三层上做到明确反馈；任何额外淡入/缩放都会让用户在「是否合并」二选一前多读 200ms 视觉噪音，违反 Tesler's Law 复杂度守恒）。W4 F3 修焦点 race 后，showModal → primaryRef.focus() 仍无视觉过渡。`prefers-reduced-motion` 路径下无差异（本就 0ms）。
+- **OnlineStatsCard 加载态为什么不加 skeleton screen 闪烁**
+  GET /api/solo-stats 在 Turso iad1 + Vercel edge 实测 80-200ms（HAR §P3）；骨架屏会让用户在 200ms 内看到 1-2 次内容替换抖动，反而比「加载中…」一行更扰。`prefers-reduced-motion` 路径下骨架屏的呼吸光晕（pulse）是反模式。
+
 
 - **A-T2 StatusBar grid-stack 为什么不选 min-w-[7rem] / min-w-[8ch]**
   像素/字符 token 锁定会让可见文本与按钮内边距产生视觉间隙（短消息「平局」右侧出现明显留白），且 zh 字符度量与 en 字符度量不一致，硬编码 token 在多语言场景会失效。grid-stack 用「内容真实宽度」驱动，token 与字体度量解耦；只有 `.status-pill` 兜底 `min-width: 7ch` 防退化到一字宽（极小字号下中文回退）。
@@ -149,7 +188,7 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 | 法则 | 对应改动 | 一句注意点 |
 | --- | --- | --- |
 | 形式追随功能（Form Follows Function） | W1 删 `lib/store.ts` 三处 auto-POST；W3 静态 token 收紧（mobile `py-12 → py-4`） | 「装饰性联网」不属单机；删比抽 helper 更净（V3 MINOR-F4 因此作废） |
-| 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框 | 弹框文案须显形「将上传 N 局 / 本机清零」（rux 决议 3/4 既约） |
+| 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框 | 弹框文案须显形「将上传 N 局 / 本机清零」（W3 弹框文案决策 3/4 既约） |
 | 信噪比（Signal-To-Noise Ratio） | W1 收窄默认路径请求面（零网络写）；W2 sync-qa 唯一名 `syncprobe-<ts>` 复位 | 端点本身保留为公开 API 面（D2 决议），不是「删净」而是「挪走」 |
 | 渐进呈现（Progressive Disclosure） | W1 `pendingSyncCount > 0` 才弹 SyncConfirmDialog；零态静默直行 | 禁发明「始终弹一次以教育用户」的常驻噪音（验收 A3 硬约束） |
 | 留白感知（Horror Vacui） | W3 一屏收紧（19px 溢出 → 80px 节省）；sticky header 紧凑 ≤56px | 仍守 `bg-elevated` 与 `bg-base` ≥12px 呼吸间隔；战绩非空 /home 允许轻量滚动 |

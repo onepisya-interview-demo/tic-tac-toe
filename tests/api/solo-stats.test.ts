@@ -139,14 +139,10 @@ describe('PUT', () => {
   });
 
   it('returns 405 even when a legacy body is provided (defensive)', async () => {
+    // PUT signature was zero-arg in W4 (F8 cleanup) — the 405 is
+    // returned regardless of body, so the call needs no Request.
     const { PUT } = await loadRoute();
-    const res = await PUT(
-      new Request('http://localhost/api/solo-stats', {
-        method: 'PUT',
-        body: JSON.stringify({ name: 'alice' }),
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+    const res = await PUT();
     expect(res.status).toBe(405);
   });
 });

@@ -65,7 +65,7 @@ export async function GET(request: Request): Promise<Response> {
 // server-authoritative accumulation only (POST /api/solo-stats/sync).
 // Returning 405 keeps the surface explicit for any old client still
 // trying the deprecated contract.
-export async function PUT(_request?: Request): Promise<Response> {
+export async function PUT(): Promise<Response> {
   return NextResponse.json(
     { error: 'method not allowed' },
     { status: 405, headers: { allow: 'GET' } },

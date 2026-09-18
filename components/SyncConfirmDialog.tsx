@@ -57,7 +57,7 @@ export interface SyncConfirmDialogProps {
    * uses the merged row's totalGames to update the local sentinel
    * so the next home-return has pending = 0 and won't re-open.
    */
-  onConfirm?: (name: string, mergedStats: GameStats) => Promise<void> | void;
+  onConfirm?: (name: string) => Promise<void> | void;
   /**
    * Fired AFTER `onConfirm` resolves successfully (currently unused —
    * kept for future "navigate after merge" callers; the dialog
@@ -93,12 +93,23 @@ export function SyncConfirmDialog({
 
   // Open / close the native <dialog>. showModal() brings focus trap,
   // ESC handler, and inert background for free.
+  //
+  // F3 fix (W4 — actual browser focus): the sibling useEffect that
+  // calls `setName(initialName)` schedules a re-render in the same
+  // commit phase, and that re-render can steal the focus from the
+  // primary button we just set it on. Defer the focus to a
+  // requestAnimationFrame so it lands after React's re-render has
+  // settled, on top of the showModal() focus call (which itself
+  // targets the first focusable = the name input).
   useEffect(() => {
     const dlg = dialogRef.current;
     if (!dlg) return;
     if (open && !dlg.open) {
       dlg.showModal();
-      primaryRef.current?.focus();
+      const raf = requestAnimationFrame(() => {
+        primaryRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
     } else if (!open && dlg.open) {
       dlg.close();
     }
@@ -157,8 +168,12 @@ export function SyncConfirmDialog({
     setBusy(true);
     setError(null);
     try {
-      const mergedStats = await runMergeSequence();
-      if (onConfirm) await onConfirm(trimmed, mergedStats);
+      // W4 F1 fix: the merged row is no longer forwarded to the
+      // caller — HomeDialogMount writes a fixed baseline (0) right
+      // after clearSoloStats(). We still await the sequence so the
+      // loading / error / disabled-button contract is preserved.
+      await runMergeSequence();
+      if (onConfirm) await onConfirm(trimmed);
       // Success path: fire the (currently unused) onAfterConfirm
       // hook. Failure path keeps the dialog open via setError() so
       // this hook MUST NOT run on throw.

@@ -258,7 +258,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentPlayer: firstPlayer,
       winner: null,
       winLine: null,
-          mode: resolvedMode,
+      mode: resolvedMode,
     });
   },
 
@@ -350,7 +350,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentPlayer: null,
       winner: null,
       winLine: null,
-        });
+    });
   },
 
   resetSoloStats: () => {
