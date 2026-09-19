@@ -40,7 +40,7 @@ const DRAW_AUTO_SWITCH_MS = 600;
  * W2 (ulw-room-migration-home-landing D-3): 标题改「线下房间」（was
  * 「单机练习」）；pass-and-play 语义通过「单机练习」的视图切换保留
  * 不强加文案。/offline 全程零网络，纯本地（one-identity-qa 硬契约）；
- * OfflineStatsPanel 文案已房间化（未建房间不记）。
+ * OfflineStatsPanel 账本无条件直显（无名有名一致）。
  */
 export default function OfflinePage() {
   const [view, setView] = useState<OfflineView>('board');

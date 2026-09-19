@@ -49,11 +49,13 @@ function loginAs(name: string): void {
   });
 }
 
-describe('components/OfflineStatsPanel (W2 房间化)', () => {
+describe('components/OfflineStatsPanel (W5 账本直显——匿名态退役)', () => {
   it('SSR output does not leak persisted client values (hydration-safe first frame)', () => {
     seedOfflineStats({ totalGames: 4, xWins: 3, oWins: 1, draws: 0, currentStreak: 2 });
     const html = renderToString(<OfflineStatsPanel />);
-    expect(html).toContain('data-testid="offline-stats-anonymous"');
+    // W5（ulw-offline-ledger-direct）：匿名卡退役，SSR 不渲染该卡（行为级：用户可见「本机匿名记账中」字样不在 SSR HTML 里）
+    expect(html).not.toContain('本机匿名记账中');
+    // hydration-safe：SSR 首帧仍是空账本（未挂载前无 localStorage 读），不泄漏持久化数据
     expect(html).not.toContain('data-value="3"');
     expect(html).not.toContain('data-value="4"');
   });
@@ -65,19 +67,32 @@ describe('components/OfflineStatsPanel (W2 房间化)', () => {
     expect(panelValues()).toEqual(['4', '3', '1', '0', 'X 连胜 2']);
   });
 
-  it('shows the "本机匿名记账中" hint instead of stats grid when roomName is empty (W4 房间化)', () => {
+  it('renders the ledger directly when roomName is empty — no anonymous card (W5 §3 F1)', () => {
     render(<OfflineStatsPanel />);
-    expect(screen.getByTestId('offline-stats-anonymous')).toBeInTheDocument();
-    expect(screen.queryByTestId('stat-value')).toBeNull();
-    // A9 红线：文案零「玩家名/注册/登录」
-    const hint = screen.getByTestId('offline-stats-anonymous');
-    expect(hint.textContent).not.toMatch(/玩家名|注册|登录/);
-    // W4 (ulw-offline-anonymous-ledger): unconditional-local semantic.
-    // Testid stays; copy reflects "记在本机账本 → 回首页命名房间 → 并入云端房间账本".
-    expect(hint.textContent).toContain('本机匿名记账中');
-    expect(hint.textContent).toContain('本机账本');
-    expect(hint.textContent).toContain('房间名');
-    expect(hint.textContent).not.toContain('未建房间不记');
+    // F1：无名挂载 → StatsGrid 在 + offline-stats-anonymous 0 命中
+    expect(screen.queryByTestId('offline-stats-anonymous')).toBeNull();
+    // screen 查询 stat-value（在 panel 内）断言 StatsGrid 已渲染
+    expect(screen.queryAllByTestId('stat-value').length).toBeGreaterThan(0);
+    // 数字 = 本机账本（emptyStats 默认零）
+    expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
+  });
+
+  it('renders the ledger identically for unnamed and named mounts (W5 §3 F2)', () => {
+    seedOfflineStats({ totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: 2 });
+    // 无名挂载：snapshot 面板 DOM + 值
+    render(<OfflineStatsPanel />);
+    const unnamedMarkup = screen.getByTestId('offline-stats').innerHTML;
+    const unnamedValues = panelValues();
+    cleanup();
+    // 有名挂载：snapshot 面板 DOM + 值
+    loginAs('alice');
+    render(<OfflineStatsPanel />);
+    const namedMarkup = screen.getByTestId('offline-stats').innerHTML;
+    const namedValues = panelValues();
+    // F2：与 F1 渲染逐字节一致（仅数据不同；此处同名 localStorage 故值也一致）
+    expect(namedMarkup).toBe(unnamedMarkup);
+    expect(namedValues).toEqual(unnamedValues);
+    expect(screen.queryByTestId('offline-stats-anonymous')).toBeNull();
   });
 
   it('mount-only hydration: panel does NOT subscribe to phase changes (single hydration point)', () => {
@@ -115,6 +130,21 @@ describe('components/OfflineStatsPanel (W2 房间化)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(refreshMock).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it('panel copy red line — zero 匿名 / 玩家名 / 注册 / 登录 / 未建房间不记 across the whole panel (W5 §3 F5)', () => {
+    seedOfflineStats({ totalGames: 5, xWins: 3, oWins: 1, draws: 1, currentStreak: 1 });
+    render(<OfflineStatsPanel />);
+    const panel = screen.getByTestId('offline-stats');
+    // A9 红线（沿用 W4）：整面板用户可见字符串零「玩家名/注册/登录」
+    expect(panel.textContent).not.toMatch(/玩家名|注册|登录/);
+    // W5 §3 F5：整面板不再有「匿名」「未建房间不记」字样（匿名卡退役）
+    expect(panel.textContent).not.toMatch(/匿名|未建房间不记/);
+    expect(panel.textContent).not.toContain('本机匿名记账中');
+    // 新面板结构：标题「单机战绩」 + StatsGrid 直显
+    expect(screen.getByTestId('offline-stats-heading')).toHaveTextContent('单机战绩');
+    expect(screen.queryByTestId('offline-stats-anonymous')).toBeNull();
+    expect(screen.queryAllByTestId('stat-value').length).toBeGreaterThan(0);
   });
 });
 
