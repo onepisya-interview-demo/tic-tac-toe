@@ -38,6 +38,7 @@
 | D-1 | **首页改引导页** | 砍掉 `OnlineStatsCard` 与全部首页 API 请求；首页零表单。战绩展示主场归 `/result`。首页 = hero + 玩法引导 + 双 CTA + 战绩静态入口。 |
 | D-2 | **按需弹框收名** | 新建 `RoomGateDialog`：点「在线对战」无名时弹框收名，成功后自动进局；线下 CTA 永远零拦截直行。`PlayerNameForm` 整体删除。 |
 | D-3 | **改叫「房间」，一步到位** | UI 文案、API 路径、DB 列、localStorage key、代码标识符、测试、QA 探针一次迁完，不留旧 surface。 |
+| D-4 | **数据可清空，从头来过**（维护者 2026-09-19 补充） | 当前部署无人使用：DB 存量行不保留、浏览器 legacy key 不迁移。DB 列迁移从「INSERT SELECT 数据保留」简化为「列集不符 → DROP 重建」；旧 `ttt.player.name.v1` 直接忽略并清理。 |
 
 ---
 
@@ -54,7 +55,7 @@
 | API | `GET /api/players/{name}/stats` | `GET /api/rooms/{room}/stats` |
 | API | `POST /api/players/{name}/stats/outcomes` | `POST /api/rooms/{room}/stats/outcomes` |
 | API | `POST /api/players/{name}/stats/merge` | `POST /api/rooms/{room}/stats/merge` |
-| localStorage | `ttt.player.name.v1` | `ttt.room.name.v1`（一次性迁移，见 §2.5） |
+| localStorage | `ttt.player.name.v1` | `ttt.room.name.v1`（不迁移数据，legacy key 启动时清理，见 §2.5） |
 | URL 参数 | `/result?name=<x>` | `/result?room=<x>` |
 | 事件 | `ttt:player-name-required` / `ttt:player-name-changed` | `ttt:room-required`（gate 弹框触发；changed 随表单删除） |
 | testid | `player-name-*` 全族、`online-stats-*` 全族 | `room-gate-*`（新）；`online-stats-*` 随卡删除 |
@@ -116,30 +117,25 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
   outcomes/merge 未知 room → 404 / 409（merge 前必须先 POST /api/rooms 的
   anti-silent-create 契约原样保留）。
 
-### 2.4 DB 列迁移（schema drift 流程，AGENTS.md 反模式硬约束）
+### 2.4 DB 列迁移（清空式重建，D-4 许可）
 
 - `db/schema.ts`：`name: text('name').unique()` → `room: text('room').unique()`；
   表名 `game_stats` 保留（语义仍准）。
-- `lib/db.ts` `getDb()` bootstrap 后追加 reconcile：`pragma_table_info('game_stats')`
-  探测含 `name` 不含 `room` → 事务内重建（CREATE TABLE _new →
-  `INSERT SELECT` 共有列、`room` 取 `name` 值 → DROP → RENAME）→
-  `DELETE FROM game_stats WHERE room IS NULL`（退役 W1 遗留 NULL 死行，与
-  W1 ranked-retire 行为对齐）。
+- `lib/db.ts` `getDb()` bootstrap 后 reconcile 收敛为**单一规则**：
+  `pragma_table_info('game_stats')` 列集与 drizzle schema 预期不符
+  （含 legacy `name` 列库、W1 遗留 NULL 行库等一切历史形状）→
+  `DROP TABLE` + 按新形状重建。**数据不保留**（D-4：无人使用，清空
+  从头来过）。趁势删除 db.ts 里历史多分支迁移逻辑（W1 ranked retire
+  的 NULL 行退役分支等），bootstrap 只剩「列集相等？否则重建」一条路径。
 - 服务函数改名（§1 映射），测试同波更新。
+- 红线不变：探测必须存在——本地 file: 库与 Turso 生产库都是旧形状，
+  没有探测的启动即 `no such column` 炸服（W1 实证）。
 
-### 2.5 localStorage 一次性迁移（lib/room-name.ts）
+### 2.5 localStorage legacy 清理（lib/room-name.ts）
 
-挂载时（`lib/store.ts` 现有 hydrate 点）执行 `migrateLegacyPlayerName()`：
-
-```
-新 key 有值 → 旧 key 若存在则删除（清理），使用新值
-新 key 无 + 旧 key 有：
-  值通过 isRoomName → 写入新 key + 删除旧 key
-  值非法（超长/控制字符）→ 丢弃 + 删除旧 key（视为无名）
-双无 → 无名，零写
-```
-
-单向一次性；SSR 安全（无 window 直接返回 null）。
+D-4 许可清空：**不迁移**。所有读写只认 `ttt.room.name.v1`；hydrate 点
+（`lib/store.ts` 现有逻辑）若发现 legacy `ttt.player.name.v1` 存在，
+直接 `removeItem` 清除（从头来过，旧名字视为无名）。单向、SSR 安全。
 
 ### 2.6 /result 页
 
@@ -152,7 +148,7 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 ### 2.7 客户端概念层改名（机械替换 + 编译面收敛）
 
 `lib/store.ts`（playerName → roomName、setPlayerName → setRoomName、hydrate 点接
-§2.5 迁移）、`lib/game-net.ts`（四函数改名 + URL 改 `/api/rooms/...`）、
+§2.5 legacy 清理）、`lib/game-net.ts`（四函数改名 + URL 改 `/api/rooms/...`）、
 `components/ResultNavigator.tsx`（push `/result?room=` + roomName）、
 `components/OfflineStatsPanel.tsx`（isAnonymous 读 roomName + 文案）、
 `components/SyncConfirmDialog.tsx`（内嵌收名流字段与文案 → 房间）、
@@ -165,12 +161,12 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 
 - vitest 删除：`OnlineStatsCard.test.tsx`、`PlayerNameForm.test.tsx`。
 - vitest 新增：`RoomGateDialog.test.tsx`（R1-R9）、`lib/room-name.test.ts` 增
-  迁移 describe（S1-S5）。
+  legacy 清理 describe（L1-L4）。
 - vitest 改名/更新：`tests/api/players-stats.test.ts` → `rooms-stats.test.ts`、
   `tests/api/sessions.test.ts` → `tests/api/rooms.test.ts`、
   `tests/lib-player-name.test.ts` → `tests/lib-room-name.test.ts`、
   `tests/lib-game-net.test.ts`（URL 断言）、`tests/db/db.test.ts`（函数名 + 新增
-  D1-D5 describe「legacy name-column migration」）、store / ResultNavigator /
+  D1-D4 describe「legacy name-column rebuild」）、store / ResultNavigator /
   SyncConfirmDialog / OfflineStatsPanel / StartGameButton / PlayController 各测试的
   字段与事件名。
 - QA 探针（生产构建 + BASE_URL 纪律不变）：`one-identity-qa.mjs`（c step 改走
@@ -198,25 +194,23 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 | R8 | ESC / 取消 | dialog 关；零 POST；零写；零导航 |
 | R9 | 输入含首尾空白 | POST body = trim 后值；localStorage 存 trim 值 |
 
-### §3.2 storage 一次性迁移（tests/lib-room-name.test.ts，S1-S5）
+### §3.2 legacy key 清理（tests/lib-room-name.test.ts，L1-L4）
 
 | ID | 分支 | 断言要点 |
 |----|------|---------|
-| S1 | 旧 key 有(合法) + 新 key 无 | 新 key = 旧值；旧 key 已删除 |
-| S2 | 新 key 有 + 旧 key 有 | 新值不被旧值覆盖；旧 key 顺手清除 |
-| S3 | 双 key 无 | 返回 null；零写入 |
-| S4 | 旧值非法（>24 字符 / 含控制字符） | 丢弃；旧 key 删除；null |
-| S5 | 无 window（SSR） | 返回 null；零异常 |
+| L1 | 旧 key 有 + 新 key 无 | 视为无名（null）；旧 key 被清除；零新写入 |
+| L2 | 新 key 有 + 旧 key 有 | 正常读新 key 值；旧 key 顺手清除；新值不被影响 |
+| L3 | 双 key 无 | 返回 null；零写入 |
+| L4 | 无 window（SSR） | 返回 null；零异常 |
 
-### §3.3 DB legacy 迁移（tests/db/db.test.ts 新 describe，D1-D5）
+### §3.3 DB 清空式重建（tests/db/db.test.ts 新 describe「legacy name-column rebuild」，D1-D4）
 
 | ID | 分支 | 断言要点 |
 |----|------|---------|
-| D1 | 手建旧形状库（name 列 + 种子行）→ getDb | pragma 列集含 `room` 不含 `name`；种子行五项统计值逐字段保留 |
+| D1 | 手建旧形状库（name 列 + 种子行）→ getDb | 表重建为新形状：pragma 列集含 `room` 不含 `name`；旧种子行不保留（0 行起点，D-4 清空许可） |
 | D2 | room UNIQUE 实证 | 同 room 第二行插入被 UNIQUE 拒绝 |
-| D3 | 迁移幂等 | closeDb + 重开后行数与数据不变 |
+| D3 | reconcile 幂等 | closeDb + 重开后列集不变、仍可用（0 行） |
 | D4 | fresh 库 | PRAGMA 列集与 drizzle schema 声明相等 |
-| D5 | legacy NULL name 死行 | 迁移后被清除（room IS NULL 零行） |
 
 ### §3.4 API 白名单与语义（tests/api/rooms*.test.ts，N1-N5）
 
@@ -237,7 +231,7 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 | Q3 | one-identity-qa b step | 无名线下 CTA 直行零弹框零拦截（既有断言保绿） |
 | Q4 | offline-result-qa | /result?room= 三分支 + 旧 ?name= 走 fallback |
 | Q5 | home-return-qa | 合并弹框房间文案；合并流全路径；首页零请求强断言（替代原 step 07 快照断言） |
-| Q6 | one-identity-qa 新 step | 预设旧 key → 打开首页 → 新 key 有值且旧 key 已删 |
+| Q6 | one-identity-qa 新 step | 预设旧 key → 打开首页 → 旧 key 已被清除、行为等同无名（房间术语） |
 | Q7 | visual-qa | 首页新基线截图（引导页布局） |
 
 ---
@@ -251,8 +245,8 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 | A3 | 在线 CTA 无名 → RoomGateDialog 全分支（R1-R9） | 单测 + Q2 |
 | A4 | 线下 CTA 永远零拦截零弹框 | Q3 |
 | A5 | 新 API family 全语义等价；旧路径（/api/sessions、/api/players/*）已删除（请求得 404） | N1-N5 + A5 curl 审计 |
-| A6 | DB legacy name 列库自动迁移：数据保留 / UNIQUE / 幂等 / fresh 列集相等 / NULL 死行清除 | D1-D5 |
-| A7 | storage 一次性迁移正确且单向 | S1-S5 + Q6 |
+| A6 | DB legacy name 列库启动时清空式重建（列集符 / UNIQUE / 幂等 / fresh 相等，数据不保留） | D1-D4 |
+| A7 | legacy localStorage key 被忽略并清理，行为等同无名 | L1-L4 + Q6 |
 | A8 | /result?room= 三分支正常；?name= 优雅 fallback | Q4 |
 | A9 | 概念零残留：`rg -n "playerName|isPlayerName|PLAYER_NAME|/api/sessions|/api/players|ttt\.player\.name" app components lib db tests` 零命中；用户可见文案零「玩家名/注册/登录」 | grep 审计（.omo/plans 与 reports 历史文档除外） |
 | A10 | 六层门禁全绿：vitest / typecheck / lint / build / commit-audit / 浏览器探针 | 每 commit |
@@ -265,8 +259,8 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 
 1. **波次与 commit 拆分**（原则：每 commit 六层门禁绿；收尾删净旧 surface，
    不留长期 shim；允许执行席按实际编译面微调边界）：
-   - W1 服务端：schema + db.ts reconcile + 新 API family + 旧 API 删除 +
-     tests/api + db.test（D1-D5）。
+   - W1 服务端：schema + db.ts 清空式 reconcile + 新 API family + 旧 API 删除 +
+     tests/api + db.test（D1-D4）。
    - W2 客户端：lib 三件套 + 全部组件 + 三页 + 首页重做 + RoomGateDialog +
      组件/单测（R/S/N 族落位）。
    - W3 探针与文档：QA 探针更新 + visual 基线 + README / DESIGN.md /
@@ -290,8 +284,11 @@ JSON-LD / SoundToggle / ViewTransition / force-dynamic 均保留
 - **路由改名（/online→/room 等）**：路由名描述记账位置不含 name 概念，改名无概念
   收益、成本（探针/文档/书签）高。Rejected。
 - **「棋桌/牌桌」候选词**：语感好但「房间」与用户心智一致且已拍板。存档备查。
-- 风险 R-1：Turso 生产库首请求触发 reconcile 迁移——deploy 后立即跑线上探针
-  （A6 的线上形态）。
+- **保留数据的 INSERT SELECT 列迁移**（AGENTS.md 经典 drift 流程）：D-4 许可
+  清空后不再必要，DROP 重建更简单；但**列集探测本身仍是红线**（无探测的
+  旧库启动即 `no such column` 炸服，W1 实证）。
+- 风险 R-1（已随 D-4 降级）：Turso 生产库首请求触发 DROP 重建即完成「线上
+  清库」——deploy 后跑一次线上探针确认 200 即可，无需数据审计。
 - 风险 R-2：one-identity-qa 重写幅度大，c step 弹框流程时序需对齐 F3 初焦模式。
 - 风险 R-3：`ttt:offline-stats-changed` 有两个消费方（pendingSyncCount 重估保留 /
   卡片 refetch 删除），删错会破坏合并弹框触发——W2 执行时以 HomeDialogMount
