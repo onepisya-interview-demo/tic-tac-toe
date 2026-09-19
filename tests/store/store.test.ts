@@ -299,7 +299,7 @@ describe('lib/store (zustand game store) — W2 ulw-room-migration-home-landing'
     restore();
   });
 
-  it('makeMove draw: anonymous → no fetch, no localStorage write (无名守卫)', async () => {
+  it('makeMove draw: anonymous OFFLINE → no fetch; writes localStorage draw (D-1 语义)', async () => {
     const { calls, restore } = mockFetch([]);
     useGameStore.getState().startGame('offline');
     const board: Board = [
@@ -315,12 +315,14 @@ describe('lib/store (zustand game store) — W2 ulw-room-migration-home-landing'
     await useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('drawn');
-    expect(calls).toHaveLength(0);
-    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
+    expect(calls, 'no network on offline path').toHaveLength(0);
+    expect(JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!)).toEqual({
+      totalGames: 1, xWins: 0, oWins: 0, draws: 1, currentStreak: 0,
+    });
     restore();
   });
 
-  it('makeMove win: anonymous → no fetch, no localStorage write (无名守卫)', async () => {
+  it('makeMove win: anonymous OFFLINE → no fetch; writes localStorage win (D-1 语义)', async () => {
     const { calls, restore } = mockFetch([]);
     useGameStore.getState().startGame('offline');
     const board: Board = [
@@ -336,7 +338,55 @@ describe('lib/store (zustand game store) — W2 ulw-room-migration-home-landing'
     await useGameStore.getState().makeMove(8);
     const s = useGameStore.getState();
     expect(s.phase).toBe('won');
-    expect(calls).toHaveLength(0);
+    expect(calls, 'no network on offline path').toHaveLength(0);
+    expect(JSON.parse(window.localStorage.getItem(OFFLINE_STATS_KEY)!)).toEqual({
+      totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1,
+    });
+    restore();
+  });
+
+  // F4 red line: anonymous ONLINE branch keeps the no-fetch / no-write guard
+  // (anti-silent-create 纵深防御). The D-1 semantic flip only loosens the
+  // offline branch; an anonymous click on /online must still skip bookkeeping
+  // instead of POSTing an outcome against a name the server has no row for.
+  it('makeMove win: anonymous ONLINE → no fetch, no localStorage write (F4 guard retained)', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('online');
+    const board: Board = [
+      'X', null, null,
+      null, 'X', null,
+      null, null, null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    await useGameStore.getState().makeMove(8);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('won');
+    expect(calls, 'no network: anonymous online never POSTs outcome').toHaveLength(0);
+    expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
+    restore();
+  });
+
+  it('makeMove draw: anonymous ONLINE → no fetch, no localStorage write (F4 guard retained)', async () => {
+    const { calls, restore } = mockFetch([]);
+    useGameStore.getState().startGame('online');
+    const board: Board = [
+      'X', 'O', 'X',
+      'X', 'O', 'O',
+      'O', 'X', null,
+    ];
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: board as unknown as Board,
+    });
+    await useGameStore.getState().makeMove(8);
+    const s = useGameStore.getState();
+    expect(s.phase).toBe('drawn');
+    expect(calls, 'no network: anonymous online never POSTs outcome').toHaveLength(0);
     expect(window.localStorage.getItem(OFFLINE_STATS_KEY)).toBeNull();
     restore();
   });

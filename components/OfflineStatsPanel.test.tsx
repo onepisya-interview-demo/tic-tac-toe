@@ -65,14 +65,19 @@ describe('components/OfflineStatsPanel (W2 房间化)', () => {
     expect(panelValues()).toEqual(['4', '3', '1', '0', 'X 连胜 2']);
   });
 
-  it('shows the "未建房间不记" hint instead of stats grid when roomName is empty (W2 房间化)', () => {
+  it('shows the "本机匿名记账中" hint instead of stats grid when roomName is empty (W4 房间化)', () => {
     render(<OfflineStatsPanel />);
     expect(screen.getByTestId('offline-stats-anonymous')).toBeInTheDocument();
     expect(screen.queryByTestId('stat-value')).toBeNull();
     // A9 红线：文案零「玩家名/注册/登录」
     const hint = screen.getByTestId('offline-stats-anonymous');
     expect(hint.textContent).not.toMatch(/玩家名|注册|登录/);
-    expect(hint.textContent).toContain('未建房间不记');
+    // W4 (ulw-offline-anonymous-ledger): unconditional-local semantic.
+    // Testid stays; copy reflects "记在本机账本 → 回首页命名房间 → 并入云端房间账本".
+    expect(hint.textContent).toContain('本机匿名记账中');
+    expect(hint.textContent).toContain('本机账本');
+    expect(hint.textContent).toContain('房间名');
+    expect(hint.textContent).not.toContain('未建房间不记');
   });
 
   it('mount-only hydration: panel does NOT subscribe to phase changes (single hydration point)', () => {

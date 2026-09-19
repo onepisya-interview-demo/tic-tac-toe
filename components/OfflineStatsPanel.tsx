@@ -20,11 +20,14 @@ type Props = {
 /**
  * Offline-mode stats surface on /offline.
  *
- * W2 (ulw-room-migration-home-landing):
+ * W4 (ulw-offline-anonymous-ledger):
  *  - isAnonymous reads `roomName` (was `playerName`).
- *  - The anonymous hint copy now says "未创建房间的玩家在本机的对局
- *    不会进入战绩账本。在首页创建房间后再开局，成绩才会从下一局开
- *    始累计。" (A9 文案红线：零「玩家名/注册/登录」)。
+ *  - The anonymous hint copy now describes the unconditional-local
+ *    semantic ("本机匿名记账中——当前对局记在本机账本里；回首页给
+ *    本机账本起一个房间名，可把这部分战绩并入云端房间账本。")
+ *    (A9 红线：零「玩家名/注册/登录」；房间术语 + 反馈环——动作有
+ *    记录 + 蔡加尼克效应——未完成的同步任务在回首页瞬间以弹框形式
+ *    回来；心智模型——"我玩过的都记着呢"是用户默认假设)。
  *  - Testid contract is unchanged (`offline-stats*`); only the copy
  *    surface moves.
  *
@@ -67,9 +70,9 @@ export function OfflineStatsPanel({ actions }: Props = {}) {
           className="rounded-md border border-border-subtle bg-surface-1 px-4 py-3 text-body text-text-secondary"
           data-testid="offline-stats-anonymous"
         >
-          <p className="font-medium text-text-primary">未建房间不记</p>
+          <p className="font-medium text-text-primary">本机匿名记账中</p>
           <p className="text-sm">
-            未创建房间的玩家在本机的对局不会进入战绩账本。在首页创建房间后再开局，成绩才会从下一局开始累计。
+            当前对局会先记在本机账本里。回到首页给本机账本起一个房间名，可把这部分战绩并入云端房间账本。
           </p>
         </div>
       ) : (

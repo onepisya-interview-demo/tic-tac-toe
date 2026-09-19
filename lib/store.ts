@@ -35,11 +35,13 @@ export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
  *   通过 lib/game-net.ts → service `recordOutcomeForRoom` 服务端权威
  *   累加）。
  * 'offline' — 离线单机版本（W4 /offline 路由：完全离线、本地账本、
- *   **无名不记**、合并弹框是唯一网络写）。
+ *   **无条件记账**、合并弹框是唯一网络写）。
  *
  * 差异仅记账路径：online 走 service，offline 走 localStorage
- * (`lib/offline-stats.ts`)。两者都遵守「无名不记」守卫：无名时根本不发
- * 请求、不写本地账本（A4 前置）。
+ * (`lib/offline-stats.ts`)。**online 分支遵守「无名不记」守卫**（无名不
+ * 发请求——anti-silent-create 纵深防御）；**offline 分支无条件记账**
+ * （D-1 语义变更：本机账本不依赖用户填名，回首页瞬间 HomeDialogMount
+ * 弹框自然引导同步与建房）。
  */
 export type GameMode = 'online' | 'offline';
 
@@ -56,12 +58,13 @@ export interface GameState {
    * Hydrated on mount by `setRoomName` (the source of truth) and
    * updated by RoomGateDialog / SyncConfirmDialog on save / clear.
    *
-   * **无名不记守卫**: online / offline 两条分支在 `makeMove` 内首句
-   * 即判断 `roomName` 是否为空；为空时**不发任何请求、不写
-   * localStorage、不累加 internalStats**，本步走完后 phase 仍正常
-   * 推进（用户体验：显示胜平，但战绩 0 增长；用户去收房名后下一局
-   * 开始计数）。这与 AC A4 「online 入口拦截 / offline 无名不记」
-   * 完全对应。
+   * **online 分支无名不记守卫** (AC A4 前置): `makeMove` 内首句
+   * 判断 `roomName` 是否为空；为 online 时为空则**不发任何请
+   * 求**（anti-silent-create 纵深防御——未知名 POST outcome 必
+   * 404，守卫避免客户端发出注定失败的请求）。offline 分支无视
+   * roomName 无条件 `recordOutcome + persistOfflineStats`（D-1 语
+   * 义变更：本机账本不依赖填名；回首页 HomeDialogMount 弹框自然
+   * 引导同步与建房）。本步 phase / board 推进不受守卫影响。
    *
    * W2 ulw-room-migration-home-landing §1: `playerName` →
    * `roomName`; `ttt.player.name.v1` → `ttt.room.name.v1`. The
@@ -228,9 +231,11 @@ export const useGameStore = create<GameStore>((set) => ({
     if (s.currentPlayer === null) return;
     if (s.board[index] !== null) return;
 
-    // **无名不记守卫 (AC A4 前置)**: 不论 online 还是 offline, 没有
-    // roomName 时直接跳过 bookkeeping。本步的 phase / board 仍正常
-    // 推进——用户体验: 显示胜平, 但战绩 0 增长。
+    // **online 分支无名不记守卫** (AC A4 前置 / anti-silent-create 纵
+    // 深防御)：仅当 online 且 roomName 为空时跳过 bookkeeping——
+    // 客户端避免发出注定 404 的 POST outcome。**offline 分支无条
+    // 件记账**（D-1 语义变更）：本机账本不依赖填名。本步 phase /
+    // board 推进不受守卫影响。
     const isAnonymous = s.roomName === null || s.roomName === '';
 
     const board = applyMove(s.board, index, s.currentPlayer);
@@ -248,7 +253,8 @@ export const useGameStore = create<GameStore>((set) => ({
       // then a longer arpeggio with vibrato to celebrate it. The 360ms
       // delay lines up with the end of the 'win' envelopes (2 × 180ms).
       setTimeout(() => playSound('cheer'), 360);
-      if (isAnonymous) {
+      // online 分支守卫保留；offline 分支无条件记账（D-1 语义变更）
+      if (isAnonymous && s.mode === 'online') {
         return;
       }
       if (s.mode === 'offline') {
@@ -274,7 +280,8 @@ export const useGameStore = create<GameStore>((set) => ({
         winLine: null,
       });
       playSound('draw');
-      if (isAnonymous) {
+      // online 分支守卫保留；offline 分支无条件记账（D-1 语义变更）
+      if (isAnonymous && s.mode === 'online') {
         return;
       }
       if (s.mode === 'offline') {
