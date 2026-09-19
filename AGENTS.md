@@ -129,6 +129,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - **eslint `globalIgnores` 必须包含 `.delta/**`（F8 fix）** —— W4 修：`.delta/worktrees/**` 是 `git worktree add` + 重元工具的沙箱（不入仓，`.git/info/exclude` 本地排除），`pnpm lint` 之前把扫描到这堆陈年源码上，11 条 warnings 全是 stale 沙箱里来——和 vitest（`.vitest-tmp/**`）和 stryker（`.stryker-tmp/**`）三工具配置不一。W4 同步在 `eslint.config.mjs` 加 `.delta/**`，回归到「0 errors 0 warnings」基线。
 
+- **dev 冷启 EMFILE 风暴（上游 #93175 OPEN，已知问题）** —— 现象：`pnpm dev` 冷启后 watchpack 连续吐 `EMFILE: too many open files, watch`（dev-repro.log 实测 ~668 次失败），随后误判 `.next/dev` was deleted 进入 22s/次重启环（33 次复现），服不可用。根因非 fd 耗尽——进程仅开 17 fd、`ulimit -n` 1048575 仍复现；系 watchpack 逐目录 watch × 本仓 `node_modules/.pnpm` 共 5,803 目录撞 macOS FSEvents 每进程流上限（源码 `node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js:864` `wp.watch({directories:[dir]})`）。止血：**`WATCHPACK_POLLING=true pnpm dev`**（dev-polling.log 实测 :3009 → 0 EMFILE / 0 deleted / HTTP 200，轮询绕开原生 `fs.watch`；Turbopack Rust watcher 无恙）。上游 vercel/next.js **#93175**「Turbopack dev on macOS hits Watchpack fs.watch EMFILE on ancestor directories」2026-04-24 起 OPEN，Next 16.3.4→16.3.5 未动 watcher 文件，未修；今日上游 #98003 合并仅做 pnpm Global Virtual Store symlink 解析，pnpm 目录农场 × Turbopack 系上游活跃战区。摘除条件：上游正式修复版落地后复测冷启 30s 无 EMFILE 即可移除本条 + dev script 注记（`.omo/plans/ulw-dev-emfile-watch.md` + 证据 `.omo/evidence/ulw/ulw-dev-emfile-watch/`）。
+
+- **主公 :3000 dev 服在线期间禁止在主 worktree 跑 `pnpm build`（构建冻结反模式）** —— 2026-09-19 实证：今夜波次十余次产线 build 清写 `.next/` 连带删除 `.next/dev`，触发 dev 服「`.next/dev` was deleted」重启环撞死服务。`pnpm build` 删 `.next` 是 Next.js 正常行为（plan §0 根因链第 3 条），与 dev 服争用同一目录即双向伤害——build 期间 dev 不可用 / build 完了 dev 也回不来（除非重启）。对策：**波次构建一律独立 git worktree**（沿 ../ttt-wa 模式，产线 build 在 worktree 内跑；零触主 worktree `.next/`），或与主公协调构建窗口（dev 服短暂停服再 build）。任何「主 worktree 跑 build 但同时保 dev 在线」的尝试都是反模式，物理上不可能。
+
 ## 项目特有风格
 
 - 桌面优先的暗色 UI；移动端保持可用，但不是优化目标。

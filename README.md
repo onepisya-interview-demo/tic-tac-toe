@@ -174,6 +174,8 @@ pnpm dev              # http://localhost:3000
 pnpm build && pnpm start
 ```
 
+> **已知问题 / Known issue**：macOS 上 `pnpm dev` 冷启可能撞 Watchpack `EMFILE` 风暴（约 668 次失败 + `.next/dev` deleted 重启环），系上游 [vercel/next.js#93175](https://github.com/vercel/next.js/issues/93175) OPEN 未修（watchpack 逐目录 watch × pnpm 目录农场 × macOS FSEvents 上限；非 fd 耗尽）。临时止血：`WATCHPACK_POLLING=true pnpm dev`。详见 `AGENTS.md` §本项目反模式。
+
 默认 `DATABASE_URL=file:./data/tic-tac-toe.db`，数据落在 `data/tic-tac-toe.db`。
 **首次 clone 后不需要建 `.env.local`** — `lib/db.ts` 默认走
 `file:./data/tic-tac-toe.db` 嵌入式 sqlite（`@libsql/client` 自带）。
