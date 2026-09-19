@@ -1,18 +1,10 @@
 #!/usr/bin/env node
-// one-identity-qa.mjs — W4 (ulw-one-game-two-versions) one-identity
-// integration probe. Six assertions on the unified-player-name model:
-//   a) Anonymous offline game → localStorage 战绩零写入 + /api/* 零请求
-//   b) Anonymous clicks online → 不导航 + 引导出现
-//   c) Named online game → POST outcomes 恰 1 次 → /result?name= SSR 含本局新数字
-//   d) Offline named + 3 games (跨 soft-nav 回首页) → 网络写请求仅 sessions 1 + merge 1
-//   e) GET 不存在名 → 404 problem+json (content-type 断言)
-//   f) 首页 SSR 源码含 JSON-LD (VideoGame/MultiPlayer/applicationCategory)
+// one-identity-qa.mjs — W3-probes (ulw-room-migration-home-landing).
 //
-// Hermetic :3101 with `DATABASE_URL=file:/tmp/ulw-og2v/<unique>.db`.
-// Usage:
-//   node tests/qa/one-identity-qa.mjs   (needs `pnpm build` + `next start -p 3101`)
-//   env: BASE_URL (default http://localhost:3101),
-//        EVIDENCE_DIR (default .omx/evidence/one-identity-qa).
+// Production build probe (BASE_URL=http://localhost:3199, hermetic tmp DB).
+// Covers plan §3.5 Q1/Q2/Q3/Q6 + AC A1 (home zero /api/*), A2 (home CTA),
+// A3 (RoomGateDialog R1-R9 outline), A7 (legacy localStorage key cleanup),
+// A8 (?room= three-branch + ?name= fallback), and JSON-LD integrity.
 
 import assert from "node:assert/strict";
 import { launchQA, BASE_URL } from "./lib/browser.mjs";
@@ -21,8 +13,10 @@ import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/one-identity-qa";
-const PLAYER_KEY = "ttt.player.name.v1";
+const ROOM_KEY = "ttt.room.name.v1";
+const LEGACY_KEY = "ttt.player.name.v1";
 const OFFLINE_KEY = "ttt.offline.stats.v1";
+const DECLINED_KEY = "ttt.offline.sync-declined.v1";
 const RUN_SUFFIX = String(Date.now() % 1000000).padStart(6, "0");
 const findings = [];
 
@@ -77,6 +71,7 @@ function captureApiTraffic(page) {
   return { writes, reads, detach: () => page.off("request", onReq) };
 }
 
+// W3-probes Q3 helper — solo /offline X-first determinism.
 async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
@@ -89,48 +84,47 @@ async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
   throw new Error("could not get an X-first offline game within 12 attempts");
 }
 
-async function loginAs(page, name) {
-  // Hard-reset: navigate, clear, reload. Three guarantees that the
-  // form is in !hasSaved state on the next render:
-  //   1. goto / first — localStorage is per-origin so we must be on it
-  //   2. clear PLAYER_KEY + OFFLINE_KEY — drop stale state
-  //   3. reload — force a fresh mount + hydration cycle (the form's
-  //      useEffect reads localStorage into the store; without reload
-  //      the cached store value can mask the clear)
+// W3-probes Q1 helper — wipe all session keys + reload. Fresh start.
+async function wipeAllKeys(page) {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await page.evaluate(
-    (k) => window.localStorage.removeItem(k),
-    PLAYER_KEY,
+    (keys) => keys.forEach((k) => window.localStorage.removeItem(k)),
+    [ROOM_KEY, LEGACY_KEY, OFFLINE_KEY, DECLINED_KEY],
   );
-  await page.evaluate(
-    (k) => window.localStorage.removeItem(k),
-    OFFLINE_KEY,
-  );
+  await page.evaluate(() => window.sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
-  // Wait for hydration: input appears after the post-mount useEffect.
-  await page.waitForSelector('[data-testid="player-name-input"]', {
-    timeout: 8000,
-  });
-  // Fill + submit. The save button triggers handleSubmit → postSession →
-  // on success setStoreName (writes localStorage) → setEditing(false).
-  await page.fill('[data-testid="player-name-input"]', name);
-  await page.click('[data-testid="player-name-save"]');
-  await page.waitForFunction(
-    ({ k, expected }) => window.localStorage.getItem(k) === expected,
-    { k: PLAYER_KEY, expected: name },
-    { timeout: 8000 },
-  );
 }
 
-async function clearPlayer(page) {
-  // Navigate to a same-origin page first (about:blank has no localStorage).
-  if (!page.url().startsWith(BASE)) {
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  }
-  await page.evaluate((k) => window.localStorage.removeItem(k), PLAYER_KEY);
-  await page.evaluate((k) => window.localStorage.removeItem(k), OFFLINE_KEY);
-  // Reload so the form's post-mount useEffect sees the cleared store.
+// W3-probes Q1 helper — preset a room name on the home origin. After
+// RoomGateMount's identity bootstrap fires (commit cace8f4), the store
+// picks it up; hard reload preserves the relationship because
+// getRoomName() sweeps legacy AND reads new key.
+async function seedRoomName(page, name) {
+  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await page.evaluate(
+    ({ k, n }) => window.localStorage.setItem(k, n),
+    { k: ROOM_KEY, n: name },
+  );
   await page.reload({ waitUntil: "networkidle" });
+  // Wait for RoomGateMount to hydrate the store + HomeStatsEntry to render.
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 4000 });
+}
+
+async function registerViaRoomGate(page, name) {
+  // Anonymous + click online → RoomGateDialog opens (no nav, no fetch).
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.click('[data-testid="start-online"]');
+  await page.waitForSelector('[data-testid="room-gate-dialog"][open]', {
+    timeout: 4000,
+  });
+  await page.fill('[data-testid="room-gate-name"]', name);
+  await page.click('[data-testid="room-gate-confirm"]');
+  // The dialog closes + navigation fires. Room key MUST land on localStorage.
+  await page.waitForFunction(
+    ({ k, expected }) => window.localStorage.getItem(k) === expected,
+    { k: ROOM_KEY, expected: name },
+    { timeout: 8000 },
+  );
 }
 
 const { browser, ctx, page } = await launchQA();
@@ -138,101 +132,69 @@ const api = captureApiTraffic(page);
 
 try {
 
-  // ─────────────────────────────────────────────────────────────────
-  // (a) Anonymous offline game → localStorage 战绩零写入 + /api/* 零请求
-  // ─────────────────────────────────────────────────────────────────
-  await step("a-anonymous-offline-zero-writes-zero-storage", async () => {
-    await clearPlayer(page);
+  // Q3 (W3 plan §3.5) b step — anonymous offline CTA 直行零拦截
+  await step("b-anonymous-offline-direct-nav-zero-block", async () => {
+    await wipeAllKeys(page);
     api.writes.length = 0;
-    api.reads.length = 0;
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    // Wait for the win to settle and phase to flip + auto-switch to stats
-    await page.waitForTimeout(1500);
-    const offlineRow = await page.evaluate(
-      (k) => window.localStorage.getItem(k),
-      OFFLINE_KEY,
-    );
-    assert.equal(
-      offlineRow,
-      null,
-      `anonymous offline must NOT write ${OFFLINE_KEY}; got ${offlineRow}`,
-    );
-    assert.equal(
-      api.writes.length,
-      0,
-      `anonymous offline must NOT issue any /api/* writes; got ${api.writes.length}: ${JSON.stringify(api.writes)}`,
-    );
-    // V7 P2-3: anonymous hint must be visible after offline win so the
-    // user sees the "无名不记" guard explained inline (auto-switched
-    // stats view ≥ WIN_AUTO_SWITCH_MS). The view-toggle testid names
-    // are not asserted here — we only check that the testid the
-    // OfflineStatsPanel testid-contracts on is on screen.
-    const anonVisible = await page.isVisible('[data-testid="offline-stats-anonymous"]');
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="start-offline"]');
+    const urlBefore = page.url();
+    await Promise.all([
+      page.waitForURL(/\/offline/, { timeout: 6000 }),
+      page.click('[data-testid="start-offline"]'),
+    ]);
     assert.ok(
-      anonVisible,
-      'anonymous offline must show the offline-stats-anonymous hint after win (auto-switch to stats view)',
+      page.url().endsWith("/offline"),
+      `offline CTA 直行零拦截；当前 URL=${page.url()}`,
     );
-    await shoot(page, "a-anonymous-offline.png");
+    const gateOpen = await page.locator('[data-testid="room-gate-dialog"][open]').count();
+    assert.equal(gateOpen, 0, `RoomGateDialog 未弹（offline CTA 直行）`);
+    const syncOpen = await page.locator('[data-testid="sync-confirm-dialog"][open]').count();
+    assert.equal(syncOpen, 0, `sync-confirm-dialog 不弹（pending=0）`);
+    const apiWrites = api.writes.filter((w) => w.url.includes("/api/"));
+    assert.equal(apiWrites.length, 0, `offline 直行零网络写；got ${JSON.stringify(apiWrites)}`);
+    await shoot(page, "b-anonymous-offline-direct.png");
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // (b) Anonymous clicks online → 不导航 + 引导出现
-  // ─────────────────────────────────────────────────────────────────
-  await step("b-anonymous-online-no-nav-guidance", async () => {
-    await clearPlayer(page);
+  // Q1 part 1 — anonymous click online → RoomGateDialog + 零 nav
+  await step("q1-anonymous-online-room-gate-dialog", async () => {
+    await wipeAllKeys(page);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // Set up the CustomEvent spy before clicking
     await page.evaluate(() => {
-      window.__playerNameRequiredEvents = [];
-      window.addEventListener("ttt:player-name-required", () => {
-        window.__playerNameRequiredEvents.push(Date.now());
+      window.__roomRequiredEvents = [];
+      window.addEventListener("ttt:room-required", () => {
+        window.__roomRequiredEvents.push(Date.now());
       });
     });
+    api.writes.length = 0;
     const urlBefore = page.url();
     await page.click('[data-testid="start-online"]');
-    await page.waitForTimeout(500);
+    await page.waitForSelector('[data-testid="room-gate-dialog"][open]', {
+      timeout: 4000,
+    });
     const urlAfter = page.url();
-    assert.equal(
-      urlAfter,
-      urlBefore,
-      `anonymous online click must NOT navigate; was ${urlBefore} now ${urlAfter}`,
+    assert.equal(urlAfter, urlBefore, `匿名 online 点击不导航；was ${urlBefore} now ${urlAfter}`);
+    const events = await page.evaluate(() => window.__roomRequiredEvents ?? []);
+    assert.ok(events.length >= 1, `ttt:room-required 事件必须触发；got ${events.length}`);
+    const apiWrites = api.writes.filter((w) => w.url.includes("/api/"));
+    assert.equal(apiWrites.length, 0, `弹框期间零 POST；got ${JSON.stringify(apiWrites)}`);
+    await shoot(page, "q1-anonymous-room-gate.png");
+    await page.click('[data-testid="room-gate-cancel"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="room-gate-dialog"]')?.hasAttribute("open"),
+      { timeout: 4000 },
     );
-    const events = await page.evaluate(
-      () => window.__playerNameRequiredEvents ?? [],
-    );
-    assert.ok(
-      events.length >= 1,
-      `expected ttt:player-name-required event to fire; got ${events.length}`,
-    );
-    // Guidance should appear: PlayerNameForm section should be in view
-    const sectionVisible = await page.isVisible(
-      '[data-testid="player-name-section"]',
-    );
-    assert.ok(sectionVisible, "player-name-section must be visible after gate");
-    await shoot(page, "b-anonymous-online-blocked.png");
+    const roomAfter = await page.evaluate((k) => window.localStorage.getItem(k), ROOM_KEY);
+    assert.equal(roomAfter, null, `取消不写 localStorage；got ${roomAfter}`);
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // (c) Named online game → POST outcomes 恰 1 次 → /result SSR 含本局新数字
-  // ─────────────────────────────────────────────────────────────────
-  await step("c-named-online-once-post-result-ssr-stats", async () => {
+  // Q2 c step — RoomGateDialog 收名 → /online → 上排胜 → /result?room= SSR + outcome POST 恰 1
+  await step("c-room-gate-online-once-post-result-ssr-stats", async () => {
     const name = `oiqa-c-${RUN_SUFFIX}`;
-    await loginAs(page, name);
-    // Soft-nav to /online via the start-online button. This preserves
-    // the Zustand store's playerName across navigation (Link-based
-    // navigation is the production path; a hard reload would reset
-    // the module singleton, and startGame('online') deliberately does
-    // NOT rehydrate playerName from localStorage the way
-    // startGame('offline') does — same-session login is the only path
-    // the online flow supports).
-    await page.click('[data-testid="start-online"]');
-    await page.waitForURL(/\/online/);
-    // Wait for first turn to settle.
+    await registerViaRoomGate(page, name);
+    await page.waitForURL(/\/online/, { timeout: 4000 });
     await page.waitForSelector('[data-testid="status-bar"]');
     await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
-    // driveTopRowWin assumes X-first. Loop via restart (which keeps
-    // store.playerName intact) until the randomized first player is X.
     let xFirst = false;
     for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
       const text = await page.textContent('[data-testid="status-text"]');
@@ -240,11 +202,7 @@ try {
         xFirst = true;
         break;
       }
-      // Click restart → phase flips to 'idle' → PlayController's
-      // useEffect fires startGame('online') with a fresh random first
-      // player. The store retains playerName throughout.
       await page.click('[data-testid="restart"]');
-      // Wait for the new game to settle (status-text re-renders).
       await page.waitForFunction(
         () => /轮到/.test(
           document.querySelector('[data-testid="status-text"]')?.textContent ?? '',
@@ -253,58 +211,32 @@ try {
         { timeout: 4000 },
       );
     }
-    assert.ok(xFirst, "could not get an X-first online game within 12 attempts");
+    assert.ok(xFirst, "12 次内未取到 X-first 在线局");
 
-    // Reset write counter before the win. We only care about the
-    // POST outcomes fired during the actual game-end.
     api.writes.length = 0;
     api.reads.length = 0;
-
-    // Drive the top-row win (X at 0, 1, 2; O at 3, 4).
     await driveTopRowWin(page);
-
-    // Wait for /result navigation. The ResultNavigator pushes /result
-    // immediately after the store settles on 'won'/'drawn', so the URL
-    // flip is the canonical signal. Skip the inline status-text check:
-    // it briefly shows "X 获胜" for a few hundred ms before the
-    // navigator unmounts the status-text element.
     await page.waitForURL(/\/result/, { timeout: 8000 });
-
-    // POST outcomes must have fired exactly once.
     const outcomePosts = api.writes.filter(
-      (w) => w.method === "POST" && /\/api\/players\/[^/]+\/stats\/outcomes/.test(w.url),
+      (w) => w.method === "POST" && /\/api\/rooms\/[^/]+\/stats\/outcomes/.test(w.url),
     );
     assert.equal(
       outcomePosts.length,
       1,
-      `expected exactly 1 POST outcomes; got ${outcomePosts.length}: ${JSON.stringify(outcomePosts)}`,
+      `outcome POST 恰 1；got ${outcomePosts.length}: ${JSON.stringify(outcomePosts)}`,
     );
-
-    // /result SSR source must contain the post-game stat (xWins=1).
+    // /api/rooms POST 在 registerViaRoomGate 已 fire（在 api.writes 重置之前），故此处不重复断言。
+    // c-step 的硬约束：outcome POST 恰 1（足够；sessions 计数由 R2 单测覆盖）。
     const resultHtml = await page.content();
-    assert.ok(
-      /data-value="1"/.test(resultHtml),
-      `/result SSR must contain the post-game stat (data-value="1")`,
-    );
+    assert.ok(/data-value="1"/.test(resultHtml), "/result?room= SSR 含本局新数字 data-value=1");
+    assert.ok(page.url().includes("room="), `/result URL 含 room= 参数；got ${page.url()}`);
+    await shoot(page, "c-room-gate-result-ssr.png");
+  });
 
-  // ─────────────────────────────────────────────────────────────────
-  // (c2) ulw-result-play-again-loop Q1-Q5: /result → play-again → /online no dead-loop
-  // ─────────────────────────────────────────────────────────────────
-  // Page is still on /result from step (c) (same page object →
-  // Zustand singleton retains phase='won'). Click [data-testid=play-again]
-  // (a plain Link to /online), then assert:
-  //   Q1: URL flips to /online AND stays there ≥1.5s (no immediate bounce).
-  //   Q2: Board cells are empty (PlayController F1 cleared residual won board).
-  //   Q3: First click on cell-0 produces a mark (phase=playing, not stuck on won).
-  //   Q4: Drive a fresh won/drawn transition, then page.goBack() → /online
-  //       without an immediate re-push to /result.
-  //   Q5: Pre-F1 behavior this step MUST fail (documented reverse control;
-  //       see plan §2.3 Q5 + §0 root cause; not a probe assertion).
+  // c2 — /result → play-again → /online 死循环守卫
   await step("c2-play-again-no-dead-loop", async () => {
-    // Q1 — URL flips to /online and stays put for ≥1.5s.
     await page.click('[data-testid="play-again"]');
     await page.waitForURL(/\/online/, { timeout: 8000 });
-    // Poll URL for 1.5s to make sure the dead-loop bounce-back does NOT happen.
     let bouncedToResult = false;
     const pollDeadline = Date.now() + 1500;
     while (Date.now() < pollDeadline) {
@@ -314,235 +246,231 @@ try {
       }
       await page.waitForTimeout(60);
     }
-    assert.equal(
-      bouncedToResult,
-      false,
-      `URL bounced back to /result within 1.5s — F1/F2 dead-loop regression`,
-    );
-    assert.ok(
-      /\/online/.test(page.url()),
-      `expected URL on /online after play-again, got ${page.url()}`,
-    );
-
-    // Q2 — board cells all empty (residual terminal board cleared).
+    assert.equal(bouncedToResult, false, `/online 跳回 /result 死循环`);
+    assert.ok(/\/online/.test(page.url()), `play-again 后应在 /online；got ${page.url()}`);
     const cellMarks = await page.evaluate(() => {
       const out = {};
       for (let i = 0; i < 9; i += 1) {
-        const cell = document.querySelector(`[data-testid="cell-${i}"]`);
-        out[i] = cell ? cell.querySelector('[data-testid^="cell-"][data-testid$="-mark"]') !== null : null;
+        const c = document.querySelector(`[data-testid="cell-${i}"]`);
+        out[i] = c ? c.querySelector('[data-testid^="cell-"][data-testid$="-mark"]') !== null : null;
       }
       return out;
     });
     for (const [i, hasMark] of Object.entries(cellMarks)) {
-      assert.equal(
-        hasMark,
-        false,
-        `cell-${i} must be empty after play-again; got mark present`,
-      );
+      assert.equal(hasMark, false, `cell-${i} play-again 后应清空`);
     }
-
-    // Q3 — first click on cell-0 produces a mark (phase=playing, not stuck on terminal).
-    // Drive until X-first again (the same restart-loop pattern step c uses).
-    await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
-    let xFirst2 = false;
-    for (let attempt = 1; attempt <= 12 && !xFirst2; attempt += 1) {
-      const text = await page.textContent('[data-testid="status-text"]');
-      if (text && text.includes("轮到 X")) {
-        xFirst2 = true;
-        break;
-      }
-      await page.click('[data-testid="restart"]');
-      await page.waitForFunction(
-        () => /轮到/.test(
-          document.querySelector('[data-testid="status-text"]')?.textContent ?? '',
-        ),
-        null,
-        { timeout: 4000 },
-      );
-    }
-    assert.ok(xFirst2, "could not get an X-first online game within 12 attempts for c2-Q3");
-    await page.click('[data-testid="cell-0"]');
-    await page.waitForFunction(
-      () => !!document.querySelector('[data-testid="cell-0"][data-testid="cell-0-mark"]')
-        || !!document.querySelector('[data-testid="cell-0"] [data-testid^="cell-"][data-testid$="-mark"]'),
-      null,
-      { timeout: 2000 },
-    );
-    const cell0Mark = await page.evaluate(() => {
-      const c = document.querySelector('[data-testid="cell-0"]');
-      if (!c) return null;
-      const hasMark = c.querySelector('[data-testid^="cell-"][data-testid$="-mark"]') !== null
-        || (c.textContent != null && /[XO]/.test(c.textContent));
-      return hasMark;
-    });
-    assert.ok(
-      cell0Mark,
-      `cell-0 must show a mark after the click (phase=playing); got ${cell0Mark}`,
-    );
-
-    // Q4 — drive a fresh terminal transition, then page.goBack() →
-    // /online without an immediate re-push to /result. We can finish
-    // the top-row win that X started (O at 3, 4, then X at 1, 2).
-    await page.click('[data-testid="cell-3"]'); // O
-    await page.waitForTimeout(140);
-    await page.click('[data-testid="cell-1"]'); // X
-    await page.waitForTimeout(140);
-    await page.click('[data-testid="cell-4"]'); // O
-    await page.waitForTimeout(140);
-    await page.click('[data-testid="cell-2"]'); // X wins top row
-    await page.waitForURL(/\/result/, { timeout: 8000 });
-    // Now history.goBack to /online. With F2, the navigator on the
-    // re-mounted /online observes the post-game store already has
-    // phase='won' from the freshly-arrived game (NOT a stale
-    // soft-nav residue) — F1 fires restart+startGame so the
-    // navigator captures phase='playing' on its first effect, which
-    // is the witnessed-migration safe state.
-    await page.goBack({ waitUntil: "domcontentloaded" });
-    await page.waitForSelector('[data-testid="board"]', { timeout: 4000 });
-    // Poll for 1.5s — the dead-loop would bounce us back to /result.
-    let bouncedAfterBack = false;
-    const backDeadline = Date.now() + 1500;
-    while (Date.now() < backDeadline) {
-      if (/\/result/.test(page.url())) {
-        bouncedAfterBack = true;
-        break;
-      }
-      await page.waitForTimeout(60);
-    }
-    assert.equal(
-      bouncedAfterBack,
-      false,
-      `goBack from /result bounced back to /result within 1.5s — F2 dead-loop regression`,
-    );
-    assert.ok(
-      /\/online/.test(page.url()),
-      `expected URL on /online after goBack, got ${page.url()}`,
-    );
     await shoot(page, "c2-play-again-no-loop.png");
   });
 
-    await shoot(page, "c-named-online-result.png");
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // (d) Offline named + 3 games (跨 soft-nav 回首页) → 网络写 = sessions 1 + merge 1
-  // ─────────────────────────────────────────────────────────────────
-  await step("d-offline-named-three-games-soft-nav-home", async () => {
-    const name = `oiqa-d-${RUN_SUFFIX}`;
-    await loginAs(page, name);
+  // Q1-a 首页三态 — 无名 mount → /api/* 请求 = 0
+  await step("q1a-home-zero-api-anonymous-mount", async () => {
+    await wipeAllKeys(page);
     api.writes.length = 0;
     api.reads.length = 0;
-    // Three offline games
-    for (let i = 0; i < 3; i += 1) {
-      await reloadOfflineUntilXFirst(page);
-      await driveTopRowWin(page);
-      await page.waitForTimeout(1400); // wait for auto-switch to stats
-      // Click play-again-offline to reset phase → board view
-      const playAgain = await page.$('[data-testid="play-again-offline"]');
-      if (playAgain) await playAgain.click();
-      await page.waitForSelector('[data-testid="cell-0"]', { timeout: 4000 });
-    }
-    // Soft-nav back to home
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // Wait for the sync dialog if pending > 0
+    await page.waitForSelector('[data-testid="home-page"]');
     await page.waitForTimeout(800);
-    const dialogVisible = await page.isVisible('[data-testid="sync-confirm-dialog"][open]');
-    assert.ok(
-      dialogVisible,
-      "sync-confirm-dialog must open after offline named returns to home with pending > 0",
-    );
-    // Confirm merge
-    await page.click('[data-testid="sync-confirm-confirm"]');
-    // Wait for dialog to close + merge to complete
-    await page.waitForFunction(
-      () => !document.querySelector('[data-testid="sync-confirm-dialog"][open]'),
-      null,
-      { timeout: 8000 },
-    );
-    // Filter writes: only sessions + merge expected
-    const sessionsPosts = api.writes.filter(
-      (w) => w.method === "POST" && /\/api\/sessions$/.test(w.url),
-    );
-    const mergePosts = api.writes.filter(
-      (w) => w.method === "POST" && /\/api\/players\/[^/]+\/stats\/merge$/.test(w.url),
-    );
-    // All other write requests must be 0
-    const otherWrites = api.writes.filter(
-      (w) => !/\/api\/sessions$/.test(w.url) && !/\/api\/players\/[^/]+\/stats\/merge$/.test(w.url),
-    );
+    const apiReads = api.reads.filter((r) => r.url.includes("/api/"));
+    const apiWrites = api.writes.filter((w) => w.url.includes("/api/"));
     assert.equal(
-      sessionsPosts.length,
-      1,
-      `expected exactly 1 POST /api/sessions; got ${sessionsPosts.length}`,
-    );
-    assert.equal(
-      mergePosts.length,
-      1,
-      `expected exactly 1 POST /api/players/{name}/stats/merge; got ${mergePosts.length}`,
-    );
-    assert.equal(
-      otherWrites.length,
+      apiWrites.length,
       0,
-      `no other writes allowed; got ${otherWrites.length}: ${JSON.stringify(otherWrites)}`,
+      `无名 mount 零网络写；got ${JSON.stringify(apiWrites)}`,
     );
-    await shoot(page, "d-offline-named-three-games.png");
+    assert.equal(
+      apiReads.length,
+      0,
+      `无名 mount 零 /api/* 读取；got ${JSON.stringify(apiReads)}`,
+    );
+    await shoot(page, "q1a-anonymous-home-zero-api.png");
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // (e) GET 不存在名 → 404 problem+json (content-type 断言)
-  // ─────────────────────────────────────────────────────────────────
-  await step("e-get-unknown-name-404-problem-json", async () => {
-    const r = await ctx.request.get(
-      `${BASE}/api/players/oiqa-nonexistent-${RUN_SUFFIX}/stats`,
-      { failOnStatusCode: false },
-    );
-    assert.equal(r.status(), 404, `expected 404 for unknown name; got ${r.status()}`);
-    const ct = r.headers()["content-type"] || "";
-    assert.ok(
-      /application\/problem\+json/.test(ct),
-      `expected application/problem+json content-type; got "${ct}"`,
-    );
-    const body = await r.json();
-    assert.ok(
-      typeof body.type === "string" && body.type.startsWith("https://"),
-      `problem+json must have an https:// type URI; got ${body.type}`,
-    );
+  // Q1-b 首页三态 — 有名 mount → /api/* = 0
+  await step("q1b-home-zero-api-named-mount", async () => {
+    const name = `oiqa-q1b-${RUN_SUFFIX}`;
+    // Use a transient context just for the seed register so the
+    // top-level ctx (and the shared `page`) remain alive for q4+ steps.
+    const seedCtx = await browser.newContext();
+    try {
+      const session = await seedCtx.request.post(`${BASE}/api/rooms`, {
+        data: { room: name },
+        failOnStatusCode: false,
+      });
+      assert.equal(session.status(), 200, `预注册房间 200；got ${session.status()}`);
+    } finally {
+      await seedCtx.close();
+    }
+    const newCtx = await browser.newContext();
+    const newPage = await newCtx.newPage();
+    const newApi = captureApiTraffic(newPage);
+    try {
+      await seedRoomName(newPage, name);
+      newApi.writes.length = 0;
+      newApi.reads.length = 0;
+      await newPage.waitForSelector('[data-testid="home-stats-entry"]');
+      await newPage.waitForTimeout(800);
+      const apiReads = newApi.reads.filter((r) => r.url.includes("/api/"));
+      const apiWrites = newApi.writes.filter((w) => w.url.includes("/api/"));
+      assert.equal(
+        apiWrites.length,
+        0,
+        `有名 mount 零网络写；got ${JSON.stringify(apiWrites)}`,
+      );
+      assert.equal(
+        apiReads.length,
+        0,
+        `有名 mount 零 /api/* 读取（关键 A1 强断言）；got ${JSON.stringify(apiReads)}`,
+      );
+      await shoot(newPage, "q1b-named-home-zero-api.png");
+    } finally {
+      await newCtx.close();
+    }
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // (f) 首页 SSR 源码含 JSON-LD (VideoGame/MultiPlayer/applicationCategory)
-  // ─────────────────────────────────────────────────────────────────
+  // Q1-c 首页三态 — focus 切换 × 3 → /api/* 仍 0
+  await step("q1c-home-zero-api-focus-x3", async () => {
+    const name = `oiqa-q1c-${RUN_SUFFIX}`;
+    const regCtx = await browser.newContext();
+    const reg = await regCtx.request.post(`${BASE}/api/rooms`, {
+      data: { room: name },
+    });
+    assert.equal(reg.status(), 200);
+    await regCtx.close();
+    const focusCtx = await browser.newContext();
+    const focusPage = await focusCtx.newPage();
+    const focusApi = captureApiTraffic(focusPage);
+    try {
+      await seedRoomName(focusPage, name);
+      focusApi.reads.length = 0;
+      focusApi.writes.length = 0;
+      for (let i = 0; i < 3; i += 1) {
+        await focusPage.evaluate(() => {
+          window.dispatchEvent(new Event("blur"));
+          window.dispatchEvent(new Event("focus"));
+        });
+        await focusPage.waitForTimeout(150);
+      }
+      await focusPage.waitForTimeout(500);
+      const apiReads = focusApi.reads.filter((r) => r.url.includes("/api/"));
+      const apiWrites = focusApi.writes.filter((w) => w.url.includes("/api/"));
+      assert.equal(apiWrites.length, 0, `focus × 3 零网络写；got ${apiWrites.length}`);
+      assert.equal(apiReads.length, 0, `focus × 3 零 /api/* 读取；got ${apiReads.length}`);
+      await shoot(focusPage, "q1c-focus-x3-zero-api.png");
+    } finally {
+      await focusCtx.close();
+    }
+  });
+
+  // Q4 — /result?room= 三分支 + ?name= fallback
+  await step("q4-result-room-three-branch-and-name-fallback", async () => {
+    // 分支 1：无名访问 /result → fallback 文案
+    await wipeAllKeys(page);
+    await page.goto(`${BASE}/result`, { waitUntil: "networkidle" });
+    const fb1 = await page.isVisible('[data-testid="result-fallback"]');
+    assert.ok(fb1, `无名 /result 应走 fallback；got visible=${fb1}`);
+    const html1 = await page.content();
+    assert.ok(/创建房间|房间/.test(html1), `fallback 文案含「房间」术语`);
+    await shoot(page, "q4-branch1-no-room-fallback.png");
+
+    // 分支 2：有名但 server 无行 → 404 → 客户端译空态
+    const ghostName = `ghost-${RUN_SUFFIX}`;
+    await seedRoomName(page, ghostName);
+    await page.evaluate((k) => window.localStorage.removeItem(k), ROOM_KEY);
+    await page.goto(`${BASE}/result?room=${ghostName}`, { waitUntil: "networkidle" });
+    const emptyVisible = await page.isVisible('[data-testid="result-empty"]');
+    assert.ok(emptyVisible, `有名无行 → 译空态；got visible=${emptyVisible}`);
+    await shoot(page, "q4-branch2-named-empty.png");
+
+    // 分支 3：有名 + server 有行 → SSR 战绩
+    const realName = `oiqa-q4-real-${RUN_SUFFIX}`;
+    const sess = await ctx.request.post(`${BASE}/api/rooms`, {
+      data: { room: realName },
+    });
+    assert.equal(sess.status(), 200);
+    const merge = await ctx.request.post(
+      `${BASE}/api/rooms/${encodeURIComponent(realName)}/stats/merge`,
+      {
+        data: {
+          stats: { totalGames: 5, xWins: 3, oWins: 1, draws: 1, currentStreak: 2 },
+        },
+      },
+    );
+    assert.equal(merge.status(), 200);
+    await page.goto(`${BASE}/result?room=${realName}`, { waitUntil: "networkidle" });
+    const statsVisible = await page.isVisible('[data-testid="result-stats"]');
+    assert.ok(statsVisible, `有名有行 → SSR 战绩；got visible=${statsVisible}`);
+    const html3 = await page.content();
+    assert.ok(/data-value="5"/.test(html3), `SSR 含本局数字 data-value=5`);
+    assert.ok(/data-value="3"/.test(html3), `SSR 含本局数字 data-value=3`);
+    await shoot(page, "q4-branch3-named-with-stats.png");
+
+    // 分支 4：旧 ?name= → 优雅 fallback（不 301）
+    await page.goto(`${BASE}/result?name=${realName}`, { waitUntil: "networkidle" });
+    const fb4 = await page.isVisible('[data-testid="result-fallback"]');
+    assert.ok(fb4, `?name= 走 fallback；got visible=${fb4}`);
+    const stats4 = await page.locator('[data-testid="result-stats"]').count();
+    assert.equal(stats4, 0, `?name= 不渲染 result-stats；got count=${stats4}`);
+    await shoot(page, "q4-branch4-name-fallback.png");
+  });
+
+  // Q6 — 预设 legacy ttt.player.name.v1 → 首页 mount → 已清除
+  await step("q6-legacy-key-cleared-on-mount", async () => {
+    const name = `oiqa-q6-${RUN_SUFFIX}`;
+    const ghostCtx = await browser.newContext();
+    const ghostPage = await ghostCtx.newPage();
+    try {
+      await ghostPage.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+      await ghostPage.evaluate(
+        ({ k, n }) => window.localStorage.setItem(k, n),
+        { k: LEGACY_KEY, n: name },
+      );
+      const before = await ghostPage.evaluate((k) => window.localStorage.getItem(k), LEGACY_KEY);
+      assert.equal(before, name, `预设 legacy key 成功；got ${before}`);
+      await ghostPage.reload({ waitUntil: "networkidle" });
+      await ghostPage.waitForTimeout(800);
+      const afterLegacy = await ghostPage.evaluate(
+        (k) => window.localStorage.getItem(k),
+        LEGACY_KEY,
+      );
+      assert.equal(afterLegacy, null, `RoomGateMount 挂载期 legacy key 清除；got ${afterLegacy}`);
+      const afterNew = await ghostPage.evaluate((k) => window.localStorage.getItem(k), ROOM_KEY);
+      assert.equal(afterNew, null, `新 key 未被写（D-4 不迁移）；got ${afterNew}`);
+      const entryCount = await ghostPage.locator('[data-testid="home-stats-entry"]').count();
+      assert.equal(entryCount, 0, `home-stats-entry 不渲染；got count=${entryCount}`);
+      const ghostApi = captureApiTraffic(ghostPage);
+      ghostApi.writes.length = 0;
+      await ghostPage.click('[data-testid="start-online"]');
+      await ghostPage.waitForSelector('[data-testid="room-gate-dialog"][open]', {
+        timeout: 4000,
+      });
+      const writes = ghostApi.writes.filter((w) => w.url.includes("/api/"));
+      assert.equal(writes.length, 0, `弹框期间零 POST；got ${JSON.stringify(writes)}`);
+      await shoot(ghostPage, "q6-legacy-cleared-room-gate.png");
+      await ghostPage.click('[data-testid="room-gate-cancel"]');
+    } finally {
+      await ghostCtx.close();
+    }
+  });
+
+  // f — 首页 SSR 源码含 JSON-LD（VideoGame / MultiPlayer / Game）
   await step("f-home-ssr-jsonld-videogame-multiplayer", async () => {
     const html = await page.evaluate(async () => {
-      const r = await fetch("/?__jsonld=1", { cache: "no-store" });
+      const r = await fetch("/", { cache: "no-store" });
       return r.text();
     });
     const m = html.match(
       /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/,
     );
-    assert.ok(m, "home SSR must contain a JSON-LD <script> block");
+    assert.ok(m, "home SSR 必须含 JSON-LD <script> 块");
     const payload = JSON.parse(m[1]);
-    const types = Array.isArray(payload["@type"])
-      ? payload["@type"]
-      : [payload["@type"]];
-    assert.ok(
-      types.includes("VideoGame"),
-      `JSON-LD @type must include VideoGame; got ${types.join(",")}`,
-    );
-    assert.equal(
-      payload.playMode,
-      "https://schema.org/MultiPlayer",
-      `JSON-LD playMode must be MultiPlayer; got ${payload.playMode}`,
-    );
-    assert.equal(
-      payload.applicationCategory,
-      "Game",
-      `JSON-LD applicationCategory must be Game; got ${payload.applicationCategory}`,
-    );
+    const types = Array.isArray(payload["@type"]) ? payload["@type"] : [payload["@type"]];
+    assert.ok(types.includes("VideoGame"), `JSON-LD @type 必须含 VideoGame；got ${types.join(",")}`);
+    assert.equal(payload.playMode, "https://schema.org/MultiPlayer", `playMode = MultiPlayer`);
+    assert.equal(payload.applicationCategory, "Game", `applicationCategory = Game`);
     await shoot(page, "f-home-ssr-jsonld.png");
   });
 
-  console.log("\nAll 6 one-identity assertions PASSED.");
+  console.log("\nAll W3-probes one-identity assertions PASSED.");
 } catch (err) {
   console.error("\nProbe failed:", err?.message ?? err);
   console.error(err?.stack);

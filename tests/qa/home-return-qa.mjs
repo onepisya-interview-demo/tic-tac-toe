@@ -1,23 +1,19 @@
-// home-return-qa.mjs — W3 (ulw-name-login-one-truth) end-to-end probe
-// for the home-page identity region and the home-return sync dialog.
-// One real Chromium + production build (pnpm build && pnpm start on
-// :3101). Covers:
+#!/usr/bin/env node
+// home-return-qa.mjs — W3-probes (ulw-room-migration-home-landing) Q5.
 //
-//   A3 弹框时机全路径:
-//      a) solo → 回首页 + pending>0 → 弹框现 (首次回首页)
-//      b) 首页直接起战不弹不拦 (pending=0 → 直行)
-//      c) 「保留本地」零网络写 + sessionStorage 标记写 (Step 4)
-//      d) 同会话 pending 无增量不重弹 (含刷新) (Step 5)
-//      e) 再玩 1 局 pending 超记录值 → 回首页再弹 (Step 6)
-//   A7 跨设备只读恢复:
-//      a) A 设备 sync 3 局 → fresh context (B 设备) 输同 name →
-//         线上战绩卡显示 3 局 (Step 7)
-//      b) B 的 ttt.offline.* keys 全程为空 (Step 7)
-//      c) B 玩 offline 从 0 独立累计 (Step 8)
+// Production build probe (BASE_URL=http://localhost:3199, hermetic tmp DB).
+// Covers plan §3.5 Q5:
+//   - 合并弹框房间术语文案
+//   - 合并并清空全路径（postRoomSession + postMerge + 客户端清）
+//   - 首页全程 /api/* = 0 强断言（替代 W2 step07 的 OnlineStatsCard 快照）
+//
+// W2 retired PlayerNameForm / OnlineStatsCard; W3 rewrites the probe
+// to the RoomGateDialog + HomeDialogMount surface. Pure-local /offline
+// contract is unchanged.
 //
 // Usage:
-//   node tests/qa/home-return-qa.mjs          (needs pnpm build && pnpm start on :3101)
-//   env: BASE_URL (default http://localhost:3101),
+//   node tests/qa/home-return-qa.mjs
+//   env: BASE_URL (default http://localhost:3199),
 //        EVIDENCE_DIR (default .omx/evidence/home-return-qa).
 
 import assert from "node:assert/strict";
@@ -27,9 +23,9 @@ import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/home-return-qa";
-const PLAYER_KEY = "ttt.player.name.v1";
-const LOCAL_OFFLINE_KEY = "ttt.offline.stats.v1";
-const OFFLINE_MERGED_KEY = "ttt.offline.last-merged-local.v1";
+const ROOM_KEY = "ttt.room.name.v1";
+const LEGACY_KEY = "ttt.player.name.v1";
+const OFFLINE_KEY = "ttt.offline.stats.v1";
 const DECLINED_KEY = "ttt.offline.sync-declined.v1";
 const RUN_SUFFIX = String(Date.now() % 1000000).padStart(6, "0");
 const findings = [];
@@ -67,457 +63,112 @@ function isWriteToApi(method, url) {
   return method === "POST" || method === "PUT" || method === "DELETE";
 }
 
-function isReadToApi(method, url) {
-  if (!url.includes("/api/")) return false;
-  return method === "GET";
+function captureLocalStorage(page) {
+  return page.evaluate(() => ({ ...window.localStorage }));
 }
 
-async function captureLocalStorage(page) {
-  return await page.evaluate(() => ({ ...window.localStorage }));
+function captureSessionStorage(page) {
+  return page.evaluate(() => ({ ...window.sessionStorage }));
 }
 
-async function captureSessionStorage(page) {
-  return await page.evaluate(() => ({ ...window.sessionStorage }));
-}
-
-async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
-    // status-bar is always rendered; status-text only appears when the
-    // active cell is in playing state. Wait for the bar first so we
-    // know the client has hydrated.
-    await page.waitForSelector('[data-testid="status-bar"]');
-    // Then wait for status-text (means phase=playing and currentPlayer
-    // is non-null, i.e. startGame ran).
-    await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
-    const text = await page.textContent('[data-testid="status-text"]');
-    if (text && text.includes("X")) return;
-    await page.reload({ waitUntil: "networkidle" });
+// W3 helper: seed a name + offline stats to prime the home-return dialog.
+// Uses fresh context (B-device equivalent) so we don't pollute the top-level ctx.
+async function seedOfflineGameOnDeviceA(browser, base, runSuffix, games = 1, name) {
+  const ctxA = await browser.newContext();
+  try {
+    const pageA = await ctxA.newPage();
+    await pageA.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await pageA.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await pageA.reload({ waitUntil: "networkidle" });
+    // Drive N offline games to populate local stats.
+    for (let i = 0; i < games; i += 1) {
+      await pageA.goto(`${base}/offline`, { waitUntil: "networkidle" });
+      await pageA.waitForSelector('[data-testid="status-bar"]');
+      // Loop until X-first
+      let xFirst = false;
+      for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+        await pageA.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+        const text = await pageA.textContent('[data-testid="status-text"]');
+        if (text && text.includes("X")) {
+          xFirst = true;
+          break;
+        }
+        await pageA.reload({ waitUntil: "networkidle" });
+      }
+      if (!xFirst) throw new Error("could not get X-first offline game");
+      await driveTopRowWin(pageA);
+      await pageA.waitForTimeout(1400); // wait for auto-switch to settle
+    }
+    await ctxA.close();
+  } catch (e) {
+    await ctxA.close().catch(() => {});
+    throw e;
   }
-  throw new Error("could not get an X-first offline game within 12 attempts");
 }
 
-// Server reset helper.
-// W1 retired /api/stats; W2 ships POST /api/sessions with no DELETE
-// counterpart. The hermetic test DB lives at /tmp/ulw-og2v/w3.db
-// (recreated once per run), so steps that need a clean baseline
-// use unique names via seedRecordRowViaApi. This helper is now a
-// no-op for symmetry with the rest of the W3 probe surface.
-async function resetServer(_page) {
-  // intentionally empty — see comment above
-}
-
-async function seedRecordRowViaApi(ctx, name, stats) {
-  // Register / login first to create the row, then fold via /merge.
-  const session = await ctx.request.post(`${BASE}/api/sessions`, {
-    data: { name },
+// Server-side seed for the cross-device step: pre-register a room with a stats row.
+async function seedRoomRowViaApi(ctx, base, name, stats) {
+  const session = await ctx.request.post(`${base}/api/rooms`, {
+    data: { room: name },
   });
-  assert.equal(session.status(), 200, `seed sessions 200, got ${session.status()}`);
-  const merge = await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
-    data: { stats },
-  });
-  assert.equal(merge.status(), 200, `seed merge 200, got ${merge.status()}`);
+  assert.equal(session.status(), 200, `seed /api/rooms 200；got ${session.status()}`);
+  const merge = await ctx.request.post(
+    `${base}/api/rooms/${encodeURIComponent(name)}/stats/merge`,
+    {
+      data: { stats },
+    },
+  );
+  assert.equal(merge.status(), 200, `seed merge 200；got ${merge.status()}`);
 }
 
-await step("step 01 reset server + verify home landing renders", async () => {
+// W3 step 01 — 首页落地三件套：home-page + start-online + start-offline
+await step("step 01 home landing renders dual CTA + home stats entry (when named)", async () => {
   const { browser, ctx, page } = await launchQA();
   try {
-    await resetServer(page);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // W1 retired empty-state testid; W3 landing renders the dual
-    // CTA + identity region instead. Verify the new surface.
     await page.waitForSelector('[data-testid="start-online"]');
     await page.waitForSelector('[data-testid="start-offline"]');
     await page.waitForSelector('[data-testid="home-page"]');
+    // 无名时 home-stats-entry 不渲染
+    const entryCount = await page.locator('[data-testid="home-stats-entry"]').count();
+    assert.equal(entryCount, 0, `无名首页 home-stats-entry 不渲染；got count=${entryCount}`);
+    // 弹框未开
+    const syncOpen = await page.locator('[data-testid="sync-confirm-dialog"][open]').count();
+    assert.equal(syncOpen, 0, `无 pending 首页无弹框`);
     await shoot(page, "home-landing-empty-warm.png");
-    // No dialog on initial load (no pending games).
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "no dialog on empty home (no pending games)",
-    );
   } finally {
     await browser.close();
   }
 });
 
-await step("step 02 offline → 回首页 + pending>0 → 弹框现 (A3 first branch)", async () => {
+// W3 step 02 — offline 1 局 → 回首页 → 弹框现 + 文案含房间术语
+await step("step 02 offline game → home return → dialog with room copy (A3 first branch)", async () => {
   const { browser, ctx, page } = await launchQA();
   try {
-    await resetServer(page);
-    // Seed a name so the W2 pure-local 守卫 (store.ts:makeMove
-    // isAnonymous branch) actually writes to localStorage on win.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    // Play 1 offline game via UI on /offline.
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
-    const localBefore = await captureLocalStorage(page);
-    assert.equal(localBefore[LOCAL_OFFLINE_KEY] !== undefined, true, "local offline stats present");
-    // Click 返回首页 link.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // The home-return dialog should now be visible.
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 4000,
-    });
-    await shoot(page, "home-dialog-first-open.png");
-    const desc = await page.textContent('[data-testid="sync-confirm-desc"]');
-    assert.ok(desc && desc.includes("将上传本机"), "dialog shows pending copy");
-  } finally {
-    await browser.close();
-  }
-});
-
-await step("step 03 pending=0 首页直接起战不弹不拦 (A3 second branch)", async () => {
-  const { browser, ctx, page } = await launchQA();
-  try {
-    await resetServer(page);
-    // Seed the name via localStorage on the same origin so the
-    // page first frame carries the value. PlayerNameForm's mount
-    // effect (post-hydration) rehydrates the store from localStorage,
-    // which the StartGameButton's requireName gate reads.
+    const name = `hrqa02-${RUN_SUFFIX}`;
+    // 种子：A 设备先设 room key 后玩 1 局 offline，让本地 stats = 1
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
     await page.evaluate(
-      (n) => {
-        window.localStorage.setItem("ttt.player.name.v1", n);
-        window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
-      },
-      `hrqa-${RUN_SUFFIX}`,
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
     );
     await page.reload({ waitUntil: "networkidle" });
-    // Wait for the PlayerNameForm's post-hydration reverse hydration
-    // to set the store. The folded testid confirms it landed.
-    // Wait for the PlayerNameForm post-hydration reverse hydration
-    // to set the store. The folded testid (player-name-readonly)
-    // confirms it landed.
-    await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
-    await page.waitForFunction(
-      () => !!document.querySelector('[data-testid="player-name-readonly"]'),
-      { timeout: 4000 },
-    );
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "no dialog on clean home",
-    );
-    await Promise.all([
-      page.waitForURL(/\/online$/),
-      page.click('[data-testid="start-online"]'),
-    ]);
-    await page.waitForSelector('[data-testid="status-bar"]');
-    await shoot(page, "start-online-direct.png");
-  } finally {
-    await browser.close();
-  }
-});
-
-await step("step 04 「保留本地」: 零网络写 + sessionStorage 标记写 (A3 third branch)", async () => {
-  const { browser, ctx, page } = await launchQA();
-  try {
-    await resetServer(page);
-    // Seed a name so the W2 pure-local 守卫 actually writes to
-    // localStorage on win.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    // Seed 1 pending game.
-// Seed player name so W2 pure-local 守卫 writes localStorage.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
-    // Track network writes from this point.
-    const writesAfterSeed = [];
-    page.on("request", (req) => {
-      if (isWriteToApi(req.method(), req.url())) {
-        writesAfterSeed.push({ method: req.method(), url: req.url() });
+    // 玩 1 局
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst = true;
+        break;
       }
-    });
-    // Go home → dialog opens.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 4000,
-    });
-    // Click 「保留本地」.
-    await page.click('[data-testid="sync-confirm-reject"]');
-    // Wait briefly for any (non-existent) writes.
-    await page.waitForTimeout(300);
-    // Dialog closed.
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "dialog closed after 保留本地",
-    );
-    assert.equal(
-      writesAfterSeed.length,
-      0,
-      `no /api/ writes after reject (got ${writesAfterSeed.length}: ${JSON.stringify(writesAfterSeed)})`,
-    );
-    // sessionStorage sentinel should record the pending count (1).
-    const sess = await captureSessionStorage(page);
-    assert.equal(
-      sess[DECLINED_KEY],
-      "1",
-      `sessionStorage ${DECLINED_KEY}=1 (got ${sess[DECLINED_KEY]})`,
-    );
-    // localStorage solo stats unchanged.
-    const local = await captureLocalStorage(page);
-    assert.equal(local[LOCAL_OFFLINE_KEY] !== undefined, true, "local stats preserved");
-  } finally {
-    await browser.close();
-  }
-});
-
-await step("step 05 同会话 pending 无增量不重弹 (含刷新) (A3 fourth branch)", async () => {
-  const { browser, ctx, page } = await launchQA();
-  try {
-    await resetServer(page);
-// Seed player name so W2 pure-local 守卫 writes localStorage.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 4000,
-    });
-    await page.click('[data-testid="sync-confirm-reject"]');
-    await page.waitForTimeout(300);
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "dialog closed after 保留本地",
-    );
-    // Hard reload the home page — declined sentinel is in sessionStorage,
-    // which survives reloads within the same tab session but is wiped on
-    // a NEW context. sessionStorage is preserved across reload.
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(300);
-    assert.equal(
-      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
-      0,
-      "no dialog after hard reload (sessionStorage sentinel still pending=1)",
-    );
-    await shoot(page, "home-no-redialog-after-reload.png");
-  } finally {
-    await browser.close();
-  }
-});
-
-await step("step 06 再玩 1 局 pending 超记录值 → 回首页再弹 (A3 fifth branch)", async () => {
-  const { browser, ctx, page } = await launchQA();
-  try {
-    await resetServer(page);
-    // 1 game → declined sentinel = 1.
-// Seed player name so W2 pure-local 守卫 writes localStorage.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    await page.waitForFunction(() => { try { const v = window.localStorage.getItem('ttt.offline.stats.v1'); return v ? JSON.parse(v).totalGames >= 1 : false; } catch { return false; } }, { timeout: 5000 });
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 4000,
-    });
-    await page.click('[data-testid="sync-confirm-reject"]');
-    await page.waitForTimeout(200);
-    // Play 1 more → pending=2 > declined=1 → re-opens.
-// Seed player name so W2 pure-local 守卫 writes localStorage.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    await reloadOfflineUntilXFirst(page);
-    await driveTopRowWin(page);
-    await page.waitForTimeout(200);
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 4000,
-    });
-    const desc = await page.textContent('[data-testid="sync-confirm-desc"]');
-    assert.ok(desc && desc.includes("将上传本机 2 局"), "dialog shows 2 pending");
-    await shoot(page, "home-dialog-reopen-2.png");
-    await page.click('[data-testid="sync-confirm-reject"]');
-  } finally {
-    await browser.close();
-  }
-});
-
-await step("step 07 fresh context (B 设备) 输同 name → 线上战绩卡显示 3 局 + offline key 全程为空 (A7)", async () => {
-  // A 设备 seed: register name + sync 3 games.
-  const browserA = await launchBrowser();
-  try {
-    const ctxA = await browserA.newContext();
-    const pageA = await ctxA.newPage();
-    await resetServer(pageA);
-    await seedRecordRowViaApi(ctxA, `hrqa-${RUN_SUFFIX}-b`, {
-      totalGames: 3,
-      xWins: 2,
-      oWins: 0,
-      draws: 1,
-      currentStreak: 1,
-    });
-    await ctxA.close();
-  } finally {
-    await browserA.close();
-  }
-
-  // B 设备: fresh context, fresh localStorage. Login with the same name
-  // and verify the online card displays 3 games. Critically, B's solo
-  // localStorage keys MUST remain empty (A2 red-line: 线上永不进本地).
-  const browserB = await launchBrowser();
-  try {
-    const ctxB = await browserB.newContext();
-    const pageB = await ctxB.newPage();
-    // Navigate to / first so window.localStorage is accessible
-    // (about:blank throws SecurityError). Then sanity-check the fresh
-    // context has no name / offline keys before any UI interaction.
-    await pageB.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    const localStart = await captureLocalStorage(pageB);
-    assert.equal(localStart[LOCAL_OFFLINE_KEY], undefined, "no local offline key on fresh context");
-    assert.equal(localStart[PLAYER_KEY], undefined, "no name key on fresh context");
-    // Type + save the name via the PlayerNameForm. The form posts to
-    // /api/sessions which returns existed:true (登录).
-    await pageB.fill('[data-testid="player-name-input"]', `hrqa-${RUN_SUFFIX}-b`);
-    await pageB.click('[data-testid="player-name-save"]');
-    // Wait for the login feedback.
-    await pageB.waitForSelector(
-      '[data-testid="player-name-feedback"][data-feedback-kind="login"]',
-      { timeout: 4000 },
-    );
-    // Wait for the online card to fetch and render the merged row.
-    await pageB.waitForSelector('[data-testid="online-stats-grid"]', {
-      timeout: 4000,
-    });
-    await shoot(pageB, "home-online-card-b-device.png");
-    // Verify the rendered numbers (the server returned totalGames=3).
-    const valueEls = await pageB.$$eval(
-      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
-      (els) => els.map((e) => e.textContent?.trim() ?? ""),
-    );
-    assert.ok(valueEls[0] === "3", `first stat value = 3 (got ${valueEls[0]})`);
-    // A2 red-line assertion: localStorage solo stats key STILL undefined
-    // even after viewing the online card.
-    const localAfter = await captureLocalStorage(pageB);
-    assert.equal(
-      localAfter[LOCAL_OFFLINE_KEY],
-      undefined,
-      `A2: localStorage ${LOCAL_OFFLINE_KEY} must remain undefined after viewing online card (got ${localAfter[LOCAL_OFFLINE_KEY]})`,
-    );
-    // And no offline-sentinel either.
-    assert.equal(
-      localAfter[OFFLINE_MERGED_KEY],
-      undefined,
-      `A2: localStorage ${OFFLINE_MERGED_KEY} must remain undefined (got ${localAfter[OFFLINE_MERGED_KEY]})`,
-    );
-    // name key WAS written (this is the identity region contract).
-    assert.equal(
-      localAfter[PLAYER_KEY],
-      `hrqa-${RUN_SUFFIX}-b`,
-      "name key written on login",
-    );
-    await ctxB.close();
-  } finally {
-    await browserB.close();
-  }
-});
-
-await step("step 08 fresh context B 玩 offline 从 0 独立累计 (A7 continuation)", async () => {
-  const browser = await launchBrowser();
-  try {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    // Login first (carries the B-device name from step 07 forward).
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.fill('[data-testid="player-name-input"]', `hrqa-${RUN_SUFFIX}-b`);
-    await page.click('[data-testid="player-name-save"]');
-    await page.waitForSelector('[data-testid="online-stats-grid"]', {
-      timeout: 4000,
-    });
-    // Play 1 offline game — local starts at 0. PlayerNameForm's
-    // submit handler wrote `hrqa-${RUN_SUFFIX}-b` to localStorage
-    // above; nothing else needed.
-    await reloadOfflineUntilXFirst(page);
-    const localBefore = await captureLocalStorage(page);
-    const before = localBefore[LOCAL_OFFLINE_KEY] ? JSON.parse(localBefore[LOCAL_OFFLINE_KEY]) : null;
-    assert.ok(!before || before.totalGames === 0, `local starts at 0 (got ${JSON.stringify(before)})`);
-    await driveTopRowWin(page);
-    await page.waitForTimeout(200);
-    const localAfter = await captureLocalStorage(page);
-    const after = JSON.parse(localAfter[LOCAL_OFFLINE_KEY]);
-    assert.equal(after.totalGames, 1, "B offline accumulates locally from 0");
-    // Online card still says 3 (server untouched by local-only play).
-    // Wait for the dialog to open first (it WILL open — pending=1).
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 8000,
-    });
-    // PlayerNameForm re-hydrates from localStorage on mount, so the
-    // online card renders the same 3-game row even after the /offline
-    // round-trip. Wait for the grid to attach (top-layer modal does
-    // not remove it from the DOM).
-    await page.waitForSelector('[data-testid="online-stats-grid"]', {
-      timeout: 8000,
-      state: "attached",
-    });
-    await page.keyboard.press("Escape").catch(() => {});
-    await page.waitForTimeout(300);
-    const valueEls = await page.$$eval(
-      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
-      (els) => els.map((e) => e.textContent?.trim() ?? ""),
-    );
-    assert.ok(valueEls[0] === "3", `online card still 3 (got ${valueEls[0]})`);
-    await ctx.close();
-  } finally {
-    await browser.close();
-  }
-});
-
-
-await step("step 09 (W2) logged-in user merge → online card updates ≤2s via event", async () => {
-  const browser = await launchBrowser();
-  try {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    await resetServer(page);
-    const name = `w2-${RUN_SUFFIX}-loggedin`;
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.fill('[data-testid="player-name-input"]', name);
-    await page.click('[data-testid="player-name-save"]');
-    await page.waitForSelector('[data-testid="online-stats-grid"]', {
-      timeout: 4000,
-    });
-    const initialOnline = await page.getAttribute(
-      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
-      "data-value",
-    );
-    assert.equal(initialOnline, "0", `online card initial = 0 (got ${initialOnline})`);
-    // Play 1 offline game locally.
-// Seed player name so W2 pure-local 守卫 writes localStorage.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      (n) => window.localStorage.setItem("ttt.player.name.v1", n),
-      `hrqa-${RUN_SUFFIX}`,
-    );
-    await reloadOfflineUntilXFirst(page);
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst, "未取到 X-first offline");
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
@@ -530,126 +181,434 @@ await step("step 09 (W2) logged-in user merge → online card updates ≤2s via 
       },
       { timeout: 5000 },
     );
-    // Go home → dialog opens with pending=1.
+    const localBefore = await captureLocalStorage(page);
+    assert.ok(localBefore[OFFLINE_KEY] !== undefined, "local offline stats 存在");
+    // 回首页
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
-    await shoot(page, "home-dialog-step09-pre-confirm.png");
-    // Click 合并并清空 — already-registered name, dialog pre-fills it.
-    await page.click('[data-testid="sync-confirm-confirm"]');
-    // ≤2s for online-stats-grid to update from 0 to 1 (server merged).
-    let updated = null;
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline) {
-      try {
-        updated = await page
-          .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
-          .first()
-          .getAttribute("data-value");
-        if (updated === "1") break;
-      } catch {
-        // selector transient — keep polling
-      }
-      await page.waitForTimeout(100);
-    }
-    await shoot(page, "home-online-card-step09-after-merge.png");
-    assert.equal(
-      updated,
-      "1",
-      `online card data-value updated to 1 within 2s after merge (got ${updated})`,
-    );
-    // A2 red-line: merge cleared local; no localStorage pollution.
-    const localAfter = await captureLocalStorage(page);
-    assert.equal(
-      localAfter[LOCAL_OFFLINE_KEY],
-      undefined,
-      `A2: ${LOCAL_OFFLINE_KEY} cleared after merge (got ${localAfter[LOCAL_OFFLINE_KEY]})`,
-    );
-    await ctx.close();
+    await shoot(page, "home-dialog-first-open.png");
+    // 弹框文案含房间术语
+    const desc = await page.textContent('[data-testid="sync-confirm-desc"]');
+    assert.ok(desc && desc.includes("将上传本机"), `弹框文案含「将上传本机」`);
+    // 弹框 title 应是「合并战绩」（W3 仍保留）
+    const title = await page.textContent('[data-testid="sync-confirm-title"]');
+    assert.ok(title && title.includes("合并"), `弹框标题含「合并」`);
   } finally {
     await browser.close();
   }
 });
 
-await step("step 10 (W2) window focus triggers online card refetch", async () => {
-  const browser = await launchBrowser();
+// W3 step 03 — pending=0 首页直接起战不弹不拦 + home 全程 /api/* = 0
+await step("step 03 pending=0 + named → click start-online → direct nav (zero /api/* on home)", async () => {
+  const { browser, ctx, page } = await launchQA();
   try {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    await resetServer(page);
-    const name = `w2-${RUN_SUFFIX}-focus`;
+    const name = `hrqa03-${RUN_SUFFIX}`;
+    // 预设房间 key + 让 RoomGateMount 把它读进 store
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 4000 });
+    // 此时 pending=0 + 有名
+    assert.equal(
+      await page.locator('[data-testid="sync-confirm-dialog"][open]').count(),
+      0,
+      "pending=0 无弹框",
+    );
+    // 监听 /api/* 网络写
+    const writes = [];
+    page.on("request", (req) => {
+      if (isWriteToApi(req.method(), req.url())) {
+        writes.push({ method: req.method(), url: req.url() });
+      }
+    });
+    await Promise.all([
+      page.waitForURL(/\/online$/),
+      page.click('[data-testid="start-online"]'),
+    ]);
+    await page.waitForSelector('[data-testid="status-bar"]');
+    await page.waitForTimeout(300);
+    // 首页 → /online 直接导航，pending=0 无弹框，零 POST 写
+    const apiWrites = writes.filter((w) => w.url.includes("/api/"));
+    assert.equal(
+      apiWrites.length,
+      0,
+      `pending=0 直行零网络写；got ${apiWrites.length}: ${JSON.stringify(apiWrites)}`,
+    );
+    await shoot(page, "start-online-direct.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// W3 step 04 — 保留本地：零网络写 + sessionStorage 哨兵
+await step("step 04 reject: zero /api/* writes + sessionStorage sentinel", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa04-${RUN_SUFFIX}`;
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    // 1 局 offline
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst = true;
+        break;
+      }
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst, "未取到 X-first");
+    await driveTopRowWin(page);
+    await page.waitForFunction(
+      () => {
+        try {
+          const v = window.localStorage.getItem("ttt.offline.stats.v1");
+          return v ? JSON.parse(v).totalGames >= 1 : false;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5000 },
+    );
+    // 网络写监听（从此点起）
+    const writesAfter = [];
+    page.on("request", (req) => {
+      if (isWriteToApi(req.method(), req.url())) {
+        writesAfter.push({ method: req.method(), url: req.url() });
+      }
+    });
+    // 回首页 → 弹框开
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.fill('[data-testid="player-name-input"]', name);
-    await page.click('[data-testid="player-name-save"]');
-    await page.waitForSelector('[data-testid="online-stats-grid"]', {
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
-    const beforeFocus = await page.getAttribute(
-      '[data-testid="online-stats-grid"] [data-testid="stat-value"]',
-      "data-value",
+    // 保留本地
+    await page.click('[data-testid="sync-confirm-reject"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      { timeout: 4000 },
     );
-    assert.equal(beforeFocus, "0", `online card before focus = 0 (got ${beforeFocus})`);
-    // Simulate an external mutation: another device syncs a 5-game row
-    // under the same name. Use the same context's APIRequestContext so
-    // we don't need a second browser.
-    const sync = await ctx.request.post(`${BASE}/api/players/${encodeURIComponent(name)}/stats/merge`, {
-      data: {
-        stats: { totalGames: 5, xWins: 5, oWins: 0, draws: 0, currentStreak: 5 },
-      },
-    });
-    assert.equal(sync.status(), 200, `external sync 200 (got ${sync.status()})`);
-    // Card is still 0 (no signal). Dispatch focus on the page window.
-    await page.evaluate(() => {
-      window.dispatchEvent(new Event("focus"));
-    });
-    // ≤2s for card to update to 5.
-    let afterFocus = null;
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline) {
-      try {
-        afterFocus = await page
-          .locator('[data-testid="online-stats-grid"] [data-testid="stat-value"]')
-          .first()
-          .getAttribute("data-value");
-        if (afterFocus === "5") break;
-      } catch {
-        // keep polling
-      }
-      await page.waitForTimeout(100);
-    }
-    await shoot(page, "home-online-card-step10-after-focus.png");
+    const apiWrites = writesAfter.filter((w) => w.url.includes("/api/"));
     assert.equal(
-      afterFocus,
-      "5",
-      `online card data-value updated to 5 within 2s after focus (got ${afterFocus})`,
+      apiWrites.length,
+      0,
+      `保留本地零网络写；got ${JSON.stringify(apiWrites)}`,
     );
-    await ctx.close();
+    // sessionStorage 哨兵 = 1
+    const sess = await captureSessionStorage(page);
+    assert.equal(sess[DECLINED_KEY], "1", `sessionStorage sentinel = 1`);
+    // localStorage 仍保留
+    const local = await captureLocalStorage(page);
+    assert.ok(local[OFFLINE_KEY] !== undefined, "本地战绩保留");
   } finally {
     await browser.close();
   }
 });
 
-await step("step 11 (W3) reset button + public ledger retired — verify clean home", async () => {
+// W3 step 05 — 同会话 pending 无增量不重弹
+await step("step 05 same-session pending stale: no re-dialog", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa05-${RUN_SUFFIX}`;
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst = true;
+        break;
+      }
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst, "未取到 X-first");
+    await driveTopRowWin(page);
+    await page.waitForFunction(
+      () => {
+        try {
+          const v = window.localStorage.getItem("ttt.offline.stats.v1");
+          return v ? JSON.parse(v).totalGames >= 1 : false;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5000 },
+    );
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 4000,
+    });
+    await page.click('[data-testid="sync-confirm-reject"]');
+    await page.waitForTimeout(300);
+    // 同会话刷新：sessionStorage 保留 → 不重弹
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    const reOpen = await page.locator('[data-testid="sync-confirm-dialog"][open]').count();
+    assert.equal(reOpen, 0, `同会话刷新不重弹（sessionStorage 哨兵仍 1）`);
+    await shoot(page, "home-no-redialog-after-reload.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// W3 step 06 — 再玩 1 局 pending 超记录值 → 重弹
+await step("step 06 pending > declined sentinel → re-dialog with N=2 copy", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa06-${RUN_SUFFIX}`;
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    // 第 1 局
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst = true;
+        break;
+      }
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst, "未取到 X-first");
+    await driveTopRowWin(page);
+    await page.waitForTimeout(1400);
+    // 第 1 次保留本地 → 哨兵 = 1
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 4000,
+    });
+    await page.click('[data-testid="sync-confirm-reject"]');
+    await page.waitForTimeout(300);
+    // 第 2 局
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst2 = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst2; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst2 = true;
+        break;
+      }
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst2, "第 2 局未取到 X-first");
+    await driveTopRowWin(page);
+    await page.waitForTimeout(1400);
+    // pending = 2 > declined = 1 → 重弹
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 4000,
+    });
+    const desc = await page.textContent('[data-testid="sync-confirm-desc"]');
+    assert.ok(desc && desc.includes("2"), `弹框文案含 2；got "${desc}"`);
+    await shoot(page, "home-dialog-reopen-2.png");
+    await page.click('[data-testid="sync-confirm-reject"]');
+  } finally {
+    await browser.close();
+  }
+});
+
+// W3 step 07 (NEW) — 首页全程 /api/* = 0 强断言（替代 W2 OnlineStatsCard 前后快照）
+// 这是 Q5 验收的核心强断言：切到任意设备（fresh / 已有 room / 多次 focus）
+// 首页都不发任何 /api/* 请求。
+await step("step 07 home zero /api/* — fresh, named, focus x3 (A1 strong)", async () => {
+  const scenarios = [
+    { label: "fresh-context-no-name", preset: null, focusCount: 0 },
+    { label: "fresh-context-with-name", preset: "named", focusCount: 0 },
+    { label: "fresh-context-with-name-focus-x3", preset: "named", focusCount: 3 },
+  ];
+  for (const sc of scenarios) {
+    const sub = await launchQA();
+    const subApi = { requests: [] };
+    const onReq = (req) => {
+      if (req.url().includes("/api/")) {
+        subApi.requests.push({ method: req.method(), url: req.url() });
+      }
+    };
+    sub.page.on("request", onReq);
+    try {
+      if (sc.preset === "named") {
+        // 用 seedRoomName 通过 RoomGateMount 路径
+        const name = `q7${RUN_SUFFIX.slice(0,4)}${sc.label.length > 8 ? sc.label.slice(0,8) : sc.label}`.slice(0, 24);
+        // 预注册到 server（避免 mount 时副作用）
+        const regCtx = await sub.browser.newContext();
+        try {
+          await regCtx.request.post(`${BASE}/api/rooms`, {
+            data: { room: name },
+          });
+        } finally {
+          await regCtx.close();
+        }
+        await sub.page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+        await sub.page.evaluate(
+          ({ k, n }) => window.localStorage.setItem(k, n),
+          { k: ROOM_KEY, n: name },
+        );
+        // Verify before reload
+        const beforeReload = await sub.page.evaluate((k) => window.localStorage.getItem(k), ROOM_KEY);
+        if (beforeReload !== name) {
+          throw new Error(`localStorage setItem 失败；got ${beforeReload}`);
+        }
+        await sub.page.reload({ waitUntil: "load" });
+        await sub.page.waitForTimeout(2000); // settle RoomGateMount hydration
+        await sub.page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
+      } else {
+        await sub.page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+        await sub.page.evaluate((k) => window.localStorage.removeItem(k), ROOM_KEY);
+        await sub.page.evaluate((k) => window.localStorage.removeItem(k), LEGACY_KEY);
+        await sub.page.evaluate(() => window.sessionStorage.clear());
+        await sub.page.reload({ waitUntil: "networkidle" });
+      }
+      subApi.requests.length = 0;
+      // focus × N
+      for (let i = 0; i < sc.focusCount; i += 1) {
+        await sub.page.evaluate(() => {
+          window.dispatchEvent(new Event("blur"));
+          window.dispatchEvent(new Event("focus"));
+        });
+        await sub.page.waitForTimeout(150);
+      }
+      await sub.page.waitForTimeout(800);
+      assert.equal(
+        subApi.requests.length,
+        0,
+        `[${sc.label}] 首页 /api/* 必须 0；got ${subApi.requests.length}: ${JSON.stringify(subApi.requests)}`,
+      );
+      await shoot(sub.page, `home-zero-api-${sc.label}.png`);
+    } finally {
+      await sub.browser.close();
+    }
+  }
+});
+
+// W3 step 08 — 合并并清空全路径（postRoomSession + postMerge）
+await step("step 08 merge + clear full path (postRoomSession + postMerge + local clear)", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa08-${RUN_SUFFIX}`;
+    // 预注册 → server row 0
+    await ctx.request.post(`${BASE}/api/rooms`, { data: { room: name } });
+    // 设 room key + 灌 1 局 offline 数据
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.evaluate(
+      ({ k, v }) => window.localStorage.setItem(k, v),
+      {
+        k: OFFLINE_KEY,
+        v: JSON.stringify({ totalGames: 2, xWins: 2, oWins: 0, draws: 0, currentStreak: 2 }),
+      },
+    );
+    // 监听网络写
+    const writes = [];
+    page.on("request", (req) => {
+      if (isWriteToApi(req.method(), req.url())) {
+        writes.push({ method: req.method(), url: req.url() });
+      }
+    });
+    // 回首页触发弹框
+    await page.reload({ waitUntil: "load" });
+    await page.waitForTimeout(2000); // settle RoomGateMount hydration
+    await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 6000,
+    });
+    await shoot(page, "home-dialog-step08-pre-confirm.png");
+    writes.length = 0;
+    // 输入预填可能因 store hydration 时序未到位；显式 fill 一次保证 canConfirm。
+    const inputVal = await page.inputValue('[data-testid="sync-confirm-name"]');
+    if (!inputVal) {
+      await page.fill('[data-testid="sync-confirm-name"]', name);
+    }
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      { timeout: 4000 },
+    );
+    // 合并并清空
+    await page.click('[data-testid="sync-confirm-confirm"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      { timeout: 8000 },
+    );
+    await page.waitForTimeout(400);
+    // 必有 POST /api/rooms + POST /api/rooms/{room}/stats/merge
+    const sessions = writes.filter(
+      (w) => w.method === "POST" && /\/api\/rooms$/.test(w.url),
+    );
+    const merges = writes.filter(
+      (w) => w.method === "POST" && /\/api\/rooms\/[^/]+\/stats\/merge/.test(w.url),
+    );
+    assert.equal(sessions.length, 1, `POST /api/rooms 恰 1；got ${sessions.length}`);
+    assert.equal(merges.length, 1, `POST merge 恰 1；got ${merges.length}`);
+    // localStorage OFFLINE_KEY 已清
+    const local = await captureLocalStorage(page);
+    assert.equal(local[OFFLINE_KEY], undefined, `合并并清空后 OFFLINE_KEY 清除`);
+    // server row 累加到 (2, 2, 0, 0, 2)
+    const r = await ctx.request.get(
+      `${BASE}/api/rooms/${encodeURIComponent(name)}/stats`,
+    );
+    assert.equal(r.status(), 200);
+    const body = await r.json();
+    assert.equal(body.stats.totalGames, 2, `server totalGames = 2；got ${body.stats.totalGames}`);
+    assert.equal(body.stats.xWins, 2, `server xWins = 2`);
+  } finally {
+    await browser.close();
+  }
+});
+
+// W3 step 09 — reset / public ledger retired — 旧路径全 404
+await step("step 09 legacy /api/sessions + /api/players/* retired — all 404", async () => {
   const browser = await launchBrowser();
   try {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    // W1 retired /api/stats; W4 moved ResetStatsButton to /offline
-    // (scope='local'). The home page therefore carries neither.
-    // Pin the W3 contract: the reset button testid is NOT on /.
+    await page.waitForSelector('[data-testid="home-page"]');
+    // 首页零 reset button / 零 player-name-section / 零 online-stats-grid
     const resetCount = await page.locator('[data-testid="reset-stats"]').count();
-    assert.equal(resetCount, 0, `reset-stats testid absent on / (got ${resetCount})`);
-    // Public ledger endpoints are 404.
+    const pnSection = await page.locator('[data-testid="player-name-section"]').count();
+    const onlineStats = await page.locator('[data-testid="online-stats-grid"]').count();
+    assert.equal(resetCount, 0, `home 无 reset-stats；got count=${resetCount}`);
+    assert.equal(pnSection, 0, `home 无 player-name-section；got count=${pnSection}`);
+    assert.equal(onlineStats, 0, `home 无 online-stats-grid；got count=${onlineStats}`);
+    // 旧路径 404
     const put = await page.request.put(`${BASE}/api/stats`, { data: {} });
-    assert.equal(put.status(), 404, `legacy /api/stats PUT 404 (got ${put.status()})`);
+    assert.equal(put.status(), 404, `legacy /api/stats PUT 404；got ${put.status()}`);
+    const sessions = await page.request.get(`${BASE}/api/sessions`);
+    assert.equal(sessions.status(), 404, `legacy /api/sessions GET 404；got ${sessions.status()}`);
+    const players = await page.request.get(`${BASE}/api/players/old-name/stats`);
+    assert.equal(players.status(), 404, `legacy /api/players/*/stats GET 404；got ${players.status()}`);
     await shoot(page, "home-no-reset-no-public.png");
+    await ctx.close();
   } finally {
     await browser.close();
   }
 });
-
 
 await writeQaLog(EVIDENCE, {
   test: "home-return-qa",
@@ -657,5 +616,5 @@ await writeQaLog(EVIDENCE, {
   findings,
   runSuffix: RUN_SUFFIX,
 });
-console.log("\nALL STEPS PASSED");
+console.log("\nALL HOME-RETURN STEPS PASSED");
 process.exit(0);

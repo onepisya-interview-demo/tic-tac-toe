@@ -1,4 +1,6 @@
-// Visual + functional QA via Playwright.
+// Visual + functional QA via Playwright — W3-probes (room migration home landing).
+// Q7: 新首页基线截图（hero + 玩法引导 + 双 CTA + 战绩静态入口） + /result?room= SSR。
+// Evidence dir 改为 room-migration 子目录以隔离 W2 旧基线。
 // Runs against the production server on http://localhost:3000.
 //
 // Two passes per invocation:
@@ -19,7 +21,7 @@ import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
 
 const BASE = BASE_URL;
-const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
+const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/room-migration-visual-qa';
 
 // Geist Mono's woff2 hash as observed in production HTML pre-preload-false.
 // When the layout fix removes the preload link, this query must return null.
@@ -98,15 +100,14 @@ async function mobileOverflow(page) {
 
 async function desktopPass(page, shoot, log) {
   // ---- 1. Home / ----
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  // Seed a player name so the W3 online entry gate (StartGameButton
-  // requireName=true default for online) passes.
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  // Seed a room name so the W3 online entry gate (StartGameButton
+  // requireName=true default for online) passes via RoomGateMount hydration.
   await page.evaluate(() => {
-    window.localStorage.setItem("ttt.player.name.v1", "visual-qa-user");
-    window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+    window.localStorage.setItem("ttt.room.name.v1", "visual-qa-room");
   });
-  await page.reload({ waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
+  await page.reload({ waitUntil: "load" });
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
   await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(300); // settle font preload
   const homeShot = await shoot(page, '01-home.png');
@@ -134,17 +135,33 @@ async function desktopPass(page, shoot, log) {
   const resultSnap = await snapshot(page);
   log.push({ stage: 'result', shot: resultShot, snapshot: resultSnap });
 
-  // ---- 4. Reload home to verify stats persisted via DB ----
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-online"]');
+  // ---- 4. Reload home — home-stats-entry 仍渲染 + 零 /api/* (Q7 强断言) ----
+  const apiHomeReload = [];
+  const onReq = (req) => {
+    if (req.url().includes("/api/")) {
+      apiHomeReload.push({ method: req.method(), url: req.url() });
+    }
+  };
+  page.on("request", onReq);
+  await page.goto(`${BASE}/`, { waitUntil: "load" });
+  await page.waitForTimeout(2000);
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
   await page.waitForTimeout(300);
   const reloadShot = await shoot(page, '04-home-after-game.png');
   const reloadSnap = await snapshot(page);
-  log.push({ stage: 'home-after-game', shot: reloadShot, snapshot: reloadSnap });
+  log.push({
+    stage: 'home-after-game',
+    shot: reloadShot,
+    snapshot: reloadSnap,
+    apiRequests: apiHomeReload.slice(),
+  });
+  if (apiHomeReload.length > 0) {
+    throw new Error(`home reload issued /api/* — expected 0; got ${apiHomeReload.length}: ${JSON.stringify(apiHomeReload)}`);
+  }
 
-  // ---- 5. Verify API stats endpoint (W2 per-name endpoint) ----
+  // ---- 5. Server stats row (server-authoritative truth) ----
   const apiResp = await page.evaluate(async () => {
-    const r = await fetch('/api/players/visual-qa-user/stats', { cache: 'no-store' });
+    const r = await fetch('/api/rooms/visual-qa-room/stats', { cache: 'no-store' });
     return { status: r.status, body: await r.json() };
   });
   log.push({ stage: 'api-stats', response: apiResp });
@@ -185,7 +202,7 @@ async function mobilePass(page, shoot, log) {
   const stages = [];
 
   // Home: reset stats first so we capture a clean empty-state home.
-  await page.request.delete(`${BASE}/api/stats`);
+  // W1 retired /api/stats DELETE; W3 hermetic DB is fresh per run.
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(220);

@@ -1,5 +1,5 @@
-// pure-local-qa.mjs — End-to-end probe for the W1 pure-local contract
-// (.omo/plans/ulw-solo-pure-local-closeout.md §1 悬案一 + §4 验收).
+// pure-local-qa.mjs — End-to-end probe for the W3-probes pure-local contract (post room migration).
+// (ulw-room-migration-home-landing W3-probes; preserves the W2 pure-local contract — name→room token swap).
 // One real Chromium + production build (pnpm build && pnpm start on
 // :3101). Probes three A1/A2/A3 acceptance criteria:
 //
@@ -21,7 +21,7 @@ import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 
 const BASE = BASE_URL;
 const EVIDENCE = process.env.EVIDENCE_DIR ?? ".omx/evidence/pure-local-qa";
-const PLAYER_KEY = "ttt.player.name.v1";
+const ROOM_KEY = "ttt.room.name.v1";
 const LOCAL_OFFLINE_KEY = "ttt.offline.stats.v1";
 const OFFLINE_MERGED_KEY = "ttt.offline.last-merged-local.v1";
 const findings = [];
@@ -62,9 +62,9 @@ async function reloadOfflineUntilXFirst(page, maxAttempts = 12) {
 await ensureDir(EVIDENCE);
 const shoot = shootTo(EVIDENCE);
 
-// W2 RESTful surface: writes to /api/sessions + /api/players/{name}/stats/*
+// W2 RESTful surface: writes to /api/rooms + /api/rooms/{name}/stats/*
 // are the only network writes that should fire on /offline. Read traffic
-// (GET /api/players/{name}/stats via the online card) is allowed by
+// (GET /api/rooms/{name}/stats via the online card) is allowed by
 // the W1 contract; only writes must be 0 for the pure-local /solo flow.
 function isWriteToApi(method, url) {
   if (!url.includes("/api/")) return false;
@@ -93,19 +93,20 @@ try {
   // A1: 断网 + 具名玩 3 局 → localStorage 战绩累计 3 且 /api/ 写请求 = 0
   // ─────────────────────────────────────────────────────────────────
   await step("A1-named-offline-three-games-zero-writes", async () => {
-    // Seed player name on the home page.
+    // Seed room via localStorage (RoomGateMount hydrates store).
     const NAME_A1 = `purelocal-a1-${RUN_SUFFIX}`;
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate((key) => window.localStorage.removeItem(key), ROOM_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="player-name-input"]');
-    await page.fill('[data-testid="player-name-input"]', NAME_A1);
-    await page.click('[data-testid="player-name-save"]');
-    // Wait long enough for the fire-and-forget PUT to land (this is
-    // the only allowed write before the offline phase).
-    await page.waitForTimeout(800);
+    await page.reload({ waitUntil: "load" });
+    await page.waitForTimeout(1500);
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: NAME_A1 },
+    );
+    await page.reload({ waitUntil: "load" });
+    await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
 
     // Navigate to /offline BEFORE installing the write-blocker. The
     // blocker intercepts every /api/* POST/PUT/DELETE and aborts it,
@@ -219,18 +220,22 @@ try {
   // A2b: pending>0 首页点「开始对战」 → 弹框;「合并并清空」 → 导航 + per-field 累加
   // ─────────────────────────────────────────────────────────────────
   await step("A2b-confirm-merges-navigates", async () => {
-    // Seed: server row for the player = 0; local row = (3,3,0,0,3).
+    // Seed: server row for the room = 0; local row = (3,3,0,0,3).
     const NAME_A2 = `purelocal-a2-${RUN_SUFFIX}`;
     // Clear any prior state from A1 — A1 used a different name.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate((key) => window.localStorage.removeItem(key), ROOM_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="player-name-input"]');
-    await page.fill('[data-testid="player-name-input"]', NAME_A2);
-    await page.click('[data-testid="player-name-save"]');
-    await page.waitForTimeout(800);
+    await page.reload({ waitUntil: "load" });
+    await page.waitForTimeout(1500);
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: NAME_A2 },
+    );
+    await page.reload({ waitUntil: "load" });
+    await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
+    await page.waitForTimeout(500);
     // Clear A2a's declined sentinel so A2b's pending > declined triggers
     // a fresh dialog open (W3 contract: sentinel survives a hard
     // reload, but a fresh name + fresh pending should re-open).
@@ -252,7 +257,17 @@ try {
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', { timeout: 4000 });
     await shoot(page, "A2b-dialog-open.png");
 
-    // 「合并并清空」 runs the postPlayerSession + postSoloSync sequence.
+    // W3: 弹框输入可能因 store hydration 时序未到位未预填；显式 fill 保证 canConfirm。
+    const inputVal = await page.inputValue('[data-testid="sync-confirm-name"]');
+    if (!inputVal) {
+      await page.fill('[data-testid="sync-confirm-name"]', NAME_A2);
+    }
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      { timeout: 4000 },
+    );
+
+    // 「合并并清空」 runs the postRoomSession + postMerge sequence.
     await page.click('[data-testid="sync-confirm-confirm"]');
     // W3: dialog closes on success, but no auto-nav. Wait for the
     // dialog's [open] attribute to be removed; use state:'attached'
@@ -270,17 +285,15 @@ try {
     await page.waitForURL("**/online", { timeout: 8000 });
     await page.waitForTimeout(400);
 
-    // The merge writes a single POST /sync (and possibly a PUT if the
-    // name was new). Both are EXPECTED — that's the merge flow.
+    // W3 merge flow: POST /api/rooms (register-or-enter) + POST /api/rooms/{room}/stats/merge.
     const writes = writeCalls.filter((c) => c.url.includes("/api/"));
     assert.ok(
       writes.length >= 1,
-      `合并并清空 must fire network writes (POST sessions + POST merge); saw ${writes.length}: ${JSON.stringify(writes)}`,
+      `合并并清空 must fire network writes (POST /api/rooms + POST merge); saw ${writes.length}: ${JSON.stringify(writes)}`,
     );
-    const postSync = writes.find((c) => c.method === "POST" && c.url.includes("/sync"));
     assert.ok(
-      writes.some((c) => c.method === "POST" && /\/api\/players\/[^/]+\/stats\/merge/.test(c.url)),
-      `合并并清空 must fire POST /api/players/{name}/stats/merge; got ${JSON.stringify(writes)}`,
+      writes.some((c) => c.method === "POST" && /\/api\/rooms\/[^/]+\/stats\/merge/.test(c.url)),
+      `合并并清空 must fire POST /api/rooms/{room}/stats/merge; got ${JSON.stringify(writes)}`,
     );
 
     // Local must be cleared.
@@ -289,7 +302,7 @@ try {
 
     // Server row must be the per-field sum (server=0 + local=3 = 3).
     const server = await page.evaluate(async (n) => {
-      const r = await fetch(`/api/players/${encodeURIComponent(n)}/stats`, { cache: "no-store" });
+      const r = await fetch(`/api/rooms/${encodeURIComponent(n)}/stats`, { cache: "no-store" });
       return r.ok ? r.json() : { stats: null };
     }, NAME_A2);
     assert.equal(server.stats.totalGames, 3, `merged totalGames must be 3, got ${server.stats.totalGames}`);
@@ -310,12 +323,12 @@ try {
     // one-identity-qa.mjs step b).
     const NAME_A3 = `purelocal-a3-${RUN_SUFFIX}`;
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), ROOM_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
     await page.evaluate(
       ({ k, n }) => window.localStorage.setItem(k, n),
-      { k: PLAYER_KEY, n: NAME_A3 },
+      { k: ROOM_KEY, n: NAME_A3 },
     );
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-online"]');
@@ -348,7 +361,7 @@ try {
   // ─────────────────────────────────────────────────────────────────
   // A4 (W2 纯净化): preset playerName in localStorage + mount /solo →
   // 全程 /api/ 请求计数 = 0，断言 stale testid 不再渲染
-  //   - solo-sync / sync-confirm-dialog / PlayerNameForm 必须不在 /offline
+  //   - solo-sync / sync-confirm-dialog / RoomGateDialog 必须不在 /offline
   //   - 清空 localStorage 后刷新仍零请求（持久化不触发 GET）
   // ─────────────────────────────────────────────────────────────────
   await step("A4-named-mount-zero-network-no-stale-testid", async () => {
@@ -356,12 +369,12 @@ try {
     // Seed name + a non-empty local row so the panel has something
     // to render.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate((key) => window.localStorage.removeItem(key), PLAYER_KEY);
+    await page.evaluate((key) => window.localStorage.removeItem(key), ROOM_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), LOCAL_OFFLINE_KEY);
     await page.evaluate((key) => window.localStorage.removeItem(key), OFFLINE_MERGED_KEY);
     await page.evaluate(
       ({ key, value }) => window.localStorage.setItem(key, value),
-      { key: PLAYER_KEY, value: NAME_A4 },
+      { key: ROOM_KEY, value: NAME_A4 },
     );
     await page.evaluate(
       ({ key, value }) => window.localStorage.setItem(key, value),
@@ -393,12 +406,17 @@ try {
       mergeNote: !!document.querySelector('[data-testid="offline-stats-merge-note"]'),
       statsError: !!document.querySelector('[data-testid="offline-stats-error"]'),
       playerNameForm: !!document.querySelector('[data-testid="player-name-section"]'),
+      // W3 新增：stale player-name-* 全族 + online-stats-* 全族 + room-gate-* 不应在 /offline
+      roomGateDialog: !!document.querySelector('[data-testid="room-gate-dialog"]'),
+      onlineStatsGrid: !!document.querySelector('[data-testid="online-stats-grid"]'),
     }));
     assert.equal(stale.syncButton, false, "offline-sync button must be absent on /offline (W2 纯净化)");
     assert.equal(stale.syncDialog, false, "sync-confirm-dialog must be absent on /offline (W2 纯净化)");
     assert.equal(stale.mergeNote, false, "offline-stats-merge-note must be absent on /offline (W2 纯净化)");
     assert.equal(stale.statsError, false, "offline-stats-error must be absent on /offline (W2 纯净化)");
-    assert.equal(stale.playerNameForm, false, "PlayerNameForm must NOT render on /offline (W2 纯净化)");
+    assert.equal(stale.playerNameForm, false, "RoomGateDialog must NOT render on /offline (W2 纯净化)");
+    assert.equal(stale.roomGateDialog, false, "RoomGateDialog must NOT render on /offline (W3 纯净化)");
+    assert.equal(stale.onlineStatsGrid, false, "online-stats-grid must NOT render anywhere (W3 全退役)");
 
     // Heading should still be the anonymous 「单机战绩」 (no name suffix).
     const heading = await page.textContent('[data-testid="offline-stats-heading"]');

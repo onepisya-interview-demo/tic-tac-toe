@@ -149,12 +149,12 @@ try {
     // the server is reachable; the rank / no-row assertion is
     // implicit in the DB being unused.
     const r = await page.evaluate(async (base) => {
-      const x = await fetch(`${base}/api/sessions`, { method: "GET", cache: "no-store" });
+      const x = await fetch(`${base}/api/rooms`, { method: "GET", cache: "no-store" });
       return x.status;
     }, BASE);
-    // /api/sessions is POST-only in W2; GET may be 404 or 405 —
-    // either way the server is up. Accept anything in 2xx-4xx
-    // except 5xx (which would mean DB unreachable).
+    // /api/rooms is POST-only in W3; GET returns 405 (Method Not Allowed)
+    // or 404 (no GET route). Either way the server is up. Accept anything
+    // in 2xx-4xx except 5xx (which would mean DB unreachable).
     assert.ok(r < 500, `expected non-5xx server response, got ${r}`);
   });
 
@@ -168,7 +168,7 @@ try {
     // roundtrip is covered by home-return-qa.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
-      window.localStorage.setItem("ttt.player.name.v1", "offline-mode-qa-user");
+      window.localStorage.setItem("ttt.room.name.v1", "offline-mode-qa-user");
     });
     offlineWriteCount = 0;
     await openOfflineAsXFirst(page);
@@ -261,7 +261,7 @@ try {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.waitForSelector('[data-testid="start-online"]');
     const stats = await page.evaluate(async (base) => {
-      const r = await fetch(`${base}/api/players/offline-mode-qa-user/stats`, { cache: "no-store" });
+      const r = await fetch(`${base}/api/rooms/offline-mode-qa-user/stats`, { cache: "no-store" });
       if (r.status === 404) return null;
       return await r.json();
     }, BASE);
@@ -269,7 +269,7 @@ try {
       assert.equal(
         stats.stats.totalGames,
         0,
-        `per-name row changed during offline session: ${JSON.stringify(stats)}`,
+        `per-room row changed during offline session: ${JSON.stringify(stats)}`,
       );
     }
     await shoot(page, "home-after-offline.png");

@@ -66,7 +66,8 @@ async function main() {
   // State reset — wipe the server row so home renders empty (deterministic
   // baseline). Page-local state (localStorage) is reset by Playwright's
   // newContext on every run.
-  await page.request.delete(`${BASE}/api/stats`);
+  // W1 retired /api/stats (DELETE ledger); W3 hermetic DB is fresh per run,
+  // so no explicit reset needed.
 
   // 1. Home
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
@@ -76,13 +77,12 @@ async function main() {
   report.stages.push({ stage: 'home', path: '/', ...await snapshot(page) });
 
   // 2. /play — click start-online on home to navigate (preserves state flow).
-  // Seed a name so the W3 online entry gate passes.
+  // Seed a name so the W3 online entry gate passes (RoomGateMount hydrates).
   await page.evaluate(() => {
-    window.localStorage.setItem("ttt.player.name.v1", "one-screen-qa-user");
-    window.dispatchEvent(new CustomEvent("ttt:player-name-changed"));
+    window.localStorage.setItem("ttt.room.name.v1", "one-screen-qa-user");
   });
-  await page.reload({ waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="player-name-section"]', { timeout: 4000 });
+  await page.reload({ waitUntil: "load" });
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
   await Promise.all([
     page.waitForURL(`${BASE}/online`),
     page.click('[data-testid="start-online"]'),
@@ -108,13 +108,13 @@ async function main() {
 
   // 5. /result — drive a ranked win (top-row); records actual overshoot
   // as INFO rather than failing on it. W3 /result is a per-name
-  // RSC reading the row from lib/db.ts:loadRecordByName; navigation
-  // carries ?name=<player> (ResultNavigator pushes it).
+  // RSC reading the row from lib/db.ts:loadRecordByRoom; navigation
+  // carries ?room=<roomName> (ResultNavigator pushes it).
   //
   // We navigate via the home start-online CTA so the page click
-  // carries the store-bound playerName forward (the W3 online
+  // carries the store-bound roomName forward (the W3 online
   // entry gate requires it; doing a fresh page.goto to /online
-  // would lose the Zustand playerName hydration).
+  // would lose the Zustand roomName hydration).
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.click('[data-testid="start-online"]');
   await page.waitForURL(`${BASE}/online`);
