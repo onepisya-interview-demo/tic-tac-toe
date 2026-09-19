@@ -82,6 +82,7 @@ sessionStorage `ttt.offline.sync-declined.v1`；「保留本地」后同会话 p
 
 **pure-local（纯本地）**：
 offline 分支零网络写契约：store 的 `makeMove` offline 分支不发任何 fetch；`/offline` 页全程 `/api/*` 请求数 = 0、零 roomName 展示、零同步按钮。跨设备同步只有一条路：首页 `HomeDialogMount` 弹框（用户主动确认）。
+_Additions（2026-09-20）_：`/offline` 战绩无条件直显（StatsGrid），无名与有名渲染一致——无『匿名态』UI 概念（2026-09-20 裁决，`.omo/plans/ulw-offline-ledger-direct.md` §1）。
 
 **防静默建档**：
 不允许「匿名点击路径被偷渡成建档」。merge 的 409 `player-session-required` 与 outcome 的 404 `stats-not-found` 都是它的实现；`lib/api-problem.ts` 是 problem+json 单点。
@@ -129,6 +130,8 @@ _Avoid_: 与 vitest 单测混称「测试」
 - **「哨兵」曾单指旧绝对值模型**：`ttt.solo.server.synced.v1` 存服务端绝对 totalGames，V4 MINOR-F1 裁决改为基线模型并更名 last-merged-local；旧 key `@deprecated` 不迁移。来源：`.omo/plans/ulw-name-login-one-truth.md`、README「localStorage 旧 key 弃用注」
 - **「solo / ranked」版本二分退役**：`solo` 撞 schema.org `SinglePlayer` 语义（本仓无 AI 对手，是同设备 pass-and-play）、`ranked` 暗含不存在的天梯。W1 御定退役为 `offline / online`（连接性维度，与参与人数 `MultiPlayer` 正交）。来源：d07fd07、README「词汇语义说明」
 - **「战绩」未限定实例**：曾致 A2 红线反复争议（GET 响应可否入 store）。裁决：W3 后只剩「查询服务器」与「写入」两通道；查询只读展示（`/result` RSC 与 HomeStatsEntry 纯链接），持久层零污染。来源：AGENTS.md「A1 红线」
+
+- **「本机匿名记账中」卡片退役（2026-09-20）**：offline 无『匿名』UI 态——账本无条件直显；『匿名』从用户可见文案退役，仅存工程语境（防静默建档的『匿名点击路径』）。`offline-stats-anonymous` testid 随卡片退役。来源：`.omo/plans/ulw-offline-ledger-direct.md` §0。
 
 ## Pending
 

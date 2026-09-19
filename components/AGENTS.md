@@ -15,7 +15,7 @@
 | 房间弹框宿主 | RoomGateMount.tsx | 首页挂载的 client 宿主；监听 `ttt:room-required` CustomEvent（detail 携带 `{ mode, href }`），打开 RoomGateDialog；同时执行挂载期 identity bootstrap（localStorage `ttt.room.name.v1` → store）+ `cleanupLegacyPlayerNameKey()` 一次性 legacy 清除 |
 | 房间弹框 | RoomGateDialog.tsx | 原生 `<dialog>`；单输入 + 主 CTA「创建并进入」/ 次 CTA「取消」 + n/24 计数 + ESC 关 + reduced-motion 无动效 + 初焦落主 CTA（requestAnimationFrame 模式，参照 SyncConfirmDialog F3 修复）；提交即 `postRoomSession(trimmed)` → 200 ok 时写 localStorage + store.roomName + `startGame(mode)` + `router.push(href)` + 关闭；422 / aborted / network-error → 就地错误文案，零持久层写入，零导航 |
 | 首页战绩静态入口 | HomeStatsEntry.tsx | `/` 路由；纯 `<Link href="/result?room=...">`，零请求零副作用；store 有 roomName 时渲染「查看 <room> 的战绩 →」链接，无 roomName 时不渲染；testid `home-stats-entry` + `home-stats-link` |
-| 单机战绩面板 | OfflineStatsPanel.tsx | `/offline` 路由；纯本地（zero network writes），无名时显 `offline-stats-anonymous` 提示卡；`isAnonymous` 读 `store.roomName`（W3） |
+| 单机战绩面板 | OfflineStatsPanel.tsx | `/offline` 路由；StatsGrid 无条件直显，无名有名一致；零网络 |
 | 入口 CTA + 拦截 | StartGameButton.tsx | `requireName` prop：online CTA 默认 true，无名点击 dispatch `ttt:room-required` Window CustomEvent（不导航，不调 startGame）；offline CTA 传 false 直行 |
 | 阶段→导航 | ResultNavigator.tsx | `/online` 路由；phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语） |
 | 音效偏好 | SoundToggle.tsx | 保证水合安全的「默认静音」控件 |
@@ -26,7 +26,7 @@
 - 用窄的 Zustand selector 读取游戏状态（`roomName` / `phase` / `board` 等），不要订阅整个 store。
 - 只有交互组件使用客户端模式；展示型基础组件保持 server-compatible。
 - 颜色、间距、字体、圆角和动效都来自全局 Tailwind v4 tokens。
-- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、start-offline、start-online、offline-stats、offline-stats-anonymous、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link。
+- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、start-offline、start-online、offline-stats、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link。
 - 可访问名称使用中文，并通过既有 live region 播报变化。
 - 全局 *:focus-visible 规则拥有 focus ring；组件不要重复声明。
 - 组件测试与组件同目录；SoundToggle 是现有 RTL/SSR 模式。
