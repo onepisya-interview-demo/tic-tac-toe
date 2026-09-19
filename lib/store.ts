@@ -21,20 +21,21 @@ import {
 } from './offline-stats';
 import { postOutcome } from './game-net';
 import {
-  clearPlayerName as clearPlayerNameLocal,
-  getPlayerName,
-  setPlayerName as setPlayerNameLocal,
-} from './player-name';
+  clearRoomName as clearRoomNameLocal,
+  cleanupLegacyPlayerNameKey,
+  getRoomName,
+  setRoomName as setRoomNameLocal,
+} from './room-name';
 import { playSound } from './sound';
 
 export type GamePhase = 'idle' | 'playing' | 'won' | 'drawn';
 
 /**
- * 'online' — 实时上服版本（W3 起 /online 路由：需 name 入口拦截，完局
- *   通过 lib/game-net.ts → service `recordOutcomeForName` 服务端权威
- *   累加）。本波（W1）只留清晰的 TODO 注释，不发任何请求。
- * 'offline' — 离线单机版本（W4 起 /offline 路由：完全离线、本地账本、
- *   **无名不记**、W3 合并弹框是唯一网络写）。
+ * 'online' — 实时上服版本（W2 /online 路由：需 room 入口拦截，完局
+ *   通过 lib/game-net.ts → service `recordOutcomeForRoom` 服务端权威
+ *   累加）。
+ * 'offline' — 离线单机版本（W4 /offline 路由：完全离线、本地账本、
+ *   **无名不记**、合并弹框是唯一网络写）。
  *
  * 差异仅记账路径：online 走 service，offline 走 localStorage
  * (`lib/offline-stats.ts`)。两者都遵守「无名不记」守卫：无名时根本不发
@@ -51,18 +52,23 @@ export interface GameState {
   winner: Player | null;
   winLine: readonly [number, number, number] | null;
   /**
-   * Player name (mirror of `localStorage['ttt.player.name.v1']`).
-   * Hydrated on mount by `setPlayerName` (the source of truth) and
-   * updated by PlayerNameForm on save / clear.
+   * Room name (mirror of `localStorage['ttt.room.name.v1']`).
+   * Hydrated on mount by `setRoomName` (the source of truth) and
+   * updated by RoomGateDialog / SyncConfirmDialog on save / clear.
    *
    * **无名不记守卫**: online / offline 两条分支在 `makeMove` 内首句
-   * 即判断 `playerName` 是否为空；为空时**不发任何请求、不写
+   * 即判断 `roomName` 是否为空；为空时**不发任何请求、不写
    * localStorage、不累加 internalStats**，本步走完后 phase 仍正常
-   * 推进（用户体验：显示胜平，但战绩 0 增长；用户去填名字后下一局
+   * 推进（用户体验：显示胜平，但战绩 0 增长；用户去收房名后下一局
    * 开始计数）。这与 AC A4 「online 入口拦截 / offline 无名不记」
    * 完全对应。
+   *
+   * W2 ulw-room-migration-home-landing §1: `playerName` →
+   * `roomName`; `ttt.player.name.v1` → `ttt.room.name.v1`. The
+   * legacy key (if present on a pre-migration browser) is dropped
+   * on the first hydrate — D-4 permits clearing without migration.
    */
-  playerName: string | null;
+  roomName: string | null;
 }
 
 export interface GameActions {
@@ -93,12 +99,13 @@ export interface GameActions {
    */
   __getInternalForTests: () => GameStats;
   /**
-   * Set / clear the player's name. Persists to localStorage and mirrors
+   * Set / clear the room name. Persists to localStorage and mirrors
    * the value into state so the store can branch on it without re-reading
-   * localStorage at every move. SSR-safe via lib/player-name.ts's window
-   * guard.
+   * localStorage at every move. SSR-safe via lib/room-name.ts's window
+   * guard. Legacy `ttt.player.name.v1` is cleared on every successful
+   * write / read (D-4).
    */
-  setPlayerName: (name: string | null) => void;
+  setRoomName: (name: string | null) => void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -110,20 +117,17 @@ const initial: GameState = {
   currentPlayer: null,
   winner: null,
   winLine: null,
-  playerName: null,
+  roomName: null,
 };
 
 // Internal stats cache (NOT in GameState type). For offline mode,
-// mirrors the last-known localStorage row; online mode (W2+) will mirror
-// the server-side per-name row via fetch response. W1 ships the offline
-// path; online path is a TODO seam inside `makeMove`.
+// mirrors the last-known localStorage row; online mode mirrors the
+// server-side per-room row via fetch response.
 let internalStats: GameStats = emptyStats();
 
 /**
- * Tagged result for store-internal network writes (kept for W2 — when
- * `recordOutcomeForName` lands, the network helper will use this same
- * { ok, reason } shape as lib/game-net.ts). W1 ships the helper but the
- * `makeMove` online branch is a TODO.
+ * Tagged result for store-internal network writes. Kept for the
+ * online branch; the { ok, reason } shape matches lib/game-net.ts.
  */
 export type StoreFetchResult<T> =
   | { ok: true; value: T }
@@ -134,8 +138,7 @@ export type StoreFetchResult<T> =
  * `ms` milliseconds. Uses AbortController + setTimeout — the pattern
  * the game-net / store helpers already use. 8000 ms is the chosen
  * floor: a single stuck request that blocks the UI for half a minute
- * is what we're guarding against. W2 will route the online branch's
- * POST outcomes call through this helper.
+ * is what we're guarding against.
  */
 export const NETWORK_TIMEOUT_MS = 8000;
 
@@ -156,30 +159,22 @@ export async function withTimeout(
 }
 
 /**
- * TODO (W2): wire online-mode outcome recording through this seam.
- * W1 keeps the function signature stable so the W2 implementation
- * drops in without touching the call site:
- *
- *   const r = await apiRecordOutcome('X');
- *   if (r.ok) internalStats = r.value.stats;
+ * Online-mode outcome recorder seam.
  *
  * Server-authoritative contract: client only names the winner; service
- * `recordOutcomeForName(name, outcome)` (lib/db.ts) reads the per-name
+ * `recordOutcomeForRoom(room, outcome)` (lib/db.ts) reads the per-room
  * row, applies `recordOutcome`, upserts, returns the new full row.
+ * The 404 from the server maps to `reason: 'not-found'` so callers
+ * can branch on the row-vanished case without inspecting status
+ * codes. Other failures keep the same reason strings the rest of
+ * lib/store.ts's network layer uses ('aborted' / 'network-error' /
+ * 'http-error').
  */
 async function apiRecordOutcome(
-  // W2 online branch seam. lib/game-net.ts:postOutcome →
-  // POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
-  // The 404 from the server maps to `reason: 'not-found'` so callers
-  // can branch on the row-vanished case without inspecting status
-  // codes (the row-existence contract is enforced server-side; we
-  // just translate the signal). Other failures keep the same reason
-  // strings the rest of lib/store.ts's network layer uses
-  // ('aborted' / 'network-error' / 'http-error').
-  name: string,
+  room: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<StoreFetchResult<{ stats: GameStats }>> {
-  const r = await postOutcome(name, outcome);
+  const r = await postOutcome(room, outcome);
   if (!r.ok) {
     if (r.reason === 'http-error' && r.status === 404) {
       return { ok: false, reason: 'not-found' };
@@ -204,14 +199,15 @@ export const useGameStore = create<GameStore>((set) => ({
       // Reload semantics: an offline session resumes from the browser-
       // persisted baseline so accumulation survives page reloads.
       internalStats = loadOfflineStats();
-      // Rehydrate the player name from localStorage when the store
-      // booted without one (SSR first frame, fresh page navigation).
-      if (!useGameStore.getState().playerName) {
-        const stored = getPlayerName();
+      // Rehydrate the room name from localStorage when the store
+      // booted without one (SSR first frame, fresh page navigation,
+      // or first home-return after the room-name migration landed).
+      if (!useGameStore.getState().roomName) {
+        const stored = getRoomName();
         if (stored) {
           // Direct set — mirrors the localStorage value into state so
           // the very next makeMove sees it.
-          useGameStore.setState({ playerName: stored });
+          useGameStore.setState({ roomName: stored });
         }
       }
     }
@@ -233,9 +229,9 @@ export const useGameStore = create<GameStore>((set) => ({
     if (s.board[index] !== null) return;
 
     // **无名不记守卫 (AC A4 前置)**: 不论 online 还是 offline, 没有
-    // playerName 时直接跳过 bookkeeping。本步的 phase / board 仍正常
+    // roomName 时直接跳过 bookkeeping。本步的 phase / board 仍正常
     // 推进——用户体验: 显示胜平, 但战绩 0 增长。
-    const isAnonymous = s.playerName === null || s.playerName === '';
+    const isAnonymous = s.roomName === null || s.roomName === '';
 
     const board = applyMove(s.board, index, s.currentPlayer);
 
@@ -247,15 +243,12 @@ export const useGameStore = create<GameStore>((set) => ({
         winner: win.player,
         winLine: win.line,
       });
-      // checkWinner is called only after applyMove(board, index, currentPlayer),
-      // so win.player is currentPlayer by construction.
       playSound('win');
       // Two-layer celebration: short ascending pair to confirm the win,
       // then a longer arpeggio with vibrato to celebrate it. The 360ms
       // delay lines up with the end of the 'win' envelopes (2 × 180ms).
       setTimeout(() => playSound('cheer'), 360);
       if (isAnonymous) {
-        // 无名不记: 既不发请求 (online) 也不写 localStorage (offline)。
         return;
       }
       if (s.mode === 'offline') {
@@ -264,14 +257,11 @@ export const useGameStore = create<GameStore>((set) => ({
         persistOfflineStats(internalStats);
         return;
       }
-      // Online: W2 — wire to lib/game-net.ts:postOutcome →
-      // POST /api/players/{name}/stats/outcomes → lib/db.ts:recordOutcomeForName.
-      // The helper returns the server-authoritative row on success;
-      // internalStats mirrors it so the next /result render + the
-      // online card refetch stay in sync (the home-return path reads
-      // internalStats only on /online /result, never for the local
-      // /offline display — A2 red-line preserved).
-      const r = await apiRecordOutcome(s.playerName as string, win.player);
+      // Online: POST /api/rooms/{room}/stats/outcomes →
+      // lib/db.ts:recordOutcomeForRoom. The server-authoritative row
+      // mirrors back into internalStats so the next /result render
+      // sees the latest numbers without a second fetch.
+      const r = await apiRecordOutcome(s.roomName as string, win.player);
       if (r.ok) internalStats = r.value.stats;
       return;
     }
@@ -292,8 +282,7 @@ export const useGameStore = create<GameStore>((set) => ({
         persistOfflineStats(internalStats);
         return;
       }
-      // Online: W2 — same seam as the win branch.
-      const r = await apiRecordOutcome(s.playerName as string, 'draw');
+      const r = await apiRecordOutcome(s.roomName as string, 'draw');
       if (r.ok) internalStats = r.value.stats;
       return;
     }
@@ -318,25 +307,32 @@ export const useGameStore = create<GameStore>((set) => ({
   resetOfflineStats: () => {
     // Defensive guard: resetOfflineStats is offline-mode-only. The sole
     // current caller is components/ResetStatsButton (scope='local',
-    // rendered only by OfflineStatsPanel → app/solo/page.tsx), so this
-    // branch is unreachable in production today. It is added so a
-    // future caller that forgets to gate on mode cannot silently wipe
-    // the online internal cache (which will become a server-row
-    // mirror in W2) with emptyStats().
+    // rendered only by OfflineStatsPanel → /offline), so this branch
+    // is unreachable in production today. It is added so a future
+    // caller that forgets to gate on mode cannot silently wipe the
+    // online internal cache (which mirrors the server-row) with
+    // emptyStats().
     if (useGameStore.getState().mode !== 'offline') return;
     clearOfflineStats();
     internalStats = emptyStats();
   },
 
-  setPlayerName: (name) => {
+  setRoomName: (name) => {
     // Mirror to localStorage so reloads re-hydrate the same value. Pass
-    // null to clear (the panel's clear button uses this). SSR-safe via
-    // the inner typeof window guard in lib/player-name.ts.
+    // null to clear. SSR-safe via the inner typeof window guard in
+    // lib/room-name.ts.
+    //
+    // W2 (D-4): every successful write runs cleanupLegacyPlayerNameKey
+    // so the user cannot end up with both keys present after they
+    // switched rooms. The legacy key is also dropped on read (via
+    // getRoomName's side-effect); this double-cleanup is belt-and-
+    // suspenders, not duplication of intent.
+    cleanupLegacyPlayerNameKey();
     if (name === null) {
-      clearPlayerNameLocal();
+      clearRoomNameLocal();
     } else {
-      setPlayerNameLocal(name);
+      setRoomNameLocal(name);
     }
-    set({ playerName: name });
+    set({ roomName: name });
   },
 }));

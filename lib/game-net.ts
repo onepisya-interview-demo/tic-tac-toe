@@ -1,28 +1,27 @@
-// Browser-side HTTP helpers for the per-player server-authoritative
-// RESTful surface (W2 ulw-one-game-two-versions).
+// Browser-side HTTP helpers for the per-room server-authoritative
+// RESTful surface (W1 + W2 ulw-room-migration-home-landing).
 //
 // Thin transport wrapper. Every helper targets exactly one of the
-// four app/api/* endpoints and preserves the { ok, reason } result
-// contract from W3's lib/solo-net.ts:
+// four app/api/rooms/* endpoints and preserves the { ok, reason } result
+// contract from the prior W3 lib/solo-net.ts:
 //
 //   { ok: true,  value: T }                            — 2xx, body parsed
 //   { ok: false, reason: 'http-error', status: N }     — non-2xx (incl. 404)
 //   { ok: false, reason: 'aborted' }                   — AbortController fired
 //   { ok: false, reason: 'network-error' }             — fetch threw
 //
-// The read path (fetchPlayerStats) translates a 404 into
+// The read path (fetchRoomStats) translates a 404 into
 // `{ ok: true, value: { stats: null } }` so display code branches on
 // a single null sentinel instead of inspecting status codes — the
 // route itself stays RFC 9457-pure.
 //
 // 8 s AbortController mirrors lib/store.ts:NETWORK_TIMEOUT_MS so a
-// Turso HTTP hang never freezes the UI for 30 s (B-2 reset observed
-// on the online ledger). The store action `apiRecordOutcome` is
-// the sole consumer of `postOutcome`; the home-return dialog is the
-// sole consumer of `postMerge` + `postSession` (run as a
-// register-then-merge sequence); the OnlineStatsCard is the sole
-// consumer of `fetchPlayerStats`; PlayerNameForm is the sole consumer
-// of `postSession`.
+// Turso HTTP hang never freezes the UI for 30 s. The store action
+// `apiRecordOutcome` is the sole consumer of `postOutcome`; the home-
+// return dialog is the sole consumer of `postMerge` + `postRoomSession`
+// (run as a register-then-merge sequence); RoomGateDialog is the sole
+// consumer of `postRoomSession`; SyncConfirmDialog uses
+// `postRoomSession` + `postMerge` for the merge flow.
 
 import { type GameStats } from './game';
 
@@ -54,26 +53,26 @@ function reasonFromError(err: unknown): 'aborted' | 'network-error' {
     : 'network-error';
 }
 
-function encodeName(name: string): string {
-  return encodeURIComponent(name);
+function encodeRoom(room: string): string {
+  return encodeURIComponent(room);
 }
 
 /**
- * POST /api/sessions { name } → { stats, existed }.
- * Idempotent register-or-login (lib/db.ts:registerOrLoginName):
+ * POST /api/rooms { room } → { stats, existed }.
+ * Idempotent register-or-enter (lib/db.ts:registerOrLoginRoom):
  *   - existed:false → fresh row created
  *   - existed:true  → existing row returned
- * UNIQUE on game_stats.name makes name immutable across sessions.
- * 422 problem+json when the name fails the whitelist; 500 on db error.
+ * UNIQUE on game_stats.room makes the room immutable across sessions.
+ * 422 problem+json when the room fails the whitelist; 500 on db error.
  */
-export async function postSession(
-  name: string,
+export async function postRoomSession(
+  room: string,
 ): Promise<FetchResult<{ stats: GameStats; existed: boolean }>> {
   try {
-    const r = await withTimeout('/api/sessions', {
+    const r = await withTimeout('/api/rooms', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ room }),
     });
     if (!r.ok) {
       return { ok: false, reason: 'http-error', status: r.status };
@@ -86,18 +85,18 @@ export async function postSession(
 }
 
 /**
- * GET /api/players/{name}/stats → { stats: GameStats | null }.
+ * GET /api/rooms/{room}/stats → { stats: GameStats | null }.
  * The route emits 404 problem+json when the row is absent; we
  * translate that into `{ stats: null }` so display code never
  * inspects status codes. All other non-2xx surface as
  * `{ ok: false, reason: 'http-error', status }`.
  */
-export async function fetchPlayerStats(
-  name: string,
+export async function fetchRoomStats(
+  room: string,
 ): Promise<FetchResult<{ stats: GameStats | null }>> {
   try {
     const r = await withTimeout(
-      `/api/players/${encodeName(name)}/stats`,
+      `/api/rooms/${encodeRoom(room)}/stats`,
       { method: 'GET', cache: 'no-store' },
     );
     if (r.status === 404) {
@@ -114,20 +113,20 @@ export async function fetchPlayerStats(
 }
 
 /**
- * POST /api/players/{name}/stats/merge { stats } → { stats: GameStats }.
- * Server folds client totals into the per-name row via per-field
- * addition (lib/db.ts:mergeRecordByName). 409 problem+json when the
- * row is absent (caller must run /api/sessions first); the
+ * POST /api/rooms/{room}/stats/merge { stats } → { stats: GameStats }.
+ * Server folds client totals into the per-room row via per-field
+ * addition (lib/db.ts:mergeRecordByRoom). 409 problem+json when the
+ * row is absent (caller must run /api/rooms first); the
  * SyncConfirmDialog's `runMergeSequence` translates 409 into a
  * user-facing "需要先登录该账号" message.
  */
 export async function postMerge(
-  name: string,
+  room: string,
   stats: GameStats,
 ): Promise<FetchResult<{ stats: GameStats }>> {
   try {
     const r = await withTimeout(
-      `/api/players/${encodeName(name)}/stats/merge`,
+      `/api/rooms/${encodeRoom(room)}/stats/merge`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -145,20 +144,20 @@ export async function postMerge(
 }
 
 /**
- * POST /api/players/{name}/stats/outcomes { outcome } → { stats: GameStats }.
+ * POST /api/rooms/{room}/stats/outcomes { outcome } → { stats: GameStats }.
  * Server-authoritative per-game accumulator
- * (lib/db.ts:recordOutcomeForName: load → recordOutcome → upsert).
+ * (lib/db.ts:recordOutcomeForRoom: load → recordOutcome → upsert).
  * 404 problem+json when the row is absent — silently upserting an
  * empty row on the first outcome would let an unauthenticated client
  * mint a session; refused by the service contract.
  */
 export async function postOutcome(
-  name: string,
+  room: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<FetchResult<{ stats: GameStats }>> {
   try {
     const r = await withTimeout(
-      `/api/players/${encodeName(name)}/stats/outcomes`,
+      `/api/rooms/${encodeRoom(room)}/stats/outcomes`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

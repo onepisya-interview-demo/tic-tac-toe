@@ -17,46 +17,45 @@ type Props = {
   /** Stable QA testid — the click contract for every probe. */
   testid: string;
   /**
-   * W3 (ulw-one-game-two-versions A4 前置): when true (default for
+   * W2 (ulw-room-migration-home-landing D-2): when true (default for
    * online CTA), the button blocks navigation while
-   * `useGameStore.playerName` is empty. The click handler:
+   * `useGameStore.roomName` is empty. The click handler:
    *   - preventDefault (no nav).
-   *   - dispatch a `ttt:player-name-required` window event so the
-   *     identity region can scroll into view + focus its input +
-   *     surface an inline nudge.
+   *   - dispatch a `ttt:room-required` window event so
+   *     RoomGateMount can open the gate dialog. Detail carries
+   *     { mode, href } so the dialog knows where to navigate and
+   *     which mode to start.
    *   - skip startGame() + router.push entirely.
-   * When false (offline CTA), the click handler is the W1 contract:
-   *   preventDefault → startGame(mode) → router.push.
+   * When false (offline CTA), the click handler is the pure-local
+   * contract: preventDefault → startGame(mode) → router.push.
    *
-   * The default is `true` because the online mode requires a name
+   * The default is `true` because the online mode requires a room
    * (AC A4 — anonymous-online is rejected by the server's
-   * recordOutcomeForName 404 anti-silent-create contract). Offline
+   * recordOutcomeForRoom 404 anti-silent-create contract). Offline
    * mode does not require a name (offline pure-local, anonymous).
    */
   requireName?: boolean;
 };
 
 /**
- * W3 (ulw-one-game-two-versions) rename + online entry gate:
+ * W2 (ulw-room-migration-home-landing) — rename + online entry gate:
  *
- * - mode: `'online'|'offline'` (already W1).
- * - Testid + label + href keep targeting the current /play + /solo
- *   routes; W4 rewires /play → /online and /solo → /offline per the
- *   plan §1.
- * - The new `requireName` prop (default true) gates the online CTA.
- *   Empty playerName + click → no nav, dispatch a
- *   `ttt:player-name-required` event so the PlayerNameForm (or its
- *   parent) can focus the input. With a name → startGame('online')
- *   → router.push('/online').
- * - Offline CTA passes `requireName={false}` so W2's "无身份可玩
- *   solo" contract stays intact.
+ * - `roomName` instead of `playerName` (the W2 symbol swap).
+ * - The `requireName` prop (default true) gates the online CTA.
+ *   Empty roomName + click → no nav, dispatch a `ttt:room-required`
+ *   event so RoomGateMount opens the gate. With a name →
+ *   startGame('online') → router.push('/online').
+ * - Offline CTA passes `requireName={false}` so the W2 pure-local
+ *   contract stays intact.
  *
- * The `ttt:player-name-required` event is intentionally a window
- * CustomEvent (not a Zustand selector) so the PlayerNameForm can be
- * the single owner of focus / inline-nudge UI without coupling the
- * StartGameButton to the identity region's internals. The event
- * detail is empty; subscribers can read store state if needed.
+ * The `ttt:room-required` event is intentionally a window CustomEvent
+ * (not a Zustand selector) so RoomGateMount is the single owner of
+ * the dialog lifecycle without coupling the StartGameButton to the
+ * dialog's internals. The event detail is `{ mode, href }`;
+ * subscribers (RoomGateMount) use them directly.
  */
+const ROOM_REQUIRED_EVENT = 'ttt:room-required';
+
 export function StartGameButton({
   href,
   label,
@@ -67,16 +66,19 @@ export function StartGameButton({
 }: Props) {
   const router = useRouter();
   const startGame = useGameStore((s) => s.startGame);
-  const playerName = useGameStore((s) => s.playerName);
+  const roomName = useGameStore((s) => s.roomName);
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>): void {
     e.preventDefault();
-    if (requireName && (playerName === null || playerName === '')) {
-      // A4 前置: 无名点击 online 不导航、不调用 startGame,
-      // 派发事件让身份区自己聚焦 + 提示。冒泡到 window, 任意订阅者
-      // (PlayerNameForm 自身的 useEffect 监听) 可响应。
+    if (requireName && (roomName === null || roomName === '')) {
+      // A4 前置: 无名点 online 不导航、不调用 startGame,
+      // 派发事件让 RoomGateMount 自己开弹框 + 收名 + 后续导航。
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ttt:player-name-required'));
+        window.dispatchEvent(
+          new CustomEvent(ROOM_REQUIRED_EVENT, {
+            detail: { mode: mode ?? 'online', href },
+          }),
+        );
       }
       return;
     }

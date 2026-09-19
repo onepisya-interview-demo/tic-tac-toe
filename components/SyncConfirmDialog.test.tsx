@@ -3,30 +3,29 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SyncConfirmDialog } from './SyncConfirmDialog';
 
-// SyncConfirmDialog — W3 (ulw-name-login-one-truth) reframe: the dialog
-// now runs the register/login + merge sequence itself, then forwards
-// the merged row to the caller. Coverage:
-//  - 主/次 CTA 文案保留 (legacy contract)
-//  - 主标题/副标题披露 (legacy contract)
-//  - n/24 计数器 + label (legacy contract)
-//  - 永久锁定 hint 在 name 合法时显形 (R4 §2.2)
-//  - 名字非法时主 CTA disabled (legacy contract)
-//  - P1-5 新分支 (ulw §5 A12): pending>0 → open=true 时弹框出现;
-//    「保留本地」零网络写 + 写 sessionStorage 标记;
-//    「合并并清空」成功 → onConfirm(name) 收到 name（merged row 由 dialog 自用 — W4 F1 fix）;
-//    fetch 失败 → dialog 不关不触发 onConfirm.
+// SyncConfirmDialog — W2 (ulw-room-migration-home-landing) 房间化:
+// - 内部 postSession → postRoomSession (POST /api/rooms)
+// - isPlayerName → isRoomName
+// - 文案零「玩家名/注册/登录」（A9 红线）
+// - 标题/副标题/label/hint 房间化
 //
-// Network stubs (W2 RESTful surface): postSession returns {stats, existed:false};
-// postMerge returns a merged row.
+// Coverage (carried over from W3 + new room-migration contracts):
+//  - 主/次 CTA 文案保留
+//  - 主标题/副标题披露
+//  - n/24 计数器 + label
+//  - 永久锁定 hint 在 room 合法时显形
+//  - 名字非法时主 CTA disabled
+//  - 「保留本地」零网络写 + 触发 onReject
+//  - 「合并并清空」成功 → onConfirm(name) 收到 trim 后的 room
+//  - 错误路径 dialog 不关不触发 onConfirm
 
 const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
 beforeEach(() => {
   fetchSpy.mockReset();
-  // Default success: 注册 / 合并成功
   fetchSpy.mockImplementation(async (url) => {
     const s = String(url);
-    if (s.endsWith('/api/sessions')) {
+    if (s.endsWith('/api/rooms')) {
       return new Response(
         '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":false}',
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -49,7 +48,7 @@ afterEach(() => {
   fetchSpy.mockReset();
 });
 
-describe('components/SyncConfirmDialog', () => {
+describe('components/SyncConfirmDialog (W2 房间化)', () => {
   it('renders 主 CTA "合并并清空" 与次 CTA "保留本地"（不出现 Confirm/OK 通用动词）', () => {
     render(
       <SyncConfirmDialog
@@ -98,11 +97,11 @@ describe('components/SyncConfirmDialog', () => {
     await user.type(screen.getByTestId('sync-confirm-name'), 'alice');
     expect(counter).toHaveTextContent('5 / 24');
     await user.clear(screen.getByTestId('sync-confirm-name'));
-    await user.type(screen.getByTestId('sync-confirm-name'), '汉字名');
+    await user.type(screen.getByTestId('sync-confirm-name'), '汉字房');
     expect(counter).toHaveTextContent('3 / 24');
   });
 
-  it('主 CTA 在名字非法时 disabled（无 network write）', async () => {
+  it('主 CTA 在房间名非法时 disabled（无 network write）', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -120,9 +119,8 @@ describe('components/SyncConfirmDialog', () => {
     await user.type(screen.getByTestId('sync-confirm-name'), 'bob');
     expect(confirm).not.toBeDisabled();
     expect(screen.queryByTestId('sync-confirm-name-error')).toBeNull();
-    // Lock hint visible when name is valid (R4 §1.3.3)
     expect(screen.getByTestId('sync-confirm-lock-hint')).toHaveTextContent(
-      '永久属于你',
+      '永久属于该账本',
     );
   });
 
@@ -145,12 +143,7 @@ describe('components/SyncConfirmDialog', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('「合并并清空」成功：onConfirm 收到 trim-name，并按序触发 postSession + postMerge', async () => {
-    // W4 F1 fix: the dialog's onConfirm now only forwards the chosen
-    // name. The merged row is still returned by runMergeSequence
-    // internally for symmetry / future callers, but the contract
-    // HomeDialogMount consumes is name-only (the baseline sentinel
-    // it writes is always 0, derived from clearOfflineStats()).
+  it('「合并并清空」成功：onConfirm 收到 trim-room，并按序触发 POST /api/rooms + POST /api/rooms/{room}/stats/merge', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -168,16 +161,15 @@ describe('components/SyncConfirmDialog', () => {
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
     expect(onConfirm).toHaveBeenCalledWith('carol');
     const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
-    expect(urls).toContain('/api/sessions');
-    expect(urls.some((u) => u.includes('/api/players/carol/stats/merge'))).toBe(true);
+    expect(urls).toContain('/api/rooms');
+    expect(urls.some((u) => u.includes('/api/rooms/carol/stats/merge'))).toBe(true);
   });
 
   it('onReject 在 onConfirm 抛错时仍能触发（error 留在 dialog 内，不静默关）', async () => {
     fetchSpy.mockReset();
     fetchSpy.mockImplementation(async (url) => {
       const s = String(url);
-      if (s.endsWith('/api/sessions')) {
-        // Login succeeds so the dialog reaches /sync; /sync then 409s.
+      if (s.endsWith('/api/rooms')) {
         return new Response(
           '{"stats":{"totalGames":5,"xWins":3,"oWins":1,"draws":1,"currentStreak":2},"existed":true}',
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -198,28 +190,23 @@ describe('components/SyncConfirmDialog', () => {
       />,
     );
     await user.click(screen.getByTestId('sync-confirm-confirm'));
-    // The dialog swallows the network error → 409 → surfaces it inline.
     const errorRow = await screen.findByTestId('sync-confirm-error');
-    expect(errorRow).toHaveTextContent('需要先登录该账号');
-    // onConfirm never fires (the network path failed).
+    expect(errorRow).toHaveTextContent('需要先进入该房间');
     expect(onConfirm).not.toHaveBeenCalled();
-    // Reject still works (user bails out).
     await user.click(screen.getByTestId('sync-confirm-reject'));
     expect(onReject).toHaveBeenCalledTimes(1);
   });
 
-  // P1-5 (ulw §5 A12): 「合并并清空」POST /sync 失败 → dialog 留开不导航.
-  it('postMerge 抛 network-error：dialog 不关，不调用 onConfirm', async () => {
+  it('postMerge 抛 http-error：dialog 不关，不调用 onConfirm', async () => {
     fetchSpy.mockReset();
     fetchSpy.mockImplementation(async (url) => {
       const s = String(url);
-      if (s.endsWith('/api/sessions')) {
+      if (s.endsWith('/api/rooms')) {
         return new Response(
           '{"stats":{"totalGames":0,"xWins":0,"oWins":0,"draws":0,"currentStreak":0},"existed":true}',
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      // /sync returns 500 — sync failed after a successful login.
       return new Response('{"error":"db unavailable"}', { status: 500 });
     });
     const user = userEvent.setup();
@@ -236,8 +223,26 @@ describe('components/SyncConfirmDialog', () => {
     await user.click(screen.getByTestId('sync-confirm-confirm'));
     const errorRow = await screen.findByTestId('sync-confirm-error');
     expect(errorRow).toHaveTextContent('同步失败');
-    // Dialog stays open and onConfirm is not called.
     expect(onConfirm).not.toHaveBeenCalled();
     expect(screen.getByTestId('sync-confirm-dialog')).toBeInTheDocument();
   });
+
+  it('W2 房间化：label 文案零「玩家名/注册/登录」', () => {
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={1}
+        initialName="alice"
+        onConfirm={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('房间名（1-24 字符）')).toBeInTheDocument();
+    // 锁 hint 在 name 合法时显形（initialName='alice' 通过 whitelist）
+    expect(screen.getByText('房间名永久属于该账本，创建后不可修改。')).toBeInTheDocument();
+    // A9 红线：用户可见文案零「玩家名/登录」+ 零旧版「注册」
+    // （hint 文案「创建后」是新的房间语义，不算旧版 注册）。
+    expect(screen.queryByText(/玩家名|登录/)).toBeNull();
+  });
+
 });

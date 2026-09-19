@@ -18,7 +18,7 @@ afterEach(() => {
     currentPlayer: null,
     winner: null,
     winLine: null,
-    playerName: null,
+    roomName: null,
   });
   useGameStore.getState().__resetInternalForTests();
 });

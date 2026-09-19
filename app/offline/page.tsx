@@ -35,54 +35,12 @@ const DRAW_AUTO_SWITCH_MS = 600;
  * Solo practice route. Client Component so the central header slot can
  * be wired to a board↔stats view toggle (see GameShell.viewToggle) and
  * the Card body can swap between the two views inside a React
- * <ViewTransition update="view-swap"> crossfade. The composition:
+ * <ViewTransition update="view-swap"> crossfade.
  *
- *   - GameShell header status-slot doubles as the toggle (real <button>,
- *     aria-pressed, testid=view-toggle, native Enter/Space); the status
- *     text inside it is still role=status + aria-live=polite so the
- *     announcement contract is preserved.
- *   - Card body renders one of two views — Board (with inline
- *     OfflineStatsPanel), wrapped in a ViewTransition keyed by the
- *     current view. The `useTransition` wrapper is what activates the
- *     in-page update animation (React 19 <ViewTransition> only fires
- *     for transitions, not raw setState).
- *   - <WinConfetti /> is hoisted to the Page level (outside both the
- *     outer <ViewTransition enter="page"> and the inner
- *     <ViewTransition key={view}>). It renders the win celebration
- *     testid target ONCE per game; toggling board↔stats does not
- *     remount it, so the burst does not replay (Bug B fix in
- *     components/WinConfetti.tsx).
- *   - The Card receives `minH="28rem"` and
- *     `viewTransitionName="offline-card"` so the browser takes a single
- *     group snapshot of the OLD and NEW children and morphs them in
- *     place at a fixed height (Bug C height fix + rvt decision 3).
- *     The 28rem token matches the larger of the Board (~22rem) and
- *     OfflineStatsPanel (~24rem) heights with comfortable breathing room
- *     so the grid-stack layout doesn't pack against the card edge.
- *   - Restart button is conditionally rendered for the 'board' view
- *     only — on the 'stats' view, the dedicated 「再来一局」 button
- *     inside OfflineStatsPanel (rendered via the `actions` prop) is the
- *     equivalent restart affordance (Ulw W3 result-paginated
- *     experience; see plan .omo/plans/ulw-ux-refresh-pass.md §3 W3
- *     and §5 A6/A7).
- *   - The page-level actions slot (below the Card) is board-view only;
- *     the stats view renders its own result actions inside the panel
- *     so the user sees a coherent "leave or replay" affordance row on
- *     the same surface they are reviewing data on, and the Card row
- *     below stays clean (no duplicate 返回首页).
- *   - prefers-reduced-motion collapses the swap to 0ms via the global
- *     ::view-transition-* rule in globals.css.
- *   - Mobile one-screen rule: 375×667 viewport fits both views inside
- *     the same Card without scrolling — confirmed by one-screen-qa.mjs.
- *
- * Auto-switch on win/draw (Ulw W3): when phase transitions to 'won'
- * or 'drawn', a useEffect schedules `startTransition(setView('stats'))`
- * after WIN_AUTO_SWITCH_MS / DRAW_AUTO_SWITCH_MS so the user sees the
- * win-glow / draw-shake animation play out before the crossfade. The
- * effect cleanup cancels the pending timer if the phase changes again
- * (e.g. user clicks 重新开局 → phase becomes 'idle') so a stale
- * switch never fires after a manual restart. Solo never navigates to
- * /result (W1: online ledger retired; result navigation is W3 territory per ulw-one-game-two-versions §3 W3).
+ * W2 (ulw-room-migration-home-landing D-3): 标题改「线下房间」（was
+ * 「单机练习」）；pass-and-play 语义通过「单机练习」的视图切换保留
+ * 不强加文案。/offline 全程零网络，纯本地（one-identity-qa 硬契约）；
+ * OfflineStatsPanel 文案已房间化（未建房间不记）。
  */
 export default function OfflinePage() {
   const [view, setView] = useState<OfflineView>('board');
@@ -95,15 +53,6 @@ export default function OfflinePage() {
     startTransition(() => setView(next));
   };
 
-  // Auto-switch to the stats view after a win (1.2s — at least one
-  // full win-glow pulse) or draw (0.6s — let draw-shake settle). The
-  // effect re-runs on every phase change; cleanup cancels any pending
-  // timer so a manual restart (phase→'idle') cannot be followed by a
-  // stale auto-switch. If the user manually toggles to stats while the
-  // timer is still scheduled, the timer's setView('stats') is a no-op
-  // since the view is already 'stats' (React bails out of identical
-  // state updates). startTransition is omitted from deps — it is
-  // stable across renders per React 19 docs.
   useEffect(() => {
     if (phase !== 'won' && phase !== 'drawn') return;
     const delay = phase === 'won' ? WIN_AUTO_SWITCH_MS : DRAW_AUTO_SWITCH_MS;
@@ -114,17 +63,10 @@ export default function OfflinePage() {
   }, [phase, startTransition]);
 
   const playAgain = () => {
-    // restart() resets phase→'idle' which cancels any pending
-    // auto-switch timer (effect cleanup) before we navigate back to
-    // the board view, so the next move does not race a stale switch.
     restart();
     setView('board');
   };
 
-  // Board-view footer actions: 返回首页 + 重新开局. The stats view
-  // renders its own action row inside OfflineStatsPanel (below the
-  // StatsGrid / ResetStatsButton) so we never duplicate the 返回首页
-  // link on the same page surface.
   const actions = view === 'board' ? (
     <>
       <Link href="/" className="flex-1">
@@ -136,12 +78,6 @@ export default function OfflinePage() {
     </>
   ) : null;
 
-  // Stats-view actions row: passed into OfflineStatsPanel so the
-  // "再来一局" + "返回首页" buttons sit at the bottom of the same card
-  // the user is reviewing data on. playAgain calls store.restart()
-  // then setView('board'); the effect cleanup for phase→'idle' then
-  // cancels any in-flight auto-switch timer (defensive — the user
-  // already triggered the switch themselves).
   const statsActions = (
     <>
       <Button
@@ -167,7 +103,7 @@ export default function OfflinePage() {
   return (
     <ViewTransition enter="page" exit="page" default="none">
       <GameShell
-        title="单机练习"
+        title="线下房间"
         viewToggle={{ pressed: view === 'stats', onToggle: toggleView }}
         actions={actions}
         cardMinH="28rem"
@@ -183,13 +119,6 @@ export default function OfflinePage() {
           )}
         </ViewTransition>
       </GameShell>
-      {/* WinConfetti is intentionally outside <GameShell> and outside the
-          inner <ViewTransition key={view}>: hoisting keeps the burst
-          mount target stable across board↔stats toggles so the
-          celebration fires exactly once per win (Bug B). The
-          z-index-50 fixed overlay still covers the Card area on either
-          view. The aria-hidden / pointer-events-none on the inner span
-          keep it decorative — input is not intercepted on either view. */}
       <WinConfetti />
     </ViewTransition>
   );

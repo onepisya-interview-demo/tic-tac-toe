@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { isPlayerName } from '@/lib/player-name';
-import { postSession, postMerge } from '@/lib/game-net';
+import { isRoomName } from '@/lib/room-name';
+import { postMerge, postRoomSession } from '@/lib/game-net';
 import { loadOfflineStats } from '@/lib/offline-stats';
 import type { GameStats } from '@/lib/game';
 
@@ -11,7 +11,17 @@ const NAME_MAX = 24;
 export const SYNC_DECLINED_KEY = 'ttt.offline.sync-declined.v1';
 
 /**
- * Home-return sync dialog (ulw-name-login-one-truth W3 contract).
+ * Home-return sync dialog
+ * (ulw-name-login-one-truth W3 + ulw-room-migration-home-landing W2 D-3).
+ *
+ * W2 改动 (room migration):
+ *  - 收名流改「房间名」语义：label "房间名（1-24 字符）"、placeholder
+ *    "房间的账本标识"、hint "名字将永久属于这个房间"。
+ *  - 内部 postSession → postRoomSession（POST /api/rooms）。
+ *  - isPlayerName → isRoomName（whitelist 与 server 端 lib/room-name
+ *    单一真源对齐，AGENTS.md §本项目反模式 ttt.player.name.v1 一致性
+ *    契约保留）。
+ *  - 标题/副标题/CTA 文案零「玩家名/注册/登录」（A9 红线）。
  *
  * Decision D1: the dialog now lives on the home page, opened by the
  * home page's mount effect when `pendingSyncCount() > declinedSentinel`
@@ -22,14 +32,14 @@ export const SYNC_DECLINED_KEY = 'ttt.offline.sync-declined.v1';
  * Two CTA branches:
  *  - "保留本地"  → onReject fires → caller writes the sentinel → zero
  *    network writes, dialog closes.
- *  - "合并并清空" → onConfirm receives the chosen name + the server's
+ *  - "合并并清空" → onConfirm receives the chosen room + the server's
  *    merged row (post-merge). The dialog internally runs the
- *    register/login + merge sequence so the caller only needs to
+ *    register-or-enter + merge sequence so the caller only needs to
  *    clear local + sentinel on success.
  *
  * Frame contract (R4 §2.2):
  *  - 主标题「合并战绩」 + 副标题「将上传本机 N 局；同步后本机清零以防重复」
- *  - 弹框内 name 输入框（label 前置规则 + n/24 计数 + 永久锁定 hint）
+ *  - 弹框内 room name 输入框（label 前置规则 + n/24 计数 + 永久锁定 hint）
  *  - 主 CTA「合并并清空」 / 次 CTA「保留本地」
  *  - 错误就地展示 + ESC = 「保留本地」(零网络写)
  *
@@ -42,20 +52,18 @@ export interface SyncConfirmDialogProps {
   /** Local stats count surfaced in the copy as "本机 N 局". */
   pendingGamesCount: number;
   /**
-   * Pre-filled name from store.playerName when the player already
-   * registered / logged in. Empty when no name is set yet — the
-   * user must type a name inside the dialog to register / log in
-   * before the merge can proceed (the home-return flow guarantees
-   * the dialog only opens when there ARE pending games, and the
+   * Pre-filled room name from store.roomName when the user already
+   * registered / entered. Empty when no name is set yet — the user
+   * must type a room inside the dialog to register / log in before
+   * the merge can proceed (the home-return flow guarantees the
+   * dialog only opens when there ARE pending games, and the
    * sync endpoint rejects absent rows with 409).
    */
   initialName: string;
   /**
-   * Fired when the user picks "合并并清空". Receives the chosen name
-   * (post-trim, post-validate) and the server's merged row (after
-   * the register-or-login + merge sequence succeeded). The caller
-   * uses the merged row's totalGames to update the local sentinel
-   * so the next home-return has pending = 0 and won't re-open.
+   * Fired when the user picks "合并并清空". Receives the chosen room
+   * name (post-trim, post-validate). The caller clears local + writes
+   * the baseline sentinel on success.
    */
   onConfirm?: (name: string) => Promise<void> | void;
   /**
@@ -85,7 +93,7 @@ export function SyncConfirmDialog({
   const [error, setError] = useState<string | null>(null);
 
   // Keep the input in sync when the dialog reopens with a fresh name
-  // (PlayerNameForm save fires while the dialog was closed).
+  // (RoomGateDialog save fires while the dialog was closed).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setName(initialName);
@@ -130,31 +138,31 @@ export function SyncConfirmDialog({
   }, [onReject]);
 
   const trimmed = name.trim();
-  const nameOk = isPlayerName(trimmed);
+  const nameOk = isRoomName(trimmed);
   const canConfirm = nameOk && !busy;
 
   async function runMergeSequence(): Promise<GameStats> {
-    // Two-step sequence: (1) postSession guarantees the row
+    // Two-step sequence: (1) postRoomSession guarantees the row
     // exists (注册 if fresh, 登录 if existing); (2) postMerge
     // folds the local snapshot into the row. The server answers
     // 409 on merge if the row vanished in between; we surface that
     // verbatim so the user knows to retry after re-logging in.
-    const session = await postSession(trimmed);
+    const session = await postRoomSession(trimmed);
     if (!session.ok) {
       if (session.reason === 'http-error' && session.status === 422) {
-        throw new Error('名字含不允许的字符');
+        throw new Error('房间名含不允许的字符');
       }
       if (session.reason === 'aborted') {
-        throw new Error('登录超时，请稍后重试（战绩仍在本地）');
+        throw new Error('进入房间超时，请稍后重试（战绩仍在本地）');
       }
-      throw new Error('登录失败，请稍后重试（战绩仍在本地）');
+      throw new Error('进入房间失败，请稍后重试（战绩仍在本地）');
     }
     const localSnapshot = loadOfflineStats();
     const r = await postMerge(trimmed, localSnapshot);
     if (!r.ok) {
       throw new Error(
         r.reason === 'http-error' && r.status === 409
-          ? '需要先登录该账号才能同步（请重新输入名字）'
+          ? '需要先进入该房间才能同步（请重新输入房间名）'
           : r.reason === 'http-error'
             ? `同步失败 (HTTP ${r.status ?? '?'})`
             : `同步失败 (${r.reason})`,
@@ -217,7 +225,7 @@ export function SyncConfirmDialog({
           htmlFor="sync-confirm-name"
           className="text-small text-text-secondary"
         >
-          玩家名（1-24 字符）
+          房间名（1-24 字符）
         </label>
         <div className="flex items-center gap-2">
           <input
@@ -233,7 +241,7 @@ export function SyncConfirmDialog({
             spellCheck={false}
             className="flex-1 bg-bg-base border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong disabled:opacity-60"
             data-testid="sync-confirm-name"
-            aria-label="玩家名"
+            aria-label="房间名"
             aria-invalid={!nameOk}
           />
           <span
@@ -249,14 +257,14 @@ export function SyncConfirmDialog({
             className="text-small text-text-secondary"
             data-testid="sync-confirm-name-error"
           >
-            名字需 1-24 字符，不含控制字符。
+            房间名需 1-24 字符，不含控制字符。
           </p>
         ) : (
           <p
             className="text-small text-text-muted"
             data-testid="sync-confirm-lock-hint"
           >
-            这个名字将永久属于你，注册后不可修改。
+            房间名永久属于该账本，创建后不可修改。
           </p>
         )}
       </div>
@@ -338,7 +346,7 @@ export function writeDeclinedPending(pending: number): void {
 
 /**
  * Clear the declined sentinel after a successful merge. Mirrors
- * `clearOfflineStats()` / `persistSyncedServerTotal` symmetry — once
+ * `clearOfflineStats()` / `persistLastMergedLocal` symmetry — once
  * the merge succeeds, the next visit has pending = 0 and the dialog
  * wouldn't re-open anyway, but clearing the sentinel makes the
  * next-play loop's behaviour deterministic.

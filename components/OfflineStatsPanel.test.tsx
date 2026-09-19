@@ -37,7 +37,7 @@ afterEach(() => {
     phase: 'idle',
     currentPlayer: null,
     winner: null,
-    playerName: null,
+    roomName: null,
   });
   useGameStore.getState().__resetInternalForTests();
   refreshMock.mockClear();
@@ -45,16 +45,13 @@ afterEach(() => {
 
 function loginAs(name: string): void {
   act(() => {
-    useGameStore.setState({ playerName: name });
+    useGameStore.setState({ roomName: name });
   });
 }
 
-describe('components/OfflineStatsPanel', () => {
+describe('components/OfflineStatsPanel (W2 房间化)', () => {
   it('SSR output does not leak persisted client values (hydration-safe first frame)', () => {
     seedOfflineStats({ totalGames: 4, xWins: 3, oWins: 1, draws: 0, currentStreak: 2 });
-    // No playerName set → server renders the anonymous hint. The
-    // persisted row must NOT bleed into the SSR output (the panel
-    // hydrates from localStorage only in a post-mount effect).
     const html = renderToString(<OfflineStatsPanel />);
     expect(html).toContain('data-testid="offline-stats-anonymous"');
     expect(html).not.toContain('data-value="3"');
@@ -68,40 +65,27 @@ describe('components/OfflineStatsPanel', () => {
     expect(panelValues()).toEqual(['4', '3', '1', '0', 'X 连胜 2']);
   });
 
-  it('shows the "无名不记" hint instead of stats grid when playerName is empty', () => {
-    // W4 (ulw-one-game-two-versions §3 W4): the offline stats surface
-    // surfaces a meta-message for anonymous players instead of the
-    // numbers — anonymous play accumulates 0 (per the 无名不记 guard
-    // in lib/store.ts:makeMove), so showing the grid would mislead.
+  it('shows the "未建房间不记" hint instead of stats grid when roomName is empty (W2 房间化)', () => {
     render(<OfflineStatsPanel />);
     expect(screen.getByTestId('offline-stats-anonymous')).toBeInTheDocument();
     expect(screen.queryByTestId('stat-value')).toBeNull();
+    // A9 红线：文案零「玩家名/注册/登录」
+    const hint = screen.getByTestId('offline-stats-anonymous');
+    expect(hint.textContent).not.toMatch(/玩家名|注册|登录/);
+    expect(hint.textContent).toContain('未建房间不记');
   });
 
   it('mount-only hydration: panel does NOT subscribe to phase changes (single hydration point)', () => {
     loginAs('bob');
-    // W2 纯净化 (ulw-name-login-one-truth.md §1 G1): the panel has a
-    // single mount-time hydration point (no phase subscription).
-    // The previous W1 design re-read localStorage in a phase-settle
-    // effect, which the W2 design intentionally removes — the
-    // production app relies on the ViewTransition remounting the
-    // panel when the user toggles board↔stats after a offline win.
-    // A live subscription would also violate AGENTS.md's
-    // 「不要新增第二个水合触发点」 rule.
     render(<OfflineStatsPanel />);
     expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
 
-    // Settle a offline game underneath the mounted panel: phase flips
-    // to won, store writes localStorage, but the panel MUST stay at
-    // zeros because it does not subscribe to phase.
     seedOfflineStats({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 });
     act(() => {
       useGameStore.setState({ phase: 'won', winner: 'X' });
     });
     expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
 
-    // Once the user remounts the panel (simulated here by unmount +
-    // re-render), the fresh mount hydrates the new row.
     cleanup();
     render(<OfflineStatsPanel />);
     expect(panelValues()).toEqual(['1', '1', '0', '0', 'X 连胜 1']);
@@ -115,13 +99,6 @@ describe('components/OfflineStatsPanel', () => {
     render(<OfflineStatsPanel />);
     expect(panelValues()).toEqual(['2', '2', '0', '0', 'X 连胜 2']);
 
-    // resetSoloStats is gated on mode === 'offline' (F-5.1 defensive
-    // guard). Production always reaches this button on /offline where
-    // PlayController has already set mode='offline'; the isolated test
-    // render does not include PlayController, so mirror that state
-    // here. Without this setState the guard fires and the click is a
-    // no-op — exactly the regression the guard is designed to prevent
-    // in real code paths.
     act(() => {
       useGameStore.setState({ mode: 'offline' });
     });
@@ -135,7 +112,6 @@ describe('components/OfflineStatsPanel', () => {
     fetchSpy.mockRestore();
   });
 });
-
 
 describe('components/OfflineStatsPanel — W3 result actions prop', () => {
   it('renders no actions row when the `actions` prop is omitted (legacy / pure-local mount)', () => {

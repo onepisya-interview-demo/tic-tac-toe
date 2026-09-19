@@ -1,39 +1,40 @@
 import { ViewTransition } from 'react';
 import { SoundToggle } from '@/components/SoundToggle';
 import { StartGameButton } from '@/components/StartGameButton';
-import { OnlineStatsCard } from '@/components/OnlineStatsCard';
-import { PlayerNameForm } from '@/components/PlayerNameForm';
 import { HomeDialogMount } from '@/components/HomeDialogMount';
+import { HomeStatsEntry } from '@/components/HomeStatsEntry';
+import { RoomGateMount } from '@/components/RoomGateMount';
 import { serializeHomeJsonLd } from '@/lib/home-jsonld';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * W3 (ulw-one-game-two-versions) home page rendering.
+ * W2 (ulw-room-migration-home-landing D-1 / D-2 / D-3) home page
+ * rendering — 引导页形态.
  *
- * The page is the project's 展示页: a hero (title + 一句话价值) +
- * 双入口 CTA 按用户意图命名 + identity region (folded) + online
- * stats card (read-only) + merged home-return sync dialog. A
- * schema.org JSON-LD block (next to the body) declares the surface
- * as VideoGame + WebApplication for crawlers + AI aggregators —
- * `playMode: MultiPlayer` + `numberOfPlayers(min:1, max:2)` tell
- * search engines this is a two-player board game playable in a
- * browser. Plan §1 / AC A8.
+ * The home page is the project's 引导页:
+ *   - hero (brand + 一句话价值主张)
+ *   - 玩法引导区 (纯 RSC 静态：轮流落子 · 三连即胜 · 同设备对战)
+ *   - 双 CTA (线下房间直行 / 在线房间无名弹 RoomGateDialog)
+ *   - 战绩静态入口 (有 roomName → 「查看 <room> 的战绩 →」去
+ *     /result?room=；无名不渲染 — 见 HomeStatsEntry)
+ *   - HomeDialogMount (保留：合并弹框，文案房间化)
+ *   - RoomGateMount (新挂载：监听 ttt:room-required)
+ *   - JSON-LD / SoundToggle / ViewTransition / force-dynamic
  *
- * The hero copy follows the design intent (ulw-one-game-two-versions
- * §0): the H1 names the brand (井字棋), the subline states the value
- * (两人同设备轮流下，自动记录战绩), and the CTA labels carry the
- * distinction between offline (离线可玩 · 本地记账) and online
- * (战绩实时云端) modes. The RSC/SPA technical split is the 次级
- * 文案 in the page-fade paragraph below the CTAs so the surface
- * stays user-intent-first and 技术实现 is supporting context.
+ * Removed surfaces (W2 退役):
+ *   - OnlineStatsCard (was the home-page identity region)
+ *   - PlayerNameForm (home 常驻收名表单)
+ * 首页零 /api/* 请求 (A1 红线)；战绩主场归 /result。
  *
- * Public ledger + ResetStatsButton(scope='ranked') Card retired in
- * W1 (id=1, name=NULL 全行族). OnlineStatsCard replaces the
- * retired surface with the same visual slot (no layout shift
- * between empty + populated states per W3 contract).
+ * 文案红线 (A9): 用户可见文案零「玩家名/注册/登录」；统一「房间
+ * 名/创建房间/进入房间」。/online 与 /offline 页内文案注明「同设
+ * 备对战」(pass-and-play 语义)。
+ *
+ * One-screen budget (one-screen-qa): 375×667 viewport fits the
+ * entire home page in a single screen — confirmed by visual-qa.mjs.
  */
-export default async function HomePage() {
+export default function HomePage() {
   return (
     <ViewTransition enter="page" exit="page" default="none">
     {/* JSON-LD: escape `<` per Next.js 16 docs to prevent XSS via
@@ -52,18 +53,36 @@ export default async function HomePage() {
           <SoundToggle />
         </div>
         <p className="text-body text-text-secondary">
-          两人同设备轮流下，自动记录战绩。
+          同设备轮流下，自动记录战绩。
         </p>
       </header>
 
-      <OnlineStatsCard />
+      <section
+        className="flex flex-col gap-2"
+        data-testid="home-howto"
+        aria-label="玩法说明"
+      >
+        <h2 className="text-h3 font-display font-medium">玩法</h2>
+        <ul className="list-disc pl-5 text-body text-text-secondary marker:text-text-muted">
+          <li data-testid="home-howto-turn">
+            轮流落子：X 先手，然后 O。
+          </li>
+          <li data-testid="home-howto-win">
+            三连即胜：横、竖、对角任一行先连成三个相同符号。
+          </li>
+          <li data-testid="home-howto-pass">
+            同设备对战：两人轮流在同一台设备上下棋（pass-and-play）。
+          </li>
+        </ul>
+      </section>
 
-      <PlayerNameForm />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-testid="home-cta-row">
+      <div
+        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        data-testid="home-cta-row"
+      >
         <StartGameButton
           href="/offline"
-          label="单机练习 · 离线可玩 · 本地记账"
+          label="线下房间 · 同设备对战 · 本地记账"
           mode="offline"
           variant="secondary"
           testid="start-offline"
@@ -71,7 +90,7 @@ export default async function HomePage() {
         />
         <StartGameButton
           href="/online"
-          label="在线对战 · 战绩实时云端"
+          label="在线房间 · 同设备对战 · 战绩云端"
           mode="online"
           variant="primary"
           testid="start-online"
@@ -80,10 +99,13 @@ export default async function HomePage() {
       </div>
 
       <p className="text-small text-text-muted" data-testid="home-cta-subtext">
-        离线版基于 React 单页应用（SPA）；在线版基于 RSC，完局后服务端权威累加战绩。
+        线下版基于 React 单页应用（SPA）；在线版基于 RSC，完局后服务端权威累加战绩。
       </p>
 
+      <HomeStatsEntry />
+
       <HomeDialogMount />
+      <RoomGateMount />
     </main>
     </ViewTransition>
   );
