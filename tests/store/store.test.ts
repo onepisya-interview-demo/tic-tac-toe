@@ -134,7 +134,7 @@ describe('lib/store (zustand game store)', () => {
 
   it('online win: named user → fires POST /api/players/{name}/stats/outcomes (W2 seam)', async () => {
     // W2 wires the online branch through lib/game-net.ts:postOutcome
-    // → POST /api/players/{name}/stats/outcomes → recordOutcomeForName.
+    // → POST /api/players/{name}/stats/outcomes → recordOutcomeForRoom (W1 ulw-room-migration-home-landing; lib/store.ts itself still imports the old symbol until W2 — this comment reflects the planned API surface, not the live seam) // → recordOutcomeForRoom.
     // The server-authoritative response (mocked here) is the source of
     // truth for internalStats; the call site is awaited so the store
     // sees the new row before the UI commits the next render.

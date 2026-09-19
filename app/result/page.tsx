@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
-import { loadRecordByName } from '@/lib/db';
+import { loadRecordByRoom } from '@/lib/db';
 import { normalizePlayerName } from '@/lib/player-name';
 import { type GameStats } from '@/lib/game';
 
@@ -102,7 +102,7 @@ export default async function ResultPage({
   let stats: GameStats | null;
   let loadError: string | null = null;
   try {
-    stats = await loadRecordByName(name);
+    stats = await loadRecordByRoom(name);
   } catch {
     stats = null;
     loadError = '加载失败，请稍后再试。';

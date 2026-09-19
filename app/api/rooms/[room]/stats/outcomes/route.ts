@@ -1,23 +1,27 @@
 import { NextResponse } from 'next/server';
-import { recordOutcomeForName } from '@/lib/db';
-import { normalizePlayerName } from '@/lib/player-name';
+import { recordOutcomeForRoom } from '@/lib/db';
+import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
 
-// W2 (ulw-one-game-two-versions) thin transport wrapper.
-//   POST /api/players/{name}/stats/outcomes
+// W1 (ulw-room-migration-home-landing) thin transport wrapper.
+//   POST /api/rooms/{room}/stats/outcomes
 //     body { outcome: 'X' | 'O' | 'draw' }
 //       → 200 { stats: GameStats }    (server-authoritative accumulator)
 //       → 404 stats-not-found (problem+json, 防静默建档)
 //       → 422 invalid-request-shape / invalid-player-name
 //       → 500 db-unavailable
 //
-// The outcome is the per-game child resource of the per-name stats
-// row. Server is the authoritative accumulator (lib/db.ts:recordOutcomeForName
+// The outcome is the per-game child resource of the per-room stats
+// row. Server is the authoritative accumulator (lib/db.ts:recordOutcomeForRoom
 // does load → recordOutcome → upsert, returning { ok:true, stats }
 // | { ok:false, reason:'not-found' }); the route only maps the
 // tagged result to a status. A 404 here means the row vanished
-// between /api/sessions and this call — same anti-silent-create
+// between /api/rooms and this call — same anti-silent-create
 // contract as /merge.
+//
+// W1 keeps the legacy `invalid-player-name` problem slug on the wire
+// for the same reason as the GET route above (plan §2.3 — slug 词表
+// 不变).
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,11 +42,11 @@ function isOutcomeBody(v: unknown): v is { outcome: 'X' | 'O' | 'draw' } {
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ name: string }> },
+  { params }: { params: Promise<{ room: string }> },
 ): Promise<Response> {
-  const { name: raw } = await params;
-  const name = normalizePlayerName(decodeURIComponent(raw));
-  if (name === null) {
+  const { room: raw } = await params;
+  const room = normalizeRoom(decodeURIComponent(raw));
+  if (room === null) {
     return problemResponse(422, 'invalid-player-name');
   }
   let body: unknown;
@@ -55,13 +59,13 @@ export async function POST(
     return problemResponse(422, 'invalid-request-shape');
   }
   try {
-    const result = await recordOutcomeForName(name, body.outcome);
+    const result = await recordOutcomeForRoom(room, body.outcome);
     if (!result.ok) {
-      // 404 防静默建档 — 在线版要求 name, 无名入口拦截先于本调用.
+      // 404 防静默建档 — 在线版要求 room, 无名入口拦截先于本调用.
       return problemResponse(
         404,
         'stats-not-found',
-        `No row for name "${name}". Register or log in before recording outcomes.`,
+        `No row for room "${room}". Register or log in before recording outcomes.`,
       );
     }
     return NextResponse.json({ stats: result.stats });

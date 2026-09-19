@@ -2,28 +2,28 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-// tests/api/sessions.test.ts — route-level coverage for the POST
-// /api/sessions handler (W2 ulw-one-game-two-versions). Imports the
+// tests/api/rooms.test.ts — route-level coverage for the POST
+// /api/rooms handler (W1 ulw-room-migration-home-landing). Imports the
 // route file's exported function directly and stubs out lib/db so we
-// can pin the contract — name whitelist (lib/player-name.ts:
-// normalizePlayerName is the single source of truth, replacing the
+// can pin the contract — room whitelist (lib/room-name.ts:
+// normalizeRoom is the single source of truth, replacing the
 // per-route duplication that AGENTS.md §本项目反模式 flagged),
 // 4xx codes, server-authoritative { stats, existed } shape, and the
 // application/problem+json envelope — without touching sqlite.
 // End-to-end registration / login integration is covered by
 // tests/db/db.test.ts (the upstream primitive).
 
-const registerOrLoginNameMock = vi.fn();
+const registerOrLoginRoomMock = vi.fn();
 vi.doMock('@/lib/db', () => ({
-  registerOrLoginName: registerOrLoginNameMock,
+  registerOrLoginRoom: registerOrLoginRoomMock,
 }));
 
 const loadRoute = async () => {
   vi.resetModules();
   vi.doMock('@/lib/db', () => ({
-    registerOrLoginName: registerOrLoginNameMock,
+    registerOrLoginRoom: registerOrLoginRoomMock,
   }));
-  return import('@/app/api/sessions/route');
+  return import('@/app/api/rooms/route');
 };
 
 /** Assert a problem+json response shape: status, content-type, and the
@@ -42,7 +42,7 @@ function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: 
 
 beforeEach(() => {
   process.env.DATABASE_URL = `file:${path.join(os.tmpdir(), 'unused-' + Math.random() + '.db')}`;
-  registerOrLoginNameMock.mockReset();
+  registerOrLoginRoomMock.mockReset();
 });
 
 afterEach(() => {
@@ -50,12 +50,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('app/api/sessions/route', () => {
+describe('app/api/rooms/route', () => {
   describe('POST', () => {
     it('returns 400 problem+json (invalid-json) on invalid json', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
           body: 'not json',
           headers: { 'content-type': 'application/json' },
@@ -64,10 +64,10 @@ describe('app/api/sessions/route', () => {
       await expectProblemJson(res, 400, 'invalid-json');
     });
 
-    it('returns 422 problem+json (invalid-request-shape) when the body has no name field', async () => {
+    it('returns 422 problem+json (invalid-request-shape) when the body has no room field', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
           body: JSON.stringify({}),
           headers: { 'content-type': 'application/json' },
@@ -76,13 +76,13 @@ describe('app/api/sessions/route', () => {
       await expectProblemJson(res, 422, 'invalid-request-shape');
     });
 
-    it('returns 422 problem+json (invalid-request-shape) when the body has extra keys besides name', async () => {
+    it('returns 422 problem+json (invalid-request-shape) when the body has extra keys besides room', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
           body: JSON.stringify({
-            name: 'alice',
+            room: 'alice',
             totalGames: 99,
           }),
           headers: { 'content-type': 'application/json' },
@@ -91,70 +91,70 @@ describe('app/api/sessions/route', () => {
       await expectProblemJson(res, 422, 'invalid-request-shape');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the name is longer than 24 characters', async () => {
+    it('returns 422 problem+json (invalid-player-name) when the room is longer than 24 characters', async () => {
       const { POST } = await loadRoute();
       const long = 'a'.repeat(25);
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: long }),
+          body: JSON.stringify({ room: long }),
           headers: { 'content-type': 'application/json' },
         }),
       );
       await expectProblemJson(res, 422, 'invalid-player-name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the name contains a control character', async () => {
+    it('returns 422 problem+json (invalid-player-name) when the room contains a control character', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'bad\u0007name' }),
+          body: JSON.stringify({ room: 'bad\u0007name' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
       await expectProblemJson(res, 422, 'invalid-player-name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the name is empty after trim', async () => {
+    it('returns 422 problem+json (invalid-player-name) when the room is empty after trim', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: '   ' }),
+          body: JSON.stringify({ room: '   ' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
       await expectProblemJson(res, 422, 'invalid-player-name');
     });
 
-    it('trims whitespace before calling registerOrLoginName (the canonical PK)', async () => {
-      registerOrLoginNameMock.mockResolvedValue({
+    it('trims whitespace before calling registerOrLoginRoom (the canonical PK)', async () => {
+      registerOrLoginRoomMock.mockResolvedValue({
         stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
         existed: false,
       });
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: '  alice  ' }),
+          body: JSON.stringify({ room: '  alice  ' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
       expect(res.status).toBe(200);
-      expect(registerOrLoginNameMock).toHaveBeenCalledWith('alice');
+      expect(registerOrLoginRoomMock).toHaveBeenCalledWith('alice');
     });
 
-    it('returns 200 with { stats, existed: false } on registration of a fresh name', async () => {
-      registerOrLoginNameMock.mockResolvedValue({
+    it('returns 200 with { stats, existed: false } on registration of a fresh room (N1)', async () => {
+      registerOrLoginRoomMock.mockResolvedValue({
         stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
         existed: false,
       });
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'newbie' }),
+          body: JSON.stringify({ room: 'newbie' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
@@ -167,16 +167,16 @@ describe('app/api/sessions/route', () => {
       });
     });
 
-    it('returns 200 with { stats, existed: true } on login of an existing name', async () => {
-      registerOrLoginNameMock.mockResolvedValue({
+    it('returns 200 with { stats, existed: true } on login of an existing room (N2)', async () => {
+      registerOrLoginRoomMock.mockResolvedValue({
         stats: { totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: -2 },
         existed: true,
       });
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'veteran' }),
+          body: JSON.stringify({ room: 'veteran' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
@@ -188,12 +188,9 @@ describe('app/api/sessions/route', () => {
       });
     });
 
-    it('idempotency: two POSTs with the same fresh name yield existed:false then existed:true (W2 contract)', async () => {
-      // First call: fresh → existed:false.
-      // Second call: row now exists → existed:true.
-      // registerOrLoginName mock models the underlying state.
+    it('idempotency: two POSTs with the same fresh room yield existed:false then existed:true (W1 contract)', async () => {
       let existed = false;
-      registerOrLoginNameMock.mockImplementation(async () => {
+      registerOrLoginRoomMock.mockImplementation(async () => {
         const stats = existed
           ? { totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 }
           : { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 };
@@ -203,35 +200,34 @@ describe('app/api/sessions/route', () => {
       });
       const { POST } = await loadRoute();
       const first = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'idem' }),
+          body: JSON.stringify({ room: 'alice' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
-      expect(first.status).toBe(200);
-      const firstBody = await first.json();
-      expect(firstBody.existed).toBe(false);
       const second = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'idem' }),
+          body: JSON.stringify({ room: 'alice' }),
           headers: { 'content-type': 'application/json' },
         }),
       );
-      expect(second.status).toBe(200);
+      const firstBody = await first.json();
       const secondBody = await second.json();
+      expect(firstBody.existed).toBe(false);
       expect(secondBody.existed).toBe(true);
-      expect(secondBody.stats.totalGames).toBe(3);
+      expect(firstBody.stats).toEqual({ totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 });
+      expect(secondBody.stats).toEqual({ totalGames: 3, xWins: 2, oWins: 1, draws: 0, currentStreak: 1 });
     });
 
-    it('returns 500 problem+json (db-unavailable) when registerOrLoginName throws', async () => {
-      registerOrLoginNameMock.mockRejectedValue(new Error('boom'));
+    it('returns 500 problem+json (db-unavailable) when registerOrLoginRoom throws', async () => {
+      registerOrLoginRoomMock.mockRejectedValue(new Error('boom'));
       const { POST } = await loadRoute();
       const res = await POST(
-        new Request('http://localhost/api/sessions', {
+        new Request('http://localhost/api/rooms', {
           method: 'POST',
-          body: JSON.stringify({ name: 'alice' }),
+          body: JSON.stringify({ room: 'alice' }),
           headers: { 'content-type': 'application/json' },
         }),
       );

@@ -1,24 +1,27 @@
 import { NextResponse } from 'next/server';
-import { loadRecordByName, mergeRecordByName } from '@/lib/db';
-import { normalizePlayerName } from '@/lib/player-name';
+import { loadRecordByRoom, mergeRecordByRoom } from '@/lib/db';
+import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
 import { type GameStats } from '@/lib/game';
 
-// W2 (ulw-one-game-two-versions) thin transport wrapper.
-//   POST /api/players/{name}/stats/merge
+// W1 (ulw-room-migration-home-landing) thin transport wrapper.
+//   POST /api/rooms/{room}/stats/merge
 //     body { stats: GameStats }
 //       → 200 { stats: GameStats }   (server-authoritative per-field sum)
 //       → 409 player-session-required (problem+json, 防静默建档)
 //       → 422 invalid-request-shape / invalid-player-name
 //       → 500 db-unavailable
 //
-// Pre-condition: caller must have just hit POST /api/sessions for the
-// same name (the SyncConfirmDialog flow enforces this — the dialog
+// Pre-condition: caller must have just hit POST /api/rooms for the
+// same room (the SyncConfirmDialog flow enforces this — the dialog
 // opens only after postPlayerSession already returned a row). A 409
-// here means the row vanished in between (admin delete, forged request,
-// concurrent wipe); we refuse to silently upsert emptyStats() so a
-// forged merge cannot resurrect a wiped account (B-T2 contract carried
-// over from W3, now under the RESTful surface).
+// here means the row vanished in between (admin delete, forged
+// request, concurrent wipe); we refuse to silently upsert emptyStats()
+// so a forged merge cannot resurrect a wiped account.
+//
+// W1 keeps the legacy `invalid-player-name` problem slug on the wire
+// for the same reason as the GET route above (plan §2.3 — slug 词表
+// 不变).
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,11 +51,11 @@ function isMergeBody(v: unknown): v is { stats: GameStats } {
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ name: string }> },
+  { params }: { params: Promise<{ room: string }> },
 ): Promise<Response> {
-  const { name: raw } = await params;
-  const name = normalizePlayerName(decodeURIComponent(raw));
-  if (name === null) {
+  const { room: raw } = await params;
+  const room = normalizeRoom(decodeURIComponent(raw));
+  if (room === null) {
     return problemResponse(422, 'invalid-player-name');
   }
   let body: unknown;
@@ -65,16 +68,16 @@ export async function POST(
     return problemResponse(422, 'invalid-request-shape');
   }
   try {
-    const existing = await loadRecordByName(name);
+    const existing = await loadRecordByRoom(room);
     if (!existing) {
-      // 409 防静默建档 — caller must run /api/sessions first.
+      // 409 防静默建档 — caller must run /api/rooms first.
       return problemResponse(
         409,
         'player-session-required',
-        `No row for name "${name}". Register or log in before merging.`,
+        `No row for room "${room}". Register or log in before merging.`,
       );
     }
-    const stats = await mergeRecordByName(name, body.stats);
+    const stats = await mergeRecordByRoom(room, body.stats);
     return NextResponse.json({ stats });
   } catch {
     return problemResponse(500, 'db-unavailable');
