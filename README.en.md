@@ -171,7 +171,7 @@ pnpm dev              # http://localhost:3000
 pnpm build && pnpm start
 ```
 
-> **Known issue**: on macOS, a cold-start `pnpm dev` may hit a Watchpack `EMFILE` storm (~668 failures plus a `.next/dev` deleted restart loop). This is upstream [vercel/next.js#93175](https://github.com/vercel/next.js/issues/93175) — still OPEN, not fixed (watchpack per-directory watcher × pnpm directory farm × macOS FSEvents per-process stream ceiling; not an fd exhaustion). Temporary workaround: `WATCHPACK_POLLING=true pnpm dev`. See `AGENTS.md` § Project anti-patterns.
+> **Known issue**: on macOS, a cold-start `pnpm dev` may hit a Watchpack `EMFILE` storm (~668 failures plus a `.next/dev` deleted restart loop). This is upstream [vercel/next.js#93175](https://github.com/vercel/next.js/issues/93175) — still OPEN, not fixed (watchpack per-directory watcher × pnpm directory farm × macOS FSEvents per-process stream ceiling; not an fd exhaustion). Temporary workaround: `WATCHPACK_POLLING=true pnpm dev`. Also close stale `localhost:3000` tabs before restarting `pnpm dev` — each tab holds an HMR websocket that reconnects simultaneously the moment the server revives, amplifying the failure. See `AGENTS.md` § Project anti-patterns.
 
 Defaults to `DATABASE_URL=file:./data/tic-tac-toe.db`; data lands in `data/tic-tac-toe.db`. **After a fresh clone you do NOT need to create `.env.local`** — `lib/db.ts` defaults to the embedded sqlite at `file:./data/tic-tac-toe.db` (bundled with `@libsql/client`). `.env.example` is only needed when you switch to Turso or a custom path. For HTTP deployment see the "Deployment" section below.
 
