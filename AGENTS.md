@@ -43,6 +43,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | RESTful 浏览器薄壳 | lib/game-net.ts | postSession / fetchPlayerStats / postMerge / postOutcome + 8s AbortController |
 | RFC 9457 problem+json | lib/api-problem.ts | problemResponse + ProblemSlug + typeUriFor |
 | 视觉和无障碍契约 | DESIGN.md、app/globals.css、components/ | 设计令牌与全局 focus 所有权是契约 |
+| 领域术语与歧义裁决 | CONTEXT.md | 语言契约：命名对齐先查此表，产出物禁用其 `_Avoid_` 别名；收录/晋升门槛见 .omo/plans/glossary-context-md.md |
 | 浏览器验证 | tests/qa/ | 先 pnpm build && pnpm start (`:3101`)，不要用 dev server |
 | 提交策略 | 下方贡献指南 | tests/qa/commit-audit.mjs 和 Git hook 共同强制 |
 | 既有设计理由 | .omo/plans/*.md | 非平凡提交必须引用 Plan footer |
@@ -81,6 +82,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 设计令牌保存在 app/globals.css 和 DESIGN.md；Tailwind class 引用令牌。
 - 提交主题和正文可以中文；Conventional 前缀与 lore trailer 键名保持英文。
 - 路由命名遵循 W1 御定：`/online` (实时上服) + `/offline` (纯本地) + `/result` (RSC 成绩单)；不引入 `solo` / `ranked` / `singleplayer` / `multiplayer` 词汇（schema.org 词汇表对齐理由见 README「词汇语义说明」节）。
+- 领域概念命名以 CONTEXT.md 为准：一切产出物（代码、commit 正文、plan、review、探针）使用表内术语、禁用其 `_Avoid_` 别名；概念不在表中勿造新词——先判断是否真缺口，是则按 `.omo/plans/glossary-context-md.md` D3 门槛入 Pending 区，复用后晋升。
 
 ## 本项目反模式
 
