@@ -97,7 +97,7 @@ await page.evaluate((hash) => {
 
 ### 27. RSC leaf boundary refactor（commit C1–C5）
 
-将 3 个 page（`/`、`/play` 后改名 `/online`、`/result`）从 `'use client'` 改为 RSC；交互逻辑收敛到叶子 client 组件（`<StartGameButton>` / `<ResetStatsButton>` / `<PlayController>` / `<StatusBarClient>` / `<RestartButton>` / `<ResultBanner>` / `<ResultActions>`）；`stats` 数据由 RSC `await loadStats()` 直读 `lib/db.ts`，`useGameStore` 仍持有 stats 直到 C4 删除（W1 `lib/store.ts:GameStats` 字段整体退役 → 现 online 版直接走 `lib/db.ts:recordOutcomeForName` 服务端权威累加）。
+将 3 个 page（`/`、`/play` 后改名 `/online`、`/result`）从 `'use client'` 改为 RSC；交互逻辑收敛到叶子 client 组件（`<StartGameButton>` / `<ResetStatsButton>` / `<PlayController>` / `<StatusBarClient>` / `<RestartButton>` / `<ResultBanner>` / `<ResultActions>`）；`stats` 数据由 RSC `await loadStats()` 直读 `lib/db.ts`，`useGameStore` 仍持有 stats 直到 C4 删除（W1 `lib/store.ts:GameStats` 字段整体退役 → online 版直接走 `lib/db.ts:recordOutcomeForName`（W3 D-3 迁移后符号改为 `recordOutcomeForRoom`，但契约不变）服务端权威累加）。
 
 设计记录：[`.omo/plans/rsc-leaf-boundary-refactor.md`](<repo-root>/.omo/plans/rsc-leaf-boundary-refactor.md)（master） + 5 份 sub-plan。
 

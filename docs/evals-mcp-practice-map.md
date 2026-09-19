@@ -96,7 +96,7 @@ evals/
 2. 服务端 idempotency key——现在防 double-count 全靠客户端哨兵 `ttt.solo.last-merged-local.v1`，服务端盲；把幂等从约定升级为强制。
 3. audit log 表（落子/同步/登录事件）——滴滴 JD 逐字词「工具调用审计」。
 
-已有可讲资产：`lib/player-name.ts:isPlayerName` 与 handler `normalizeName` 单一真相契约（DRIFT = 422 坏 UX）；commit 六层门禁 + Stryker 变异 = 「评测准入门禁 + 回归机制」的既有实践；AGENTS.md 反模式区每条带实证编号（B-1/B-2/W1）= 「badcase → 归因 → 固化契约」闭环。
+已有可讲资产（W3 D-3 迁移至房间术语）：`lib/room-name.ts:isRoomName` 与 handler `normalizeRoom` 单一真相契约（W3 迁移自 `lib/player-name.ts:isPlayerName` + `normalizePlayerName`；DRIFT = 「保存房间 → POST 422」坏 UX）；commit 六层门禁 + Stryker 变异 = 「评测准入门禁 + 回归机制」的既有实践；AGENTS.md 反模式区每条带实证编号（B-1/B-2/W1）= 「badcase → 归因 → 固化契约」闭环。
 
 ---
 

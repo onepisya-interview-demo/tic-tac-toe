@@ -3,6 +3,7 @@
 > Source spec: `.omo/ulw-loop/brief.md` (P3 审美段为输入)
 > Stack: Next.js 16 App Router + Tailwind v4 + Zustand + Drizzle/SQLite
 > Generated: 2026-09-07
+> Updated: 2026-09-20 (W3 ulw-room-migration-home-landing: 房间术语 + 首页引导化)
 > Status: contract for implementation
 
 ## 0. Research Log
@@ -75,7 +76,7 @@
 
 | Route | Composition (single flex-row) | h1 slot | testid |
 | --- | --- | --- | --- |
-| `/` | (no single-line header — home is the score-cards layout) | n/a | n/a |
+| `/` | (no single-line header — home is the guided landing layout) | n/a | n/a |
 | `/online` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "游戏中" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
 | `/offline` | `[h1 compact | StatusBarClient inline | SoundToggle]` | "单机练习" (`text-h2 font-semibold`) | `status-bar` / `status-text` |
 | `/result` | `[result-headline h1 | SoundToggle]` | `result-headline` is the h1 | `result-headline` (aria-live=assertive) |
@@ -90,31 +91,82 @@ slot is the title, not the status text. `SoundToggle` keeps its own padding. Mob
 
 **Implementation rule**: every primitive MUST use the tokens above; no inline hex.
 
-## 4b. OnlineStatsCard & SyncConfirmDialog (W3 增补)
+## 4b. RoomGateDialog / SyncConfirmDialog / HomeDialogMount (W3 增补)
 
-`/offline` 纯净化后身份与跨设备同步上首页，新增两个组件；写明动效与契约以免后人重发明。
+W3 后首页成为引导页：删除 `OnlineStatsCard` 与 `PlayerNameForm`，新增 `RoomGateDialog` + `RoomGateMount`（房间按需收名）+ `HomeStatsEntry`（战绩静态入口，纯 `<Link>`）；`SyncConfirmDialog` 文案与关键路径改房间术语。写明动效与契约以免后人重发明。
 
-### OnlineStatsCard（components/OnlineStatsCard.tsx）
+### RoomGateDialog（components/RoomGateDialog.tsx）
 
 | 维度 | 契约 |
 | --- | --- |
-| 数据源 | `GET /api/players/{name}/stats`（仅读） |
-| 触发 | `useEffect([playerName])`：store.playerName 由空变非空时拉取；同 store 字段变化（PlayerNameForm 改）会重拉 |
-| 状态机 | `idle → loading → ok / empty / error`（组件内 `useState<LoadState>`） |
-| 渲染 | 三态共用 `Card` 槽位（登录前「设置名字后在此查看」+ 登录后「StatsGrid / 该名字尚无战绩记录 / 加载失败」），避免空/有态布局跳变守 375 一屏 |
-| 持久层 | 严禁写 localStorage / 任何 store 字段 —— A2 红线，home-return-qa step 07 逐字节快照断言 |
-| 错误处理 | 网络/超时/404 等行内展示，不污染持久层 |
+| 触发 | 首页 `RoomGateMount` 监听 `ttt:room-required` Window CustomEvent（`StartGameButton` 在无名点 online CTA 时 dispatch，detail 携带 `{ mode, href }`） |
+| 居中 | 原生 `<dialog>` + Tailwind v4 Preflight 把 UA `dialog:modal { margin: auto }` 清零；项目加 `m-auto` 显形居中（契约：dialog 中心与视口中心偏差 ≤8px，one-identity-qa 验收） |
+| 背板 | `::backdrop` 选 `bg-base/70`（显式 CSS：`dialog::backdrop { background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent) }`，因 Tailwind v4 不生成 `backdrop:bg-X/Y` 变体）+ `backdrop-blur-sm`（Tailwind 类仍生效）；禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
+| 内容 | 标题「创建房间」+ 副标题「同设备对战 · 战绩云端」+ roomName 输入 + 主「创建并进入」/ 次「取消」+ 24 字符计数 + 错误行；422 / aborted / network-error 三态就地文案，零持久层写入，零导航 |
+| 焦点 | showModal 后主 CTA「创建并进入」初焦（`requestAnimationFrame(() => primaryRef.current?.focus())` + cleanup `cancelAnimationFrame`；落到 React re-render settle 之后；F3 fix 模式） |
+| 关键路径 | 提交即 `postRoomSession(trimmed)`（`POST /api/rooms`）→ 200 ok 时写 localStorage `ttt.room.name.v1` + `setRoomName` + `startGame(mode)` + `router.push(href)` + close dialog；`existed:false` 文案「房间已创建」，`existed:true` 文案「已进入房间 <room>」 |
+| 退路 | ESC / 次 CTA「取消」= 关 dialog，零 POST 零写零导航 |
+| reduced-motion | 弹框内无连续动画；ESC/click 关 dialog 即时 |
+| testid | `room-gate-dialog` / `room-gate-input` / `room-gate-submit` / `room-gate-cancel` / `room-gate-counter` / `room-gate-feedback` |
+
+why-not: 为什么不做「创建并进入」按钮的 loading spinner 旋转动画
+  → 弹框已经 `aria-busy={busy}` + 主按钮文字切换「创建中…」/「进入中…」+ 全输入框 + 次按钮 disabled；spinner 是装饰性，无信息增量为冗余。`prefers-reduced-motion` 路径下 spinner 更不该存在（即使非旋转，CPU 也在画）。
+
+why-not: 为什么主次按钮用 `flex-col-reverse sm:flex-row sm:justify-end` 而非 modal library
+  → 库引入违「禁 UI/动画/路由/数据访问库」项目约束；原生 `<dialog>` 自带 focus trap / ESC / inert 背景三件套，足够。
+
+why-not: 为什么 `<dialog>` 加 `m-auto` 而不是改 global UA 样式或换 Tailwind plugin
+  → Tailwind v4 Preflight `* { margin: 0 }`（node_modules/tailwindcss/preflight.css:13）覆盖 UA `dialog:modal { margin: auto }`；项目解法是在 dialog 自己 className 上 `m-auto` 把居中找回（最小作用域）。global 加 `dialog { margin: auto }` 会让其它未来 modal 实例共享同一规则，违反「契约先行 / 最小作用域」原则。prefers-reduced-motion 下无差异（m-auto 是 layout 态非动画态）。
+
+why-not: 为什么 `::backdrop` 的 `bg-base/70` 走显式 CSS 而非 `backdrop:bg-base/70` Tailwind 类
+  → Tailwind v4 不生成 `backdrop:bg-X/Y`（color-mix + arbitrary variant 组合）规则；.next 静态 CSS 实测只产出 `.backdrop\:backdrop-blur-sm::backdrop { backdrop-filter }`，无 `bg-base/70::backdrop { background-color }`。换成显式 CSS rule 用同一 `--color-bg-base` token，契约不变（DESIGN.md §图底关系 bg-base/70），且与 `backdrop-blur-sm` 类共享变量源。
+
+why-not: 为什么 `::backdrop` 用 `bg-base/70 + backdrop-blur-sm` 而非 `bg-black/60`
+  → DESIGN.md §图底关系行已明文禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255，破坏暗色背景下的边界感知）；`bg-base/70` 既守住图底关系又维持品牌调性。
+
+why-not: 为什么 focus 调用包进 `requestAnimationFrame`
+  → W4 F3 fix：showModal 同 commit phase 内 `setName(initialName)` 触发的 re-render 会重置焦点；`requestAnimationFrame` 把 focus 落到 React re-render settle 之后，cleanup `cancelAnimationFrame` 防泄漏。`reduced-motion` 路径不受影响（`requestAnimationFrame` 在 reduced-motion 下仍触发，仅回调内不读偏好）。
+
+### HomeDialogMount（components/HomeDialogMount.tsx）
+
+W3 起：删除「OnlineStatsCard focus refetch」职责，**仅**负责跨设备合并弹框触发。
+
+| 维度 | 契约 |
+| --- | --- |
+| 触发 | mount effect 监听 pathname=`/` + `focus` + `visibilitychange` + `storage` + `ttt:offline-stats-changed`（合并后重估 pendingSyncCount）；`pendingSyncCount() > declinedSentinel` 时打开 SyncConfirmDialog |
+| 写层 | 合并成功 → `clearOfflineStats()` + `persistLastMergedLocal(0)`；onReject → `writeDeclinedPending(pendingSnapshot)`（sessionStorage 防重弹哨兵） |
+| 渲染 | 仅渲染 SyncConfirmDialog；不显示表单；不挂载任何网络组件 |
+| 测试 | `home-return-qa` 探针覆盖；不验证 localStorage 快照（旧 A2 红线已随 OnlineStatsCard 删除而并入 A1 首页零 API 红线） |
+
+### HomeStatsEntry（components/HomeStatsEntry.tsx）
+
+W3 新增首页战绩静态入口。
+
+| 维度 | 契约 |
+| --- | --- |
+| 渲染 | store.roomName 非空时渲染 `<Link href="/result?room=${encodeURIComponent(roomName)}">`「查看 <room> 的战绩 →」链接，房间名包在 `<span class="font-mono">`；store.roomName 空时**不渲染**（连骨架都没有，A1 红线零 DOM 干扰） |
+| 数据源 | 纯 `useGameStore((s) => s.roomName)` 读，无 fetch、无 useEffect（store 是客户端单例，hard reload 由 RoomGateMount identity bootstrap 恢复） |
+| 持久层 | 零写入：禁写 localStorage / 任何 store 字段；A1 红线扩展——首页零网络 + 零持久副作用 |
+| testid | `home-stats-entry`（div）+ `home-stats-link`（anchor） |
+
+why-not: 为什么不用 useEffect 读 localStorage 而走 store 单例
+  → 重复读 localStorage 会引入第二个水合触发点（AGENTS.md 反模式）；store 已是客户端单例，RoomGateMount 挂载期 useEffect 已负责 localStorage → store 单向同步（identity bootstrap）；HomeStatsEntry 直接读 store 是「唯一真相」正确路径。
+
+why-not: 为什么 store.roomName 空时整个组件 return null 而不是渲染骨架
+  → 首屏引导页一屏预算（one-screen-qa 契约）要求 375×667 viewport 装下整个首页；空骨架会占高度且无信息；无名时战绩不存在，渲染入口即误导。
 
 ### SyncConfirmDialog（components/SyncConfirmDialog.tsx）
+
+W3 起：内嵌收名流（合并时输入房间名）+ 主「合并并清空」/ 次「保留本地」；房间术语化。
 
 | 维度 | 契约 |
 | --- | --- |
 | 触发 | `HomeDialogMount` mount effect：`pendingSyncCount() > declinedSentinel` 时开 |
 | 居中 | 原生 `<dialog>` + Tailwind v4 Preflight 把 UA `dialog:modal { margin: auto }` 清零；项目加 `m-auto` 显形居中（契约：dialog 中心与视口中心偏差 ≤8px，A1 验收） |
 | 背板 | `::backdrop` 选 `bg-base/70`（显式 CSS：`dialog::backdrop { background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent) }`，因 Tailwind v4 不生成 `backdrop:bg-X/Y` 变体）+ `backdrop-blur-sm`（Tailwind 类仍生效）；禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255）；复用 §图底关系行 |
-| 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局；同步后本机清零以防重复」+ name 输入 + 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
+| 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局到房间 <room>；同步后本机清零以防重复」+ roomName 输入（预填 store.roomName / localStorage）+ 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
 | 焦点 | showModal 后主 CTA「合并并清空」初焦（rAF 延后到 re-render settle 之后；F3 fix） |
-| 关键路径 | 内部 `runMergeSequence`: `postSession`（注册/登录）→ `loadOfflineStats()` 快照 → `postMerge`（合并）；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm |
+| 关键路径 | 内部 `runMergeSequence`: `postRoomSession`（进入房间；200 ok）→ `loadOfflineStats()` 快照 → `postMerge`（合并）→ 200 ok → `clearOfflineStats()` + `persistLastMergedLocal(0)`；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm；409 `player-session-required` 翻译为「需要先进入该房间」就地展示 |
 | 退路 | ESC / 点击遮罩 / 次 CTA「保留本地」= `onReject`；`HomeDialogMount` 写 sessionStorage `ttt.offline.sync-declined.v1` 避免同会话重弹 |
 | reduced-motion | 弹框内无连续动画；ESC/click 关 dialog 即时 |
 
@@ -130,35 +182,6 @@ why-not: 为什么 `::backdrop` 的 `bg-base/70` 走显式 CSS 而非 `backdrop:
   → Tailwind v4 不生成 `backdrop:bg-X/Y`（color-mix + arbitrary variant 组合）规则；.next 静态 CSS 实测只产出 `.backdrop\:backdrop-blur-sm::backdrop { backdrop-filter }`，无 `bg-base/70::backdrop { background-color }`。换成显式 CSS rule 用同一 `--color-bg-base` token，契约不变（DESIGN.md §图底关系 bg-base/70），且与 `backdrop-blur-sm` 类共享变量源。
 why-not: 为什么 `::backdrop` 用 `bg-base/70 + backdrop-blur-sm` 而非 `bg-black/60`
   → DESIGN.md §图底关系行已明文禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255，破坏暗色背景下的边界感知）；`bg-base/70` 既守住图底关系又维持品牌调性，`backdrop-blur-sm` 提一点层次（与 sticky header 不用 blur 是因为 `bg-base` 暗色下 12px blur 几乎不可见，徒增合成成本；modal 后景是页面整体而非一行，blur 收益更高）。
-
-### PlayerNameForm（components/PlayerNameForm.tsx）
-
-W4 折叠 contract（`.omo/plans/ulw-ux-refresh-pass.md` §3 W4）——已登录折叠为只读态，编辑动作折叠在「编辑」按钮后展开。
-
-| 状态 | 触发 | 渲染 | 关键 testid |
-| --- | --- | --- | --- |
-| `!hydrated` | SSR / 首帧 | 骨架：仅 label 行 | `player-name-section`（div） |
-| `hasSaved && !editing`（折叠） | hydration 完成 + 持久层有名字 + 未点编辑 | 只读名字 token + 「编辑」按钮；input/登录/清除/取消/计数器/格式错误/锁定 hint 全隐藏；`feedback.kind==='success'` 时折叠行下方仍展示「登录/注册」反馈 pill | `player-name-readonly`、`player-name-edit` |
-| `hasSaved && editing` | 用户点「编辑」 | 既有 input + 「登录」 + 「清除」 + 新增「取消」 + 计数器 + 反馈块；input 预填 `playerName` | `player-name-input`、`player-name-save`、`player-name-clear`、`player-name-cancel`、`player-name-counter` |
-| `!hasSaved` | hydration 完成 + 持久层无名字 | input + 「保存」 + 计数器 + 反馈块（与 W3 完全一致） | 同上无 `clear`/`cancel` |
-
-**状态转换**
-
-- 折叠 → 编辑：`setEditing(true)` + `setName(playerName)` + reset touched/feedback。
-- 编辑 → 折叠（取消）：`setEditing(false)` + `setName(playerName)` + reset touched/feedback；不写任何持久层。
-- 编辑 → 折叠（提交成功）：`setStoreName(trimmed)` + `setFeedback({kind:'success',existed})` + `setEditing(false)`；localStorage 与 store 在写之前不动。
-- 任意编辑态 → !hasSaved（清除）：`setStoreName(null)` + `setEditing(false)` + reset touched/feedback。
-
-**约束性映射**：已登录不再出现裸 input（保存/登录歧义消除），编辑动作折叠在「编辑」按钮之后；与 W1 SyncConfirmDialog「pending>0 才弹」同根渐进呈现但更进一层——不只是「不弹」，而是「按钮都不在」。未登录路径不受影响。
-
-why-not: 为什么折叠态保留 success feedback pill 而不是提交完立刻隐藏
-  → 「登录 vs 注册」区分是用户首次成功时的核心信号（"已为你登录，欢迎回来" vs "注册成功"）；折叠后保留一帧反馈等价于「折叠 + 短反馈」，符合 `prefers-reduced-motion` 下零动画但仍传达结果语义。
-
-why-not: 为什么取消按钮用 `variant="ghost"` 而非 `secondary`
-  → 取消语义是「撤回本次编辑意图」，不可见的破坏性最低；ghost 与「编辑」按钮同款，符合「次级动作低权重」原则；与 SyncConfirmDialog「保留本地」按钮同源（次 CTA = ghost）。
-
-why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 inline 文本
-  → 「已锁定」语义需要视觉容器（与 §1 status-pill 同源），让用户一眼看出「这是不可改的值」而非「普通文字」；与 sticky header `bg-base` 实色同构但层级不同——readonly 是 token pill，header 是 layout bar。
 
 ## 5. Motion
 
@@ -179,6 +202,7 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 | In-page view switch | `translate` (6px→0) + `opacity` 双向 | 180ms | ease-out |
 | /offline Card morph | `view-transition-name: offline-card` 同位 morph（group snapshot）+ 容器 `min-h: 28rem` 锁高 | 180ms（继承 view-swap） | ease-out |
 | view-toggle button width | grid-stack 双图层（StatusBar 4 态 `grid-area: 1/1` 同格叠放，visibility 切换可见态）+ button `min-width: max-content` 锁宽 | — (静态) | — |
+| RoomGateDialog 打开 | `<dialog>.showModal()` 平台 API（无 enter 动画；原生 `::backdrop` 由浏览器绘制）| — (静态) | — |
 | SyncConfirmDialog 打开 | `<dialog>.showModal()` 平台 API（无 enter 动画；原生 `::backdrop` 由浏览器绘制）| — (静态) | — |
 
 - **View Transitions (route)**: 平台 API（React `<ViewTransition>`，Next 16 App Router 内置 canary 导出），非动画库，不违「禁动画库」之约；不支持 VT 的旧浏览器回退既有 `.page-fade-in`，`prefers-reduced-motion` 降级路径既有
@@ -197,8 +221,10 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 
 - **W3 弹框 (SyncConfirmDialog) 为什么不加 enter 动画（W4 终校：仍无新增动效）**
   原生 `<dialog>.showModal()` 自带 ::backdrop 渐入 + 焦点 trap，但这是浏览器实现而非项目动画；本项目无 enter transition 自定义 CSS（`dialog` 上无 `animation`/`transition` 属性）。why-not: 加 enter 动画 = 「确认性操作」类装饰（Fitts's Law 已经在遮罩 1.5 click 关 + 主 CTA 大字 + 主操作 8s loading 这三层上做到明确反馈；任何额外淡入/缩放都会让用户在「是否合并」二选一前多读 200ms 视觉噪音，违反 Tesler's Law 复杂度守恒）。W4 F3 修焦点 race 后，showModal → primaryRef.focus() 仍无视觉过渡。`prefers-reduced-motion` 路径下无差异（本就 0ms）。
-- **OnlineStatsCard 加载态为什么不加 skeleton screen 闪烁**
-  GET /api/players/{name}/stats 在 Turso iad1 + Vercel edge 实测 80-200ms（HAR §P3）；骨架屏会让用户在 200ms 内看到 1-2 次内容替换抖动，反而比「加载中…」一行更扰。`prefers-reduced-motion` 路径下骨架屏的呼吸光晕（pulse）是反模式。
+- **RoomGateDialog 与 SyncConfirmDialog 共享 showModal 平台 API 范式**
+  两个 dialog 同源——都用 `<dialog>.showModal()` + ::backdrop 原生渲染 + F3 模式初焦 + 无 enter 动画；why-not 同上不再重复。两个组件的 why-not 各自列在本组件 §4b 行内。
+- **W3 HomeStatsEntry 为什么不加 hover 微动效（颜色/下划线）**
+  已经是 `<Link>` + `underline underline-offset-2 hover:text-text-primary`：颜色变化走 Tailwind 默认 `transition-colors`，本就克制；再加 `transform` 或 `opacity` 动画是装饰性冗余，违反 §5「No bounce / no slide-in / no parallax」原则。`prefers-reduced-motion` 路径下 `transition-colors` 仍生效（150ms 颜色差远低于「动画」阈值）。
 
 
 - **A-T2 StatusBar grid-stack 为什么不选 min-w-[7rem] / min-w-[8ch]**
@@ -220,26 +246,26 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 
 ### 52 法则对照（ulw-solo-pure-local-closeout W4 增补）
 
-本节把 W1-W3 关键改动映射到「52 设计法则」（信源：`/Users/onepisya/code/UI Propmt/skills/elegant-ui/52-design-principles/`）。每条以「法则 → 对应改动 → 一句注意点」记入契约；证据详见
+本节把 W1-W4 关键改动映射到「52 设计法则」（信源：`/Users/onepisya/code/UI Propmt/skills/elegant-ui/52-design-principles/`）。每条以「法则 → 对应改动 → 一句注意点」记入契约；证据详见
 `.omo/evidence/ulw/ulw-solo-pure-local-closeout/R2-principles-mapping.md` §0-§9。
 
 | 法则 | 对应改动 | 一句注意点 |
 | --- | --- | --- |
-| 形式追随功能（Form Follows Function） | W1 删 `lib/store.ts` 三处 auto-POST；W3 静态 token 收紧（mobile `py-12 → py-4`） | 「装饰性联网」不属单机；删比抽 helper 更净（V3 MINOR-F4 因此作废） |
-| 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框 | 弹框文案须显形「将上传 N 局 / 本机清零」（W3 弹框文案决策 3/4 既约） |
-| 信噪比（Signal-To-Noise Ratio） | W1 收窄默认路径请求面（零网络写）；W2 sync-qa 唯一名 `syncprobe-<ts>` 复位 | 端点本身保留为公开 API 面（D2 决议），不是「删净」而是「挪走」 |
-| 渐进呈现（Progressive Disclosure） | W1 `pendingSyncCount > 0` 才弹 SyncConfirmDialog；零态静默直行 | 禁发明「始终弹一次以教育用户」的常驻噪音（验收 A3 硬约束） |
-| 约束性（Constraints / 渐进呈现进阶） | W4 `PlayerNameForm` 已登录折叠：只读 + 编辑；点编辑才展开 input/登录/清除/取消；未登录直接展开 | 折叠 = 编辑按钮独占可达面；已登录不该有裸输入语义（避免「保存」歧义） |
-| 留白感知（Horror Vacui） | W3 一屏收紧（19px 溢出 → 80px 节省）；sticky header 紧凑 ≤56px | 仍守 `bg-elevated` 与 `bg-base` ≥12px 呼吸间隔；战绩非空 /home 允许轻量滚动 |
+| 形式追随功能（Form Follows Function） | W1 删 `lib/store.ts` 三处 auto-POST；W3 静态 token 收紧（mobile `py-12 → py-4`）；W3 删 `OnlineStatsCard` + `PlayerNameForm` | 「装饰性联网」不属单机；删比抽 helper 更净（V3 MINOR-F4 因此作废） |
+| 泰斯勒定律（Tesler's Law / 复杂度守恒） | W1 把「自动同步」复杂度转移到「合并 / 保留」弹框；W3 RoomGateDialog 按需收名 | 弹框文案须显形「将上传 N 局 / 本机清零」（W3 弹框文案决策 3/4 既约） |
+| 信噪比（Signal-To-Noise Ratio） | W1 收窄默认路径请求面（零网络写）；W2 sync-qa 唯一名 `syncprobe-<ts>` 复位；W3 首页零 `/api/*` 请求（A1 红线） | 端点本身保留为公开 API 面（D2 决议），不是「删净」而是「挪走」 |
+| 渐进呈现（Progressive Disclosure） | W1 `pendingSyncCount > 0` 才弹 SyncConfirmDialog；零态静默直行；W3 online 无名点 CTA 才弹 RoomGateDialog | 禁发明「始终弹一次以教育用户」的常驻噪音（验收 A3 硬约束） |
+| 约束性（Constraints / 渐进呈现进阶） | W3 `RoomGateDialog` 内嵌完整收名流（无名即弹、收完即进）；已有 roomName 不弹直接进 | 折叠 = 弹框独占可达面；已有 roomName 不该有裸 input 语义（避免「保存」歧义）；W3 替代 W4 `PlayerNameForm` 折叠态 |
+| 留白感知（Horror Vacui） | W3 一屏收紧（19px 溢出 → 80px 节省）；sticky header 紧凑 ≤56px；W3 首页减表单后更多呼吸空间 | 仍守 `bg-elevated` 与 `bg-base` ≥12px 呼吸间隔；战绩非空 /home 允许轻量滚动 |
 | 菲茨定律（Fitts's Law） | W1 弹框主/次 CTA 整行宽（移动端单列 1fr/1fr 堆叠）；按钮 padding 8/12/16 | 触区 ≥44px；遮罩外 click 不关弹框（用 ESC + 显式按钮替代） |
 | 多尔蒂门槛（Doherty Threshold） | W1 弹框显形 ≤100ms + 主 CTA loading + 8s `AbortController.timeout()` | 400ms 内用户必须看见反馈；HAR §P2 实证 30s 卡死反例 |
 | 图底关系（Figure-Ground） | W1 `::backdrop` 选 `bg-base/70` + `backdrop-blur-sm`；W3 sticky `bg-base` 实色 | 禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255） |
-| 反馈环（Feedback Loop） | W2 `ttt:offline-stats-changed` dispatch + OnlineStatsCard focus refetch；W3 win/draw ≤2s 切 stats 视图 + confetti 落位 | 行为 → 状态变化 → 视觉响应 ≤400ms 闭环；不依赖用户主动刷新 |
+| 反馈环（Feedback Loop） | W3 win/draw ≤2s 切 stats 视图 + confetti 落位；W3 删除 OnlineStatsCard focus refetch（避免冗余轮询；`/result` RSC 是 single source of truth） | 行为 → 状态变化 → 视觉响应 ≤400ms 闭环；不依赖用户主动刷新 |
 | 映射关系（Mapping） | W2 ResetStatsButton caption 显形作用域；aria-pressed ↔ view-toggle 控制-状态同构 | 控件外观 / 文案须与系统状态一一对应；禁「按钮名 ≠ 作用域」歧义（A5） |
 | 图层化（Layering） | W1 `::backdrop` 暗背景层；W3 confetti overlay `z-index: 50` 悬浮于战绩视图 | 视觉层级 = 信息层级；z-index 须 token 化阶梯（globals.css 单一源） |
-| 宽容性（Forgiveness） | W1 弹框 ESC = reject；W4 折叠态「编辑」独占可达面；「保留本地」零网络写 | 撤销 / 退出必须可逆且零代价；禁把破坏性操作伪装成中性操作（D1） |
+| 宽容性（Forgiveness） | W1 弹框 ESC = reject；W3 RoomGateDialog ESC = cancel（零 POST 零写零导航）；W4 「保留本地」零网络写 | 撤销 / 退出必须可逆且零代价；禁把破坏性操作伪装成中性操作（D1） |
 
-未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。约束性作为渐进呈现的「操作权限收口」延伸，W4 增列入表。心流 / Zeigarnik 与「紧凑化」无直接对位。
+未选入的常用候选（理由）：席克定律——弹框只有 2 CTA，选项数不构成问题；古腾堡图表——本轮无新主视区扫描路径改动；确认性操作——同源渐进呈现，不重复入条。心流 / Zeigarnik 与「紧凑化」无直接对位。
 
 
 ## 6. Accessibility
@@ -256,17 +282,18 @@ why-not: 为什么 readonly 名字用 `bg-bg-elevated` 边框 token pill 而非 
 
 | Route | Purpose | Key elements |
 | --- | --- | --- |
-| `/` | Showcase (landing) | H1 `井字棋`, 副标, OnlineStatsCard, PlayerNameForm, 双入口 CTA（start-offline / start-online）, JSON-LD, HomeDialogMount |
-| `/online` | Online versus (two players, pass-and-play, server-authoritative) | StatusBar, Board (3×3 Cell grid), 返回首页 / 重开; on game end auto-push `/result?name=<name>` |
+| `/` | Guided landing (W3 D-1) | H1 `井字棋`, 副标, 玩法引导区（轮流落子 · 三连即胜 · 同设备传递）, 双入口 CTA（`start-offline` / `start-online`）, `HomeStatsEntry`（战绩静态入口；纯 `<Link>`；无名不渲染）, `HomeDialogMount`（合并弹框宿主）, `RoomGateMount`（房间弹框宿主）, JSON-LD |
+| `/online` | Online versus (two players, pass-and-play, server-authoritative) | StatusBar, Board (3×3 Cell grid), 返回首页 / 重开; on game end auto-push `/result?room=<roomName>` |
 | `/offline` | Solo practice (pure local, anonymous-not-recorded) | StatusBar, Board ↔ OfflineStatsPanel view-swap (W3 result-paginated), 返回首页 / 重开 |
-| `/result?name={trimmed}` | Real-time score sheet (RSC, per-name) | StatsGrid, 再来一局 → /online, 返回首页 → / |
+| `/result?room={trimmed}` | Real-time score sheet (RSC, per-room) | StatsGrid, 再来一局 → /online, 返回首页 → /；旧 `?name=` 走 fallback（portfolio 无保留价值） |
 
 **Transitions**:
-- `/` → click start-online → `/online` (first player randomized in store)
-- `/` → click start-offline → `/offline` (first player randomized in store)
-- `/online` → 胜/平 → `/result?name=<name>` (ResultNavigator push; real-time RSC score sheet)
-- `/offline` → 胜/平 → inline OfflineStatsPanel view-swap (no navigation; confetti fires once)
-- `/result` → click 再来一局 → `/online` (new randomized first player, stats updated server-side)
+- `/` → click start-online（有名）→ `/online`（first player randomized in store）
+- `/` → click start-online（无名）→ dispatch `ttt:room-required` → `RoomGateMount` 打开 `RoomGateDialog` → 收名成功 → `/online`
+- `/` → click start-offline → `/offline`（first player randomized in store；永久零拦截）
+- `/online` → 胜/平 → `/result?room=<roomName>`（ResultNavigator push；real-time RSC score sheet）
+- `/offline` → 胜/平 → inline OfflineStatsPanel view-swap（no navigation；confetti fires once）
+- `/result` → click 再来一局 → `/online`（new randomized first player, stats updated server-side）
 - `/result` / `/offline` → click 返回首页 → `/`
 
 ### Modes: online (default) vs offline
@@ -275,15 +302,15 @@ One store, one `mode` field (`'online' | 'offline'`); the two modes share the bo
 
 | | online (`/online`) | offline (`/offline`) |
 | --- | --- | --- |
-| Entry gate | `StartGameButton` blocks when `useGameStore.playerName` is empty; dispatches `ttt:player-name-required` so the identity region focuses | Always navigable; anonymous path is allowed (无名不记) |
-| Outcome write | `POST /api/players/{name}/stats/outcomes` — server-authoritative accumulator (`lib/db.ts:recordOutcomeForName`) | Zero network writes — local `recordOutcome` accumulation |
-| Stats persistence | Server per-name row (`game_stats`, `name TEXT UNIQUE`) | `localStorage['ttt.offline.stats.v1']` (5-number JSON; shape mismatch → `emptyStats`) |
-| Game over | `ResultNavigator` pushes `/result?name=<name>` (RSC real-time score sheet, force-dynamic) | Inline `OfflineStatsPanel` view-swap (Confetti fires once via W4 Bug B hoisted `WinConfetti`); no navigation by design |
-| Stats display | RSC reads `loadRecordByName(name)` at request time (force-dynamic) | `OfflineStatsPanel`: SSR renders `emptyStats`, hydrates from localStorage in effect |
+| Entry gate | `StartGameButton` `requireName=true`：无名点 CTA → dispatch `ttt:room-required` → `RoomGateMount` 打开 `RoomGateDialog`；有名直行 `startGame + push` | Always navigable; anonymous path is allowed (无名不记) |
+| Outcome write | `POST /api/rooms/{room}/stats/outcomes` — server-authoritative accumulator (`lib/db.ts:recordOutcomeForRoom`) | Zero network writes — local `recordOutcome` accumulation |
+| Stats persistence | Server per-room row (`game_stats`, `room TEXT UNIQUE`) | `localStorage['ttt.offline.stats.v1']` (5-number JSON; shape mismatch → `emptyStats`) |
+| Game over | `ResultNavigator` pushes `/result?room=<roomName>` (RSC real-time score sheet, force-dynamic) | Inline `OfflineStatsPanel` view-swap (Confetti fires once via W4 Bug B hoisted `WinConfetti`); no navigation by design |
+| Stats display | RSC reads `loadRecordByRoom(room)` at request time (force-dynamic) | `OfflineStatsPanel`: SSR renders `emptyStats`, hydrates from localStorage in effect |
 | Reset | Server-side row delete (admin op, no frontend UI) | `clearOfflineStats()` — local only, instant (`reset-offline-stats`) |
-| Cross-device merge | n/a (server is single source of truth) | `HomeDialogMount` mount effect → `SyncConfirmDialog` → `POST /api/sessions` + `POST /api/players/{name}/stats/merge` (per-field sum) + local clear + `ttt.offline.last-merged-local.v1` baseline sentinel (W4 F1) |
+| Cross-device merge | n/a (server is single source of truth) | `HomeDialogMount` mount effect → `SyncConfirmDialog` → `POST /api/rooms` + `POST /api/rooms/{room}/stats/merge` (per-field sum) + local clear + `ttt.offline.last-merged-local.v1` baseline sentinel (W4 F1) |
 
-The two ledgers never mix: the online card reads the server row only; the offline panel reads localStorage only. All visual, motion, and accessibility contracts (§1–§6) apply identically to both modes. See `.omo/plans/ulw-one-game-two-versions.md` §1 for the vocabulary rationale.
+The two ledgers never mix: the home page `HomeStatsEntry` reads the store roomName only (no fetch); the `/result` RSC reads the server row only; the offline panel reads localStorage only. All visual, motion, and accessibility contracts (§1–§6) apply identically to both modes. See `.omo/plans/ulw-one-game-two-versions.md` §1 for the version-vocabulary rationale and `.omo/plans/ulw-room-migration-home-landing.md` §0 / §1 for the room-vocabulary rationale.
 
 ## 8. Accepted Debt
 
@@ -292,6 +319,7 @@ The two ledgers never mix: the online card reads the server row only; the offlin
 - **No i18n** — Chinese only (per brief P2)
 - **No background music** — optional one-shot sound effects are available through the user-mutable control
 - **No animation library** — CSS transitions only (per brief 不能引入)
+- **W3 战绩 homepage 卡（OnlineStatsCard）删除**：战绩主场归 `/result?room=` RSC，首页纯引导化
 
 ## 9. Quality Gates
 
@@ -315,45 +343,48 @@ The two ledgers never mix: the online card reads the server row only; the offlin
 
 ---
 
-### Offline cross-device merge (历史叙述 · W-SYNC wave 2 已并入主 README「offline 跨设备同步」段)
+### Historical: W-SYNC wave 2 / W4 PlayerNameForm 折叠态（已退役）
 
-下表是 W-SYNC wave 2 的旧契约摘要，仅保留作为「历史叙述」；现行契约见 README.md / README.en.md「offline 跨设备同步是怎么工作的」段以及 `lib/offline-stats.ts` / `components/SyncConfirmDialog.tsx` / `components/HomeDialogMount.tsx` 顶 doc。
+W-SYNC wave 2 引入 `SyncConfirmDialog`（合并弹框）与原 `PlayerNameForm`（首页常驻收名表单），由 W3 D-3 房间术语迁移后：**`PlayerNameForm` 整体删除**（W2 改造面完成），由 `RoomGateDialog` 按需收名替代；`OnlineStatsCard` 同步删除，由 `HomeStatsEntry` 战绩静态入口替代。下表是 W-SYNC wave 2 / W4 PlayerNameForm 的旧契约摘要，仅保留作为「历史叙述」；现行契约见 §4b + §7 + README.md「一局棋两版本 → 首页 = 引导页」与「FAQ · online 入口拦截 / 首页身份恢复 / offline 跨设备同步」段。
 
 | 旧 Contract | 旧 Value | 当前状态 |
 | --- | --- | --- |
-| Storage key | `ttt.player.name.v1` (localStorage) | 保留；与 `lib/player-name.ts:normalizePlayerName` 同源 |
+| `PlayerNameForm`（首页常驻收名） | W4 折叠 contract：已登录只读 + 编辑展开；testid `player-name-*` 全族 | **退役（W2 删除）**；由 `RoomGateDialog`（按需弹框收名）替代 |
+| `OnlineStatsCard`（首页战绩只读卡） | `GET /api/players/{name}/stats` 响应只入组件 state（A2 红线） | **退役（W2 删除）**；由 `HomeStatsEntry`（纯 `<Link>`）替代；A2 红线并入 A1 首页零 API 红线 |
+| Storage key | `ttt.player.name.v1` (localStorage) | **W3 启动期被 `cleanupLegacyPlayerNameKey` 单向清空，不迁移**；新唯一 key `ttt.room.name.v1` |
 | Offline stats key | `ttt.solo.stats.v1` | 弃用不迁移 → `ttt.offline.stats.v1` |
-| API: read | `GET /api/solo-stats?name={trimmed}` | 退役 → `GET /api/players/{name}/stats` (RFC 9457 404 problem+json) |
-| API: write | `POST /api/solo-stats` body `{ name, outcome }` | 退役（405）→ `POST /api/players/{name}/stats/outcomes` (RFC 9457) |
-| DB | `solo_records` (name TEXT PRIMARY KEY + 5 ints + updated_at) | 退役 → 单表 `game_stats` (name TEXT UNIQUE)，per-name 行族 |
-| Client UI | `PlayerNameForm` + `SoloStatsPanel` | 改 `PlayerNameForm` (W4 折叠) + `OfflineStatsPanel` (W4 重命名) |
-| Test ids | `solo-sync` / `solo-stats-heading` / `solo-stats-error` / `reset-solo-stats` | 重命名 → `offline-stats-heading` / `offline-stats-error` / `reset-offline-stats` / `offline-stats`；`sync-confirm-*` 改在 home 页触发 |
+| API: read | `GET /api/solo-stats?name={trimmed}` | 退役 → `GET /api/rooms/{room}/stats` (RFC 9457 404 problem+json) |
+| API: write | `POST /api/solo-stats` body `{ name, outcome }` | 退役（405）→ `POST /api/rooms/{room}/stats/outcomes` (RFC 9457) |
+| API: register | `POST /api/sessions` body `{ name }` | **退役（W3 D-3 删除）** → `POST /api/rooms` body `{ room }` |
+| API: merge | `POST /api/players/{name}/stats/merge` | **退役（W3 D-3 删除）** → `POST /api/rooms/{room}/stats/merge` |
+| DB | `solo_records` (name TEXT PRIMARY KEY + 5 ints + updated_at) | 退役 → 单表 `game_stats` (room TEXT UNIQUE，W1 列名 `name` → `room`)，per-room 行族 |
+| Client UI | `PlayerNameForm` + `SoloStatsPanel` | 改 `RoomGateDialog`（按需弹框）+ `OfflineStatsPanel`（W4 重命名）+ `HomeStatsEntry`（W3 战绩静态入口） |
+| Test ids | `solo-sync` / `solo-stats-heading` / `solo-stats-error` / `reset-solo-stats` / `player-name-*` 全族 / `online-stats-*` 全族 | 重命名 → `offline-stats-heading` / `offline-stats-error` / `reset-offline-stats` / `offline-stats`；`room-gate-*`（新）/ `home-stats-entry` / `home-stats-link`（新）；旧 `player-name-*` / `online-stats-*` testid 整体退役（one-identity-qa A4 step 断言：`/offline` 路由下零命中） |
 | Concurrency model | Last-write-wins per name | 保留；README 「FAQ · offline 跨设备同步」注明边界 |
-| Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | 重写为「`/offline` 路由零网络写；`loadOfflineStats()` only」（`one-identity-qa` A4 步骤断言） |
+| Unnamed-path network | Zero `/api/solo-stats` calls; `loadSoloStats()` only | W3 强化：「`/offline` 路由零网络写；`loadOfflineStats()` only；首页任何状态任何 focus 行为下 `/api/*` 请求数 = 0」（`one-identity-qa` Q1 + A4 step 硬断言） |
 
-新契约的完整描述在「一局棋两版本 → offline / online」与「localStorage 旧 key 弃用注」两节；本表只保留「为什么是这样」的轨迹。
+新契约的完整描述在「一局棋两版本 → 首页 = 引导页」与「localStorage key 表」两节；本表只保留「为什么是这样」的轨迹。
 
-#### 玩家名输入对照（行业最佳实践，W4 增补）
+#### 玩家名输入对照（历史叙述 · W4 增补，已退役）
 
-本节把 `components/PlayerNameForm.tsx` 的玩家名 / 字符计数 / 校验策略对照行业最佳实践
+W4 时曾以 `components/PlayerNameForm.tsx` 的玩家名 / 字符计数 / 校验策略对照行业最佳实践
 （NN/g / GOV.UK / Material / OWASP / MDN / Roblox Wiki）做差距审计。证据详见
 `.omo/evidence/ulw/ulw-solo-pure-local-closeout/R1-name-input-best-practices.md` §1-§2。
-本节只列 W4 决策：**已符合** / **P0 采纳** / **已知差距，未采纳原因**——禁止造未实现的
-功能描述。
+**W3 D-3 后 PlayerNameForm 整体删除，本节仅作为「历史叙述」保留其决策记录；现行契约是 §4b RoomGateDialog 与 `lib/room-name.ts:isRoomName` / `normalizeRoom`（同源单点）。**
 
-**已符合**（无伪差距；与设计契约自洽）：
+**已符合**（历史决策；与现行 RoomGateDialog 契约自洽）：
 
 - 可见 label 在字段上方 + counter 同行右侧；placeholder 不当 label（NN/g BP-A1/A2 / GOV.UK BP-B1）
 - `n/24` 实时计数 + `aria-live="polite"`（NN/g BP-B2 / Material BP-B3）
-- 服务端权威白名单 + 422 拒绝；`lib/player-name.ts:isPlayerName` 与 route handler
-  `isValidPlayerName` 字符范围同源（OWASP BP-F1 / BP-A5；AGENTS.md 反模式行显式约束）
+- 服务端权威白名单 + 422 拒绝；`lib/room-name.ts:isRoomName`（迁移自 `isPlayerName`）与 route handler
+  `normalizeRoom`（迁移自 `normalizePlayerName`）字符范围同源（OWASP BP-F1 / BP-A5；AGENTS.md 反模式行显式约束）
 - 控制字符过滤 C0/C1/DEL（OWASP BP-F2）
 - 允许 CJK 与 emoji（字符接受侧；计数侧见已知差距）
 - SSR-safe + `aria-invalid` + `aria-describedby` + `role="alert"`（a11y 最佳实践）
-- 「先玩后填」匿名路径：`playerName === null` 时 UI 走「匿名玩家」且零网络写
-  （punchev BP-E3 路径；W1 ulw-solo-pure-local-closeout 落地为「未命名 solo = 匿名玩家」）
+- 「先玩后填」匿名路径：roomName 为 null 时 UI 走「匿名玩家」且 `/offline` 零网络写
+  （W3 落地为 `/offline` 零网络 + 首页 HomeStatsEntry 不渲染）
 
-**P0 采纳**（学界共识；本轮不改代码，但在设计契约中显形以兑现可见性）：
+**P0 采纳**（历史决策；W4 文档化即兑现）：
 
 - **「字符计数按 UTF-16」明示**：单 emoji 视作 2 字符；12 emoji 即可达到 24/24 计数上限
   （Edward Ken Fox BP-C2）。R1 建议 W4 文档化即兑现，不引入 `Intl.Segmenter`
@@ -365,7 +396,7 @@ The two ledgers never mix: the online card reads the server row only; the offlin
 **已知差距，未采纳原因**（R1 §3 P1/P2；本轮不动，记入未来 wave）：
 
 - **P1-4 `autoComplete="off"` + iOS `autoCapitalize="off" autoCorrect="off" spellCheck={false}`**：
-  避免浏览器把用户真名 autofill 到玩家名。**未采纳**：组件级 4 个 prop 改动属 UI 行为变更，
+  避免浏览器把用户真名 autofill 到房间名。**未采纳**：组件级 4 个 prop 改动属 UI 行为变更，
   需独立 `fix(ui)` commit；本轮 W4 是 docs-only，不混入代码改动。
 - **P1-5 Enter 提交 IME composition 守卫**：现代 Chrome/Safari 已正确处理受控 input 的 IME
   composition；当前实现不阻塞用户。**未采纳**：影响面极小（仅 CJK 用户 + Enter），
