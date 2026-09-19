@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useGameStore } from '@/lib/store';
+import { useGameStore, type GamePhase } from '@/lib/store';
 
 type Props = {
   /**
@@ -20,8 +20,9 @@ type Props = {
 };
 
 /**
- * ResultNavigator
- * ───────────────
+ * ResultNavigator (ulw-result-play-again-loop F2 witnessed-migration guard)
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * Mounts on the `/play` page (online mode only). Watches the
  * Zustand store and on phase transition to 'won' / 'drawn' pushes
  * `/result?name=<playerName>`. The actual stats render is done
@@ -40,29 +41,43 @@ type Props = {
  *    trim. The RSC page also re-runs normalizePlayerName, so the
  *    server is the source of truth on the name (404 → fallback
  *    view).
- *  - re-mounts: the navigator records the last phase it acted on in
- *    a ref so the same win does not double-push on React strict
- *    mode double-render. Combined with phase transitions being a
- *    strict equality check, this is sufficient.
+ *  - re-mounts and observed-migration (F2): the navigator records
+ *    the previous phase it observed in `prevPhaseRef`. A push only
+ *    fires when this mount lifecycle has *witnessed* the
+ *    non-terminal → terminal transition — i.e. `prev !== null`,
+ *    `prev !== 'won' && prev !== 'drawn'`, and `phase` is terminal.
+ *    If the component mounts while the store already holds a
+ *    terminal phase (`prev === null` after the first effect run, so
+ *    the transition happened BEFORE mount — outside this lifecycle's
+ *    observation window), no push fires. This kills the dead-loop
+ *    where `/result → play-again → /online` would otherwise re-push
+ *    `/result` immediately from the stale `won` residue.
+ *  - `restart()` (RestartButton or F1 mount reset) flips phase
+ *    back through `idle`/`playing`, which overwrites `prevPhaseRef`
+ *    to the non-terminal value so the next genuine in-lifecycle win
+ *    can push again.
+ *  - StrictMode double mount: refs persist across the intentional
+ *    double-invocation, so the second mount run sees the value the
+ *    first run wrote. The first mount's `prev === null` early return
+ *    leaves the ref populated with the actual phase, and any
+ *    transition that happens AFTER mount is observed exactly once.
  */
 export function ResultNavigator({ mode }: Props) {
   const router = useRouter();
   const phase = useGameStore((s) => s.phase);
   const playerName = useGameStore((s) => s.playerName);
-  const lastPushedPhaseRef = useRef<typeof phase>(null);
+  const prevPhaseRef = useRef<GamePhase | null>(null);
 
   useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
     if (mode !== 'online') return;
-    if (phase !== 'won' && phase !== 'drawn') {
-      // Phase rolled back to idle (restart) — clear the ref so the
-      // next game can push again.
-      lastPushedPhaseRef.current = null;
-      return;
-    }
-    if (lastPushedPhaseRef.current === phase) return;
+    if (prev === null) return;
+    const terminal = phase === 'won' || phase === 'drawn';
+    if (!terminal) return;
+    if (prev === 'won' || prev === 'drawn') return;
     const name = (playerName ?? '').trim();
     if (name === '') return;
-    lastPushedPhaseRef.current = phase;
     router.push(`/result?name=${encodeURIComponent(name)}`);
   }, [mode, phase, playerName, router]);
 

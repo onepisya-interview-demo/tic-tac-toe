@@ -286,6 +286,141 @@ try {
       /data-value="1"/.test(resultHtml),
       `/result SSR must contain the post-game stat (data-value="1")`,
     );
+
+  // ─────────────────────────────────────────────────────────────────
+  // (c2) ulw-result-play-again-loop Q1-Q5: /result → play-again → /online no dead-loop
+  // ─────────────────────────────────────────────────────────────────
+  // Page is still on /result from step (c) (same page object →
+  // Zustand singleton retains phase='won'). Click [data-testid=play-again]
+  // (a plain Link to /online), then assert:
+  //   Q1: URL flips to /online AND stays there ≥1.5s (no immediate bounce).
+  //   Q2: Board cells are empty (PlayController F1 cleared residual won board).
+  //   Q3: First click on cell-0 produces a mark (phase=playing, not stuck on won).
+  //   Q4: Drive a fresh won/drawn transition, then page.goBack() → /online
+  //       without an immediate re-push to /result.
+  //   Q5: Pre-F1 behavior this step MUST fail (documented reverse control;
+  //       see plan §2.3 Q5 + §0 root cause; not a probe assertion).
+  await step("c2-play-again-no-dead-loop", async () => {
+    // Q1 — URL flips to /online and stays put for ≥1.5s.
+    await page.click('[data-testid="play-again"]');
+    await page.waitForURL(/\/online/, { timeout: 8000 });
+    // Poll URL for 1.5s to make sure the dead-loop bounce-back does NOT happen.
+    let bouncedToResult = false;
+    const pollDeadline = Date.now() + 1500;
+    while (Date.now() < pollDeadline) {
+      if (/\/result/.test(page.url())) {
+        bouncedToResult = true;
+        break;
+      }
+      await page.waitForTimeout(60);
+    }
+    assert.equal(
+      bouncedToResult,
+      false,
+      `URL bounced back to /result within 1.5s — F1/F2 dead-loop regression`,
+    );
+    assert.ok(
+      /\/online/.test(page.url()),
+      `expected URL on /online after play-again, got ${page.url()}`,
+    );
+
+    // Q2 — board cells all empty (residual terminal board cleared).
+    const cellMarks = await page.evaluate(() => {
+      const out = {};
+      for (let i = 0; i < 9; i += 1) {
+        const cell = document.querySelector(`[data-testid="cell-${i}"]`);
+        out[i] = cell ? cell.querySelector('[data-testid^="cell-"][data-testid$="-mark"]') !== null : null;
+      }
+      return out;
+    });
+    for (const [i, hasMark] of Object.entries(cellMarks)) {
+      assert.equal(
+        hasMark,
+        false,
+        `cell-${i} must be empty after play-again; got mark present`,
+      );
+    }
+
+    // Q3 — first click on cell-0 produces a mark (phase=playing, not stuck on terminal).
+    // Drive until X-first again (the same restart-loop pattern step c uses).
+    await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+    let xFirst2 = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst2; attempt += 1) {
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("轮到 X")) {
+        xFirst2 = true;
+        break;
+      }
+      await page.click('[data-testid="restart"]');
+      await page.waitForFunction(
+        () => /轮到/.test(
+          document.querySelector('[data-testid="status-text"]')?.textContent ?? '',
+        ),
+        null,
+        { timeout: 4000 },
+      );
+    }
+    assert.ok(xFirst2, "could not get an X-first online game within 12 attempts for c2-Q3");
+    await page.click('[data-testid="cell-0"]');
+    await page.waitForFunction(
+      () => !!document.querySelector('[data-testid="cell-0"][data-testid="cell-0-mark"]')
+        || !!document.querySelector('[data-testid="cell-0"] [data-testid^="cell-"][data-testid$="-mark"]'),
+      null,
+      { timeout: 2000 },
+    );
+    const cell0Mark = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid="cell-0"]');
+      if (!c) return null;
+      const hasMark = c.querySelector('[data-testid^="cell-"][data-testid$="-mark"]') !== null
+        || (c.textContent != null && /[XO]/.test(c.textContent));
+      return hasMark;
+    });
+    assert.ok(
+      cell0Mark,
+      `cell-0 must show a mark after the click (phase=playing); got ${cell0Mark}`,
+    );
+
+    // Q4 — drive a fresh terminal transition, then page.goBack() →
+    // /online without an immediate re-push to /result. We can finish
+    // the top-row win that X started (O at 3, 4, then X at 1, 2).
+    await page.click('[data-testid="cell-3"]'); // O
+    await page.waitForTimeout(140);
+    await page.click('[data-testid="cell-1"]'); // X
+    await page.waitForTimeout(140);
+    await page.click('[data-testid="cell-4"]'); // O
+    await page.waitForTimeout(140);
+    await page.click('[data-testid="cell-2"]'); // X wins top row
+    await page.waitForURL(/\/result/, { timeout: 8000 });
+    // Now history.goBack to /online. With F2, the navigator on the
+    // re-mounted /online observes the post-game store already has
+    // phase='won' from the freshly-arrived game (NOT a stale
+    // soft-nav residue) — F1 fires restart+startGame so the
+    // navigator captures phase='playing' on its first effect, which
+    // is the witnessed-migration safe state.
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="board"]', { timeout: 4000 });
+    // Poll for 1.5s — the dead-loop would bounce us back to /result.
+    let bouncedAfterBack = false;
+    const backDeadline = Date.now() + 1500;
+    while (Date.now() < backDeadline) {
+      if (/\/result/.test(page.url())) {
+        bouncedAfterBack = true;
+        break;
+      }
+      await page.waitForTimeout(60);
+    }
+    assert.equal(
+      bouncedAfterBack,
+      false,
+      `goBack from /result bounced back to /result within 1.5s — F2 dead-loop regression`,
+    );
+    assert.ok(
+      /\/online/.test(page.url()),
+      `expected URL on /online after goBack, got ${page.url()}`,
+    );
+    await shoot(page, "c2-play-again-no-loop.png");
+  });
+
     await shoot(page, "c-named-online-result.png");
   });
 

@@ -36,11 +36,19 @@ export const dynamic = 'force-dynamic';
  *
  * ResultActions used to be a 'use client' component that called
  * store.startGame(); W3 retires that — the play-again link is
- * a plain <Link href="/online">; the navigator's startGame fires
- * when /play mounts (PlayController + startGame('online')). The
- * W1 reset chain is gone (the /api/stats retirement). The page
- * therefore ships as a true RSC — only SoundToggle (app/layout.tsx
- * sibling) carries a client boundary.
+ * a plain <Link href="/online"> and ships zero store mutations
+ * of its own. The transition into a fresh game on /online is the
+ * job of <PlayController> (ulw-result-play-again-loop F1): its
+ * first-mount effect treats a residual terminal phase (won /
+ * drawn) as stale — the soft-nav from /result leaves the Zustand
+ * singleton in terminal state — and runs restart() + startGame(mode)
+ * to seed an empty board. ResultNavigator (F2 witnessed-migration
+ * guard) handles the OUTBOUND navigation: it only pushes /result
+ * when this mount lifecycle has *witnessed* a non-terminal →
+ * terminal transition, so the residual phase on /online never
+ * re-triggers the loop. The page itself therefore ships as a true
+ * RSC — only SoundToggle (app/layout.tsx sibling) carries a client
+ * boundary.
  */
 type SearchParams = Promise<{ name?: string | string[] }>;
 
