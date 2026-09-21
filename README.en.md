@@ -82,10 +82,10 @@ Four endpoints, modeled after [AIP-136](https://google.aip.dev/136) / [RESTfulAP
 
 | Method + path | Body | 2xx response | Errors (problem+json) |
 | --- | --- | --- | --- |
-| `POST /api/sessions` | `{ name }` | `200 { stats, existed }` — idempotent register/login (`existed:false` creates empty row; `existed:true` returns existing row) | `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-player-name` / `500 db-unavailable` |
-| `GET /api/players/{name}/stats` | — | `200 { stats }` — server-authoritative per-name row lookup | `404 stats-not-found` / `422 invalid-player-name` / `500 db-unavailable` |
-| `POST /api/players/{name}/stats/merge` | `{ stats }` | `200 { stats }` — server `load → accumulateMergeStats per-field sum → upsert` | `409 player-session-required` (anti-silent-create) / `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-player-name` / `500 db-unavailable` |
-| `POST /api/players/{name}/stats/outcomes` | `{ outcome: 'X' \| 'O' \| 'draw' }` | `200 { stats }` — server `load → recordOutcome → upsert` (`lib/db.ts:recordOutcomeForName`) | `404 stats-not-found` (anti-silent-create) / `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-player-name` / `500 db-unavailable` |
+| `POST /api/sessions` | `{ name }` | `200 { stats, existed }` — idempotent register/login (`existed:false` creates empty row; `existed:true` returns existing row) | `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
+| `GET /api/players/{name}/stats` | — | `200 { stats }` — server-authoritative per-name row lookup | `404 stats-not-found` / `422 invalid-room-name` / `500 db-unavailable` |
+| `POST /api/players/{name}/stats/merge` | `{ stats }` | `200 { stats }` — server `load → accumulateMergeStats per-field sum → upsert` | `409 enter-room-required` (anti-silent-create) / `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
+| `POST /api/players/{name}/stats/outcomes` | `{ outcome: 'X' \| 'O' \| 'draw' }` | `200 { stats }` — server `load → recordOutcome → upsert` (`lib/db.ts:recordOutcomeForName`) | `404 stats-not-found` (anti-silent-create) / `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
 
 ### problem+json error shape
 
@@ -96,14 +96,14 @@ HTTP/1.1 409 Conflict
 Content-Type: application/problem+json
 
 {
-  "type": "https://docs.example.com/probs/player-session-required",
-  "title": "Player session required",
+  "type": "https://docs.example.com/probs/enter-room-required",
+  "title": "Enter room required",
   "status": 409,
   "detail": "No row for name \"alice\". Register or log in before merging."
 }
 ```
 
-The `type` field is a stable short-URI (https form) so clients branch on type rather than scraping text. Registered slugs: `stats-not-found` / `player-session-required` / `invalid-player-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`.
+The `type` field is a stable short-URI (https form) so clients branch on type rather than scraping text. Registered slugs: `stats-not-found` / `enter-room-required` / `invalid-room-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`.
 
 ### Client-side callers
 

@@ -49,7 +49,7 @@ _Supersedes_: 「注册/登录」（W3 D-3 退役）；`POST /api/sessions`（�
 _Usage_: 「在线对战」点击 → 无名 → RoomGateDialog 收名 → 提交此端点 → 进入。
 
 **合并（merge）**：
-`POST /api/rooms/{room}/stats/merge`，body `{stats}`；**用户主动确认后**的服务端 per-field 累加（见 **per-field 累加**），row 不存在返 409 `player-session-required`。service 真源 `lib/db.ts:mergeRecordByRoom`。
+`POST /api/rooms/{room}/stats/merge`，body `{stats}`；**用户主动确认后**的服务端 per-field 累加（见 **per-field 累加**），row 不存在返 409 `enter-room-required`。service 真源 `lib/db.ts:mergeRecordByRoom`。
 _Avoid_: 「上传」；PUT `/api/stats`、`/api/solo-stats/sync`、`/api/offline-stats/sync`、`/api/players/{name}/stats/merge`（均已退役）
 _Usage_: 弹框流第一步永远是进入房间——未存在的房间 merge 必 409，这不是 bug 是契约。
 
@@ -85,7 +85,7 @@ offline 分支零网络写契约：store 的 `makeMove` offline 分支不发任�
 _Additions（2026-09-20）_：`/offline` 战绩无条件直显（StatsGrid），无名与有名渲染一致——无『匿名态』UI 概念（2026-09-20 裁决，`.omo/plans/ulw-offline-ledger-direct.md` §1）。
 
 **防静默建档**：
-不允许「匿名点击路径被偷渡成建档」。merge 的 409 `player-session-required` 与 outcome 的 404 `stats-not-found` 都是它的实现；`lib/api-problem.ts` 是 problem+json 单点。
+不允许「匿名点击路径被偷渡成建档」。merge 的 409 `enter-room-required` 与 outcome 的 404 `stats-not-found` 都是它的实现；`lib/api-problem.ts` 是 problem+json 单点。
 
 **per-field 累加**：
 服务端 merge 语义：`accumulateMergeStats` 逐字段相加，**非行级覆盖**。幂等边界：同一 stats 第二次 POST 会**双计**——这就是为什么「合并并清空」成功后必须 `clearOfflineStats()` + 写合并基线哨兵。

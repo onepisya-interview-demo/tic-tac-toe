@@ -166,7 +166,7 @@ W3 起：内嵌收名流（合并时输入房间名）+ 主「合并并清空」
 | 背板 | `::backdrop` 选 `bg-base/70`（显式 CSS：`dialog::backdrop { background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent) }`，因 Tailwind v4 不生成 `backdrop:bg-X/Y` 变体）+ `backdrop-blur-sm`（Tailwind 类仍生效）；禁纯黑 `#000` 蒙层（与 `bg-base #0A0A0A` 对比不足 10/255）；复用 §图底关系行 |
 | 内容 | 标题「合并战绩」+ 副标题「将上传本机 N 局到房间 <room>；同步后本机清零以防重复」+ roomName 输入（预填 store.roomName / localStorage）+ 主「合并并清空」/ 次「保留本地」+ 24 字符计数 + 错误行 |
 | 焦点 | showModal 后主 CTA「合并并清空」初焦（rAF 延后到 re-render settle 之后；F3 fix） |
-| 关键路径 | 内部 `runMergeSequence`: `postRoomSession`（进入房间；200 ok）→ `loadOfflineStats()` 快照 → `postMerge`（合并）→ 200 ok → `clearOfflineStats()` + `persistLastMergedLocal(0)`；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm；409 `player-session-required` 翻译为「需要先进入该房间」就地展示 |
+| 关键路径 | 内部 `runMergeSequence`: `postRoomSession`（进入房间；200 ok）→ `loadOfflineStats()` 快照 → `postMerge`（合并）→ 200 ok → `clearOfflineStats()` + `persistLastMergedLocal(0)`；任何一环失败 → error 行 + dialog 不关 + 不调 onConfirm；409 `enter-room-required` 翻译为「需要先进入该房间」就地展示 |
 | 退路 | ESC / 点击遮罩 / 次 CTA「保留本地」= `onReject`；`HomeDialogMount` 写 sessionStorage `ttt.offline.sync-declined.v1` 避免同会话重弹 |
 | reduced-motion | 弹框内无连续动画；ESC/click 关 dialog 即时 |
 
