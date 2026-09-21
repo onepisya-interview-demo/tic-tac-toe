@@ -40,7 +40,8 @@ type Props = {
 /**
  * W2 (ulw-room-migration-home-landing) — rename + online entry gate:
  *
- * - `roomName` instead of `playerName` (the W2 symbol swap).
+ * - `roomName` instead of `playerName` (the W2 symbol swap; the
+ *   `playerName` spelling is retired).
  * - The `requireName` prop (default true) gates the online CTA.
  *   Empty roomName + click → no nav, dispatch a `ttt:room-required`
  *   event so RoomGateMount opens the gate. With a name →

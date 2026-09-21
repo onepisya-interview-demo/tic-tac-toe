@@ -22,9 +22,9 @@ export const dynamic = 'force-dynamic';
  *   - RoomGateMount (新挂载：监听 ttt:room-required)
  *   - JSON-LD / SoundToggle / ViewTransition / force-dynamic
  *
- * Removed surfaces (W2 退役):
+ * Removed surfaces (W2 客户端波退役，历史记录):
  *   - OnlineStatsCard (was the home-page identity region)
- *   - PlayerNameForm (home 常驻收名表单)
+ *   - PlayerNameForm (home 常驻收名表单；收名现走 RoomGateDialog)
  * 首页零 /api/* 请求 (A1 红线)；战绩主场归 /result。
  *
  * 文案红线 (A9): 用户可见文案零「玩家名/注册/登录」；统一「房间

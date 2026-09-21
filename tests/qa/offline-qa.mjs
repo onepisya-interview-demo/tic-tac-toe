@@ -359,7 +359,7 @@ try {
   });
 
   // ─────────────────────────────────────────────────────────────────
-  // A4 (W2 纯净化): preset playerName in localStorage + mount /solo →
+  // A4 (W2 纯净化): preset 房间名 (ttt.room.name.v1) in localStorage + mount /offline →
   // 全程 /api/ 请求计数 = 0，断言 stale testid 不再渲染
   //   - solo-sync / sync-confirm-dialog / RoomGateDialog 必须不在 /offline
   //   - 清空 localStorage 后刷新仍零请求（持久化不触发 GET）

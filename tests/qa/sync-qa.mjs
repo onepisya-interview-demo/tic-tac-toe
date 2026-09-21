@@ -12,8 +12,9 @@
 //     pure-local-qa (A1) which now explicitly asserts zero /api/ requests
 //     in both named and unnamed paths.
 //   - sync-qa step 02 "home-save-player-name"       → moved to
-//     home-return-qa (W3) which exercises the renamed
-//     PlayerNameForm (注册/登录 语义) on the home page.
+//     home-return-qa (W3) which exercises the room-gate
+//     (RoomGateDialog 收名；PlayerNameForm 已随 W2 客户端波退役)
+//     on the home page.
 //   - sync-qa step 02.5 "save-only-immediate-server-row" → home-return-qa.
 //   - sync-qa step 03 "named-offline-game-roundtrip"   → retired (named+sync
 //     no longer supported on /offline).

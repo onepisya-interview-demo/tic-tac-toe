@@ -413,7 +413,7 @@ try {
     await shoot(page, "q4-branch4-name-fallback.png");
   });
 
-  // Q6 — 预设 legacy ttt.player.name.v1 → 首页 mount → 已清除
+  // Q6 — 预设 legacy 旧键 ttt.player.name.v1（W3 前退役键名，启动期单向清除不迁移）→ 首页 mount → 已清除
   await step("q6-legacy-key-cleared-on-mount", async () => {
     const name = `oiqa-q6-${RUN_SUFFIX}`;
     const ghostCtx = await browser.newContext();

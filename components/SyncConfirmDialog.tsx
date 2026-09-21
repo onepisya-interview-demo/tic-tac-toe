@@ -19,8 +19,8 @@ export const SYNC_DECLINED_KEY = 'ttt.offline.sync-declined.v1';
  *    "房间的账本标识"、hint "名字将永久属于这个房间"。
  *  - 内部 postSession → postRoomSession（POST /api/rooms）。
  *  - isPlayerName → isRoomName（whitelist 与 server 端 lib/room-name
- *    单一真源对齐，AGENTS.md §本项目反模式 ttt.player.name.v1 一致性
- *    契约保留）。
+ *    单一真源对齐，AGENTS.md §本项目反模式 ttt.room.name.v1 一致性
+ *    契约；isPlayerName 为退役符号名）。
  *  - 标题/副标题/CTA 文案零「玩家名/注册/登录」（A9 红线）。
  *
  * Decision D1: the dialog now lives on the home page, opened by the

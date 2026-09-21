@@ -196,11 +196,11 @@ async function main() {
     const overshoot = s.scrollHeight - limit;
     if (s.stage === 'result' || s.stage === 'home') {
       // /result carries the celebration + actions row (plan §4 A6 allows
-      // best-effort here); /home shows the full StatsGrid (5 cards) +
-      // PlayerNameForm (W4 折叠后: 已登录 = token pill + 编辑按钮, 高度
-      // 显著缩; 未登录 = input + 保存 + 计数器, 与 W3 几乎一致), 仍
-      // INFO-only — 移动端 stats ledger + name-form 组合本质上易超 375
-      // 一屏, 即便折叠也无法降至 ≤ viewport, 按 V3 home 例外路径入档.
+      // best-effort here); /home 自 W2 客户端波起是引导页 (hero + 玩法
+      // 引导 + 双 CTA + HomeStatsEntry 静态入口；旧 StatsGrid + 收名表单
+      // 组合已随该波退役), 预算天然宽松, 仍 INFO-only — 例外按 V3 home
+      // 例外路径保留入档 (W2 前的 stats ledger + name-form 组合本质上易
+      // 超 375 一屏, 即便折叠也无法降至 ≤ viewport).
       findings.push({
         assertion: 'A6-one-screen-INFO',
         stage: s.stage,

@@ -13,12 +13,13 @@ import { getRoomName } from '@/lib/room-name';
  *
  * (a) **Mount-time identity bootstrap** — single mount-period
  *     hydration point for the room name. The pre-W2 PlayerNameForm
- *     owned this side-effect via its reverse-hydration useEffect
- *     (localStorage → store mirror). W2 deleted PlayerNameForm but
- *     left the hydration implicit in nothing — causing Q6/A7
- *     (legacy ttt.player.name.v1 never swept), A2 (hard reload →
- *     home-stats-entry not rendered), and the §2.2 named-user
- *     regression (online CTA opens the gate when it shouldn't).
+ *     (now retired) owned this side-effect via its reverse-hydration
+ *     useEffect (localStorage → store mirror). W2 deleted
+ *     PlayerNameForm but left the hydration implicit in nothing —
+ *     causing Q6/A7 (legacy ttt.player.name.v1 never swept), A2
+ *     (hard reload → home-stats-entry not rendered), and the §2.2
+ *     named-user regression (online CTA opens the gate when it
+ *     shouldn't).
  *     This mount effect fixes all three by calling getRoomName()
  *     exactly once: the read sweeps the legacy key (D-4) AND
  *     returns the trimmed canonical PK; when the store is empty

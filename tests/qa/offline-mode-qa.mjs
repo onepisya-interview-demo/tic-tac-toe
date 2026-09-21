@@ -142,12 +142,12 @@ try {
   });
 
   await step("02 baseline: server reachable (no per-name row expected)", async () => {
-    // W1 retired /api/stats; W3 has no per-name DELETE so the
-    // isolation baseline is the empty per-name table (this probe
-    // uses /tmp/ulw-og2v/w3.db, recreated fresh per run). A bare
-    // GET on /api/sessions returning a list-shape 200 confirms
-    // the server is reachable; the rank / no-row assertion is
-    // implicit in the DB being unused.
+    // W1 retired /api/stats; the room-migration surface is per-room
+    // (game_stats.room UNIQUE), so there is no per-name DELETE and
+    // the isolation baseline is simply "server reachable" (this probe
+    // uses a fresh throwaway tmp DB, recreated per run). A bare
+    // GET on /api/rooms confirms the server is up; the rank / no-row
+    // notion is retired with the /api/stats chain.
     const r = await page.evaluate(async (base) => {
       const x = await fetch(`${base}/api/rooms`, { method: "GET", cache: "no-store" });
       return x.status;
@@ -159,13 +159,13 @@ try {
   });
 
   await step("03 offline win: zero write requests, inline banner, localStorage xWins=1", async () => {
-    // Seed the player name before driving the offline win — the W2
-    // pure-local contract (`store.ts:makeMove` isAnonymous guard)
-    // skips localStorage writes for anonymous offline play, so a
-    // name is required to exercise the offline accumulation path.
-    // Use localStorage (not the form) so the probe stays focused
-    // on the offline-mode contract; the form POST /api/sessions
-    // roundtrip is covered by home-return-qa.
+    // Seed the room name before driving the offline win. Seeding keeps
+    // the probe focused on the offline-mode flow; since W4 D-1 offline
+    // writes localStorage unconditionally (no name required) — the
+    // true-anonymous first game is covered by anonymous-first-game-qa.
+    // Seeding via localStorage (not the room gate) keeps this probe
+    // minimal; the gate's POST /api/rooms roundtrip is covered by
+    // home-return-qa.
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       window.localStorage.setItem("ttt.room.name.v1", "offline-mode-qa-user");

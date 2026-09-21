@@ -381,17 +381,20 @@ W4 时曾以 `components/PlayerNameForm.tsx` 的玩家名 / 字符计数 / 校�
 - 控制字符过滤 C0/C1/DEL（OWASP BP-F2）
 - 允许 CJK 与 emoji（字符接受侧；计数侧见已知差距）
 - SSR-safe + `aria-invalid` + `aria-describedby` + `role="alert"`（a11y 最佳实践）
-- 「先玩后填」匿名路径：roomName 为 null 时 UI 走「匿名玩家」且 `/offline` 零网络写
-  （W3 落地为 `/offline` 零网络 + 首页 HomeStatsEntry 不渲染）
+- 「先玩后填」路径：offline 模式账本无条件直显（W5 §1，无「匿名态」UI），
+  首页 HomeStatsEntry 仅在 named 时渲染「查看 <room> 战绩 →」链接，
+  跨设备同步通过 HomeDialogMount 弹框（用户主动确认）
 
 **P0 采纳**（历史决策；W4 文档化即兑现）：
 
 - **「字符计数按 UTF-16」明示**：单 emoji 视作 2 字符；12 emoji 即可达到 24/24 计数上限
   （Edward Ken Fox BP-C2）。R1 建议 W4 文档化即兑现，不引入 `Intl.Segmenter`
   （grapheme 改造风险面大于收益）。
-- **「未命名 = 匿名玩家」兜底是合理选择**：BP-E1 的 Roblox `Guest NNNN` 模式适用于
-  「无服务端身份」场景；本仓已有显式命名作为身份，引入随机昵称会让用户每次刷新看到
-  不同名字，造成「为什么之前的战绩没了」的认知摩擦，故不采纳。
+- **「未命名 = 本机账本直显」兜底是合理选择**（W5 直显语义；旧述「匿名玩家」
+  随匿名卡退役）：BP-E1 的 Roblox `Guest NNNN` 模式适用于「无服务端身份」场景；
+  本仓 offline 无条件直显本机账本、online 由 RoomGateDialog 收名，引入随机昵称
+  会让用户每次刷新看到不同名字，造成「为什么之前的战绩没了」的认知摩擦，
+  故不采纳。
 
 **已知差距，未采纳原因**（R1 §3 P1/P2；本轮不动，记入未来 wave）：
 

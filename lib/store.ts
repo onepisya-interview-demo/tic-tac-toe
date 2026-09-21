@@ -67,9 +67,10 @@ export interface GameState {
    * 引导同步与建房）。本步 phase / board 推进不受守卫影响。
    *
    * W2 ulw-room-migration-home-landing §1: `playerName` →
-   * `roomName`; `ttt.player.name.v1` → `ttt.room.name.v1`. The
-   * legacy key (if present on a pre-migration browser) is dropped
-   * on the first hydrate — D-4 permits clearing without migration.
+   * `roomName`; `ttt.player.name.v1` → `ttt.room.name.v1` (the
+   * pre-rename spellings are retired). The legacy key (if present
+   * on a pre-migration browser) is dropped on the first hydrate —
+   * D-4 permits clearing without migration.
    */
   roomName: string | null;
 }

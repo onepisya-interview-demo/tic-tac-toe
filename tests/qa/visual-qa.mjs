@@ -237,9 +237,9 @@ async function mobilePass(page, shoot, log) {
   const offlineStatsOverflow = await mobileOverflow(page);
   stages.push({ stage: 'm-offline-stats', overflow: offlineStatsOverflow });
 
-  // /result — drive a ranked win on /online then navigate. The previous
+  // /result — drive an online win on /online then navigate. The previous
   // step left us on /offline (stats view) which has no start-online button,
-  // so go via home (carry the store-bound playerName) rather than
+  // so go via home (carry the store-bound roomName) rather than
   // direct goto (would lose the Zustand hydration).
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   await page.click('[data-testid="start-online"]');

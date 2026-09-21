@@ -10,7 +10,8 @@ const NAME_MAX = 24;
 /**
  * RoomGateDialog (ulw-room-migration-home-landing W2 D-2):
  *
- * Replaces the W3 PlayerNameForm-based entry gate. The dialog opens
+ * Replaces the retired PlayerNameForm-based entry gate (PlayerNameForm
+ * was removed in this plan's W2 client wave, not W3). The dialog opens
  * when StartGameButton dispatches `ttt:room-required` (detail carries
  * the original { mode, href }) — see components/RoomGateMount for the
  * mount effect that subscribes.

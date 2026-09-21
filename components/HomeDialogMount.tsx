@@ -43,9 +43,10 @@ import {
  *  - `ttt:offline-stats-changed` custom event (dispatched after every
  *    offline game settles, so a long-running session that never leaves
  *    home still re-evaluates — defence in depth). W2 (room migration)
- *    preserved this listener because the only OnlineStatsCard
- *    refetch consumer of this event was removed; pendingSyncCount
- *    re-evaluation is the surviving contract (R-3 red line).
+ *    preserved this listener because its only refetch consumer
+ *    (OnlineStatsCard, retired in the W2 client wave) was removed;
+ *    pendingSyncCount re-evaluation is the surviving contract
+ *    (R-3 red line).
  *
  * On confirm success: clear local + write syncedServerTotal to the
  * server-merged row's totalGames + clearDeclinedPending.
@@ -55,9 +56,10 @@ import {
  * (sessionStorage lives until the tab is closed).
  *
  * W2 (room migration): the localStorage sentinel swap (playerName →
- * roomName) does NOT affect this component — the offline ledger is
- * keyed on `ttt.offline.*` keys, which never held the name concept.
- * The setStoreName → setRoomName rename is the only call-site touch.
+ * roomName; the pre-rename spelling is retired) does NOT affect this
+ * component — the offline ledger is keyed on `ttt.offline.*` keys,
+ * which never held the name concept. The setStoreName → setRoomName
+ * rename is the only call-site touch.
  */
 export function HomeDialogMount() {
   const pathname = usePathname();
