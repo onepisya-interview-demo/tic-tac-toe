@@ -50,7 +50,7 @@
     "@vercel/analytics": "^2.0.1",
     "canvas-confetti": "^1.9.4",
     "drizzle-orm": "^0.45.2",
-    "next": "16.3.4",
+    "next": "16.3.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zustand": "^5.0.15"
@@ -80,7 +80,7 @@
     "@vitest/ui": "^5.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.5",
     "fast-check": "^4.9.0",
     "jsdom": "^30.0.1",
     "playwright": "^1.63.0",
