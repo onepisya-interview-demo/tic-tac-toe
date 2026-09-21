@@ -8,20 +8,21 @@ import { type GameStats } from '@/lib/game';
 //   POST /api/rooms/{room}/stats/merge
 //     body { stats: GameStats }
 //       → 200 { stats: GameStats }   (server-authoritative per-field sum)
-//       → 409 player-session-required (problem+json, 防静默建档)
-//       → 422 invalid-request-shape / invalid-player-name
+//       → 409 enter-room-required (problem+json, 防静默建档)
+//       → 422 invalid-request-shape / invalid-room-name
 //       → 500 db-unavailable
 //
 // Pre-condition: caller must have just hit POST /api/rooms for the
 // same room (the SyncConfirmDialog flow enforces this — the dialog
-// opens only after postPlayerSession already returned a row). A 409
+// opens only after postRoomSession already returned a row). A 409
 // here means the row vanished in between (admin delete, forged
 // request, concurrent wipe); we refuse to silently upsert emptyStats()
 // so a forged merge cannot resurrect a wiped account.
 //
-// W1 keeps the legacy `invalid-player-name` problem slug on the wire
-// for the same reason as the GET route above (plan §2.3 — slug 词表
-// 不变).
+// Slugs speak the W3 room vocabulary (CONTEXT.md): W-C
+// (ulw-result-win-celebration D-5b) renamed the W1 player-era 409/422
+// slugs to their room-vocabulary equivalents with no compat window —
+// callers branch on status codes, not slug strings.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,7 +57,7 @@ export async function POST(
   const { room: raw } = await params;
   const room = normalizeRoom(decodeURIComponent(raw));
   if (room === null) {
-    return problemResponse(422, 'invalid-player-name');
+    return problemResponse(422, 'invalid-room-name');
   }
   let body: unknown;
   try {
@@ -73,8 +74,8 @@ export async function POST(
       // 409 防静默建档 — caller must run /api/rooms first.
       return problemResponse(
         409,
-        'player-session-required',
-        `No row for room "${room}". Register or log in before merging.`,
+        'enter-room-required',
+        `No row for room "${room}". Enter or create the room before merging.`,
       );
     }
     const stats = await mergeRecordByRoom(room, body.stats);

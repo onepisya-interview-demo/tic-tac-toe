@@ -27,8 +27,11 @@ const loadRoute = async () => {
 };
 
 /** Assert a problem+json response shape: status, content-type, and the
- *  RFC 9457 §3.1 body fields are present and self-consistent. */
-function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: string): Promise<{ type: string; title: string; status: number; detail?: string }> {
+ *  RFC 9457 §3.1 body fields are present and self-consistent. Pass
+ *  expectedTitle to pin the exact human-readable title (required for
+ *  the W-C slug-migration titles: invalid-room-name / enter-room-
+ *  required / stats-not-found). */
+function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: string, expectedTitle?: string): Promise<{ type: string; title: string; status: number; detail?: string }> {
   expect(res.status).toBe(expectedStatus);
   expect(res.headers.get('content-type')).toBe('application/problem+json');
   return res.json().then((body: { type: string; title: string; status: number; detail?: string }) => {
@@ -36,6 +39,9 @@ function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: 
     expect(body.type).toBe(`https://docs.example.com/probs/${expectedSlug}`);
     expect(typeof body.title).toBe('string');
     expect(body.title.length).toBeGreaterThan(0);
+    if (expectedTitle !== undefined) {
+      expect(body.title).toBe(expectedTitle);
+    }
     return body;
   });
 }
@@ -91,7 +97,7 @@ describe('app/api/rooms/route', () => {
       await expectProblemJson(res, 422, 'invalid-request-shape');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the room is longer than 24 characters', async () => {
+    it('returns 422 problem+json (invalid-room-name) when the room is longer than 24 characters', async () => {
       const { POST } = await loadRoute();
       const long = 'a'.repeat(25);
       const res = await POST(
@@ -101,10 +107,10 @@ describe('app/api/rooms/route', () => {
           headers: { 'content-type': 'application/json' },
         }),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the room contains a control character', async () => {
+    it('returns 422 problem+json (invalid-room-name) when the room contains a control character', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
         new Request('http://localhost/api/rooms', {
@@ -113,10 +119,10 @@ describe('app/api/rooms/route', () => {
           headers: { 'content-type': 'application/json' },
         }),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the room is empty after trim', async () => {
+    it('returns 422 problem+json (invalid-room-name) when the room is empty after trim', async () => {
       const { POST } = await loadRoute();
       const res = await POST(
         new Request('http://localhost/api/rooms', {
@@ -125,7 +131,7 @@ describe('app/api/rooms/route', () => {
           headers: { 'content-type': 'application/json' },
         }),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
     it('trims whitespace before calling registerOrLoginRoom (the canonical PK)', async () => {

@@ -6,16 +6,14 @@ import { problemResponse } from '@/lib/api-problem';
 // W1 (ulw-room-migration-home-landing) thin transport wrapper.
 //   GET /api/rooms/{room}/stats  →  200 { stats: GameStats }     (row found)
 //                                    404 stats-not-found (problem+json)
-//                                    422 invalid-player-name
+//                                    422 invalid-room-name
 //                                    500 db-unavailable
 //
-// Read-only display surface. W1 keeps the legacy `invalid-player-name`
-// problem slug: the wire vocabulary is intentionally unchanged during
-// the migration (plan §2.3 — problem slug 词表保持不变); the slug name
-// is stale but the slug itself is what callers (lib/game-net.ts and any
-// future caller) match on. A wholesale slug rename would expand the
-// PR blast radius for no behavior gain. Pinned in reports/review/V9
-// audit trail.
+// Read-only display surface. Slugs speak the W3 room vocabulary
+// (CONTEXT.md); W-C (ulw-result-win-celebration D-5b) renamed the W1
+// player-era 422 slug to `invalid-room-name` with no compat window —
+// callers (lib/game-net.ts and any future caller) branch on status
+// codes, not slug strings.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +25,7 @@ export async function GET(
   const { room: raw } = await params;
   const room = normalizeRoom(decodeURIComponent(raw));
   if (room === null) {
-    return problemResponse(422, 'invalid-player-name');
+    return problemResponse(422, 'invalid-room-name');
   }
   try {
     const stats = await loadRecordByRoom(room);

@@ -16,9 +16,13 @@
 // answer so display code can branch on `value.stats === null`
 // without parsing problem+json.
 //
-// Single source of truth for the whitelist (lib/player-name.ts:
-// normalizePlayerName) is the only consumer of `invalid-player-name`;
-// every other problem slug is intentionally generic.
+// Single source of truth for the whitelist (lib/room-name.ts:
+// normalizeRoom) is the only consumer of `invalid-room-name`;
+// every other problem slug is intentionally generic. Slugs speak the
+// W3 room vocabulary (CONTEXT.md) — W-C (ulw-result-win-celebration
+// D-5b) renamed the W1 player-era slugs to their room-vocabulary
+// equivalents with no compat window (mapping in that plan §4b);
+// clients branch on status codes, not slug strings.
 
 import { NextResponse } from 'next/server';
 
@@ -34,8 +38,8 @@ const TYPE_BASE = 'https://docs.example.com/probs/';
  */
 export type ProblemSlug =
   | 'stats-not-found'
-  | 'player-session-required'
-  | 'invalid-player-name'
+  | 'enter-room-required'
+  | 'invalid-room-name'
   | 'invalid-request-shape'
   | 'invalid-json'
   | 'method-not-allowed'
@@ -48,9 +52,9 @@ export type ProblemSlug =
  * summary"; we use the same English string for every instance).
  */
 const TITLES: Record<ProblemSlug, string> = {
-  'stats-not-found': 'Player stats not found',
-  'player-session-required': 'Player session required',
-  'invalid-player-name': 'Invalid player name',
+  'stats-not-found': 'Room stats not found',
+  'enter-room-required': 'Enter room required',
+  'invalid-room-name': 'Invalid room name',
   'invalid-request-shape': 'Invalid request shape',
   'invalid-json': 'Invalid JSON body',
   'method-not-allowed': 'Method not allowed',

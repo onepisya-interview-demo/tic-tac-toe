@@ -8,7 +8,7 @@ import { problemResponse } from '@/lib/api-problem';
 //     body { outcome: 'X' | 'O' | 'draw' }
 //       → 200 { stats: GameStats }    (server-authoritative accumulator)
 //       → 404 stats-not-found (problem+json, 防静默建档)
-//       → 422 invalid-request-shape / invalid-player-name
+//       → 422 invalid-request-shape / invalid-room-name
 //       → 500 db-unavailable
 //
 // The outcome is the per-game child resource of the per-room stats
@@ -19,9 +19,9 @@ import { problemResponse } from '@/lib/api-problem';
 // between /api/rooms and this call — same anti-silent-create
 // contract as /merge.
 //
-// W1 keeps the legacy `invalid-player-name` problem slug on the wire
-// for the same reason as the GET route above (plan §2.3 — slug 词表
-// 不变).
+// Slugs speak the W3 room vocabulary (CONTEXT.md): W-C
+// (ulw-result-win-celebration D-5b) renamed the W1 player-era 422
+// slug to `invalid-room-name` with no compat window.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,7 +47,7 @@ export async function POST(
   const { room: raw } = await params;
   const room = normalizeRoom(decodeURIComponent(raw));
   if (room === null) {
-    return problemResponse(422, 'invalid-player-name');
+    return problemResponse(422, 'invalid-room-name');
   }
   let body: unknown;
   try {
@@ -65,7 +65,7 @@ export async function POST(
       return problemResponse(
         404,
         'stats-not-found',
-        `No row for room "${room}". Register or log in before recording outcomes.`,
+        `No row for room "${room}". Enter or create the room before recording outcomes.`,
       );
     }
     return NextResponse.json({ stats: result.stats });

@@ -51,8 +51,11 @@ const loadOutcomesRoute = async () => {
 };
 
 /** Assert a problem+json response shape: status, content-type, and the
- *  RFC 9457 §3.1 body fields are present and self-consistent. */
-function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: string): Promise<{ type: string; title: string; status: number; detail?: string }> {
+ *  RFC 9457 §3.1 body fields are present and self-consistent. Pass
+ *  expectedTitle to pin the exact human-readable title (required for
+ *  the W-C slug-migration titles: invalid-room-name / enter-room-
+ *  required / stats-not-found). */
+function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: string, expectedTitle?: string): Promise<{ type: string; title: string; status: number; detail?: string }> {
   expect(res.status).toBe(expectedStatus);
   expect(res.headers.get('content-type')).toBe('application/problem+json');
   return res.json().then((body: { type: string; title: string; status: number; detail?: string }) => {
@@ -60,6 +63,9 @@ function expectProblemJson(res: Response, expectedStatus: number, expectedSlug: 
     expect(body.type).toBe(`https://docs.example.com/probs/${expectedSlug}`);
     expect(typeof body.title).toBe('string');
     expect(body.title.length).toBeGreaterThan(0);
+    if (expectedTitle !== undefined) {
+      expect(body.title).toBe(expectedTitle);
+    }
     return body;
   });
 }
@@ -82,31 +88,31 @@ const ctxParams = (room: string): { params: Promise<{ room: string }> } => ({
 
 describe('app/api/rooms/[room]/stats/route — GET', () => {
   describe('room whitelist', () => {
-    it('returns 422 problem+json (invalid-player-name) for a room longer than 24 characters', async () => {
+    it('returns 422 problem+json (invalid-room-name) for a room longer than 24 characters', async () => {
       const { GET } = await loadStatsRoute();
       const res = await GET(
         new Request(`http://localhost/api/rooms/${'a'.repeat(25)}/stats`),
         ctxParams('a'.repeat(25)),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the room contains a control character', async () => {
+    it('returns 422 problem+json (invalid-room-name) when the room contains a control character', async () => {
       const { GET } = await loadStatsRoute();
       const res = await GET(
         new Request('http://localhost/api/rooms/bad%07name/stats'),
         ctxParams('bad\x07name'),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
-    it('returns 422 problem+json (invalid-player-name) when the room is whitespace-only after trim', async () => {
+    it('returns 422 problem+json (invalid-room-name) when the room is whitespace-only after trim', async () => {
       const { GET } = await loadStatsRoute();
       const res = await GET(
         new Request('http://localhost/api/rooms/%20%20%20/stats'),
         ctxParams('   '),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
   });
 
@@ -118,7 +124,9 @@ describe('app/api/rooms/[room]/stats/route — GET', () => {
         new Request('http://localhost/api/rooms/alice/stats'),
         ctxParams('alice'),
       );
-      const body = await expectProblemJson(res, 404, 'stats-not-found');
+      // W-C (D-5b): slug stays `stats-not-found`, title de-players to
+      // 'Room stats not found' — pin both.
+      const body = await expectProblemJson(res, 404, 'stats-not-found', 'Room stats not found');
       // The 404 problem+json carries the missing room in `detail` so
       // logs / devs can trace the lookup without a separate trace span.
       expect(body.detail).toContain('alice');
@@ -159,7 +167,7 @@ describe('app/api/rooms/[room]/stats/route — GET', () => {
 
 describe('app/api/rooms/[room]/stats/merge/route — POST', () => {
   describe('input validation', () => {
-    it('returns 422 problem+json (invalid-player-name) for a control char in room', async () => {
+    it('returns 422 problem+json (invalid-room-name) for a control char in room', async () => {
       const { POST } = await loadMergeRoute();
       const res = await POST(
         new Request('http://localhost/api/rooms/bad%07name/stats/merge', {
@@ -169,7 +177,7 @@ describe('app/api/rooms/[room]/stats/merge/route — POST', () => {
         }),
         ctxParams('bad\x07name'),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
     it('returns 400 problem+json (invalid-json) on malformed json body', async () => {
@@ -262,7 +270,7 @@ describe('app/api/rooms/[room]/stats/merge/route — POST', () => {
       });
     });
 
-    it('returns 409 problem+json (player-session-required) when the room row is absent (no silent create) (N5)', async () => {
+    it('returns 409 problem+json (enter-room-required) when the room row is absent (no silent create) (N5)', async () => {
       loadRecordMock.mockResolvedValue(null);
       const { POST } = await loadMergeRoute();
       const res = await POST(
@@ -275,7 +283,7 @@ describe('app/api/rooms/[room]/stats/merge/route — POST', () => {
         }),
         ctxParams('ghost'),
       );
-      const body = await expectProblemJson(res, 409, 'player-session-required');
+      const body = await expectProblemJson(res, 409, 'enter-room-required', 'Enter room required');
       expect(body.detail).toContain('ghost');
       // The 409 short-circuits before mergeRecordByRoom runs — forged
       // merge requests cannot trigger an upsert behind the user's back.
@@ -305,7 +313,7 @@ describe('app/api/rooms/[room]/stats/merge/route — POST', () => {
 
 describe('app/api/rooms/[room]/stats/outcomes/route — POST', () => {
   describe('input validation', () => {
-    it('returns 422 problem+json (invalid-player-name) when room has a control char', async () => {
+    it('returns 422 problem+json (invalid-room-name) when room has a control char', async () => {
       const { POST } = await loadOutcomesRoute();
       const res = await POST(
         new Request('http://localhost/api/rooms/bad%07name/stats/outcomes', {
@@ -315,7 +323,7 @@ describe('app/api/rooms/[room]/stats/outcomes/route — POST', () => {
         }),
         ctxParams('bad\x07name'),
       );
-      await expectProblemJson(res, 422, 'invalid-player-name');
+      await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
     });
 
     it('returns 422 problem+json (invalid-request-shape) when outcome is not X|O|draw', async () => {
@@ -382,7 +390,7 @@ describe('app/api/rooms/[room]/stats/outcomes/route — POST', () => {
         }),
         ctxParams('ghost'),
       );
-      const body = await expectProblemJson(res, 404, 'stats-not-found');
+      const body = await expectProblemJson(res, 404, 'stats-not-found', 'Room stats not found');
       expect(body.detail).toContain('ghost');
     });
 

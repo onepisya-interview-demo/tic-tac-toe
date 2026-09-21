@@ -59,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
   // retiring; the route no longer inlines its own validator.
   const room = normalizeRoom(body.room);
   if (room === null) {
-    return problemResponse(422, 'invalid-player-name');
+    return problemResponse(422, 'invalid-room-name');
   }
   try {
     const result = await registerOrLoginRoom(room);
