@@ -9,15 +9,17 @@
 | 棋盘焦点和键盘 | Board.tsx | 负责 roving focus、方向键环绕、Enter/Space |
 | 回合和结果文本 | ui/StatusBar.tsx | polite 且 atomic 的 live region |
 | 战绩展示 | ui/StatsGrid.tsx、ui/StatsCard.tsx | 五项战绩契约；等宽字体加动效 |
-| 胜利庆祝触发器 | WinConfetti.tsx | `/offline` 路由专用，hoisted 出 view-swap 容器，bug B fix 保障胜局仅触发一次；aria-hidden QA 层；canvas 不在 React 树内 |
+| 胜利庆祝触发器 | WinConfetti.tsx | `/offline` 与 `/result`（经 ResultCelebration，W-A 起组件零改动复用）共用庆祝层；hoisted 出 view-swap 容器，bug B fix 保障胜局仅触发一次；aria-hidden QA 层；canvas 不在 React 树内 |
 | 跨设备合并弹框 | SyncConfirmDialog.tsx | 原生 `<dialog>`，mount 在首页；主「合并并清空」/ 次「保留本地」；runMergeSequence 内部跑 `lib/game-net.ts:postRoomSession` + `postMerge`（W3 房间术语） |
 | 首页合并弹框触发 | HomeDialogMount.tsx | mount effect 监听 pathname/focus/visibilitychange/storage 事件 + `ttt:offline-stats-changed`（合并后重估 pendingSyncCount），`pendingSyncCount() > declinedSentinel` 打开 SyncConfirmDialog；W3 起不再 refetch 战绩（OnlineStatsCard 已删，A1 红线） |
 | 房间弹框宿主 | RoomGateMount.tsx | 首页挂载的 client 宿主；监听 `ttt:room-required` CustomEvent（detail 携带 `{ mode, href }`），打开 RoomGateDialog；同时执行挂载期 identity bootstrap（localStorage `ttt.room.name.v1` → store）+ `cleanupLegacyPlayerNameKey()` 一次性 legacy 清除 |
-| 房间弹框 | RoomGateDialog.tsx | 原生 `<dialog>`；单输入 + 主 CTA「创建并进入」/ 次 CTA「取消」 + n/24 计数 + ESC 关 + reduced-motion 无动效 + 初焦落主 CTA（requestAnimationFrame 模式，参照 SyncConfirmDialog F3 修复）；提交即 `postRoomSession(trimmed)` → 200 ok 时写 localStorage + store.roomName + `startGame(mode)` + `router.push(href)` + 关闭；422 / aborted / network-error → 就地错误文案，零持久层写入，零导航 |
+| 房间弹框 | RoomGateDialog.tsx | 原生 `<dialog>`；单输入 + 主 CTA「创建并进入」/ 次 CTA「取消」 + n/24 计数 + ESC 关 + reduced-motion 无动效 + 初焦落主 CTA（requestAnimationFrame 模式，参照 SyncConfirmDialog F3 修复）；提交即 `postRoomSession(trimmed)` → 200 ok 后经 `onConfirm(room, existed)` 回调交宿主全权处理（localStorage + store 双写、`startGame`、导航均归调用方——弹框与路由解耦）；422 / aborted / network-error → 就地错误文案，零持久层写入，零导航；宿主两个：RoomGateMount（首页）+ OnlineGateMount（/online） |
+| /result 庆祝岛 | ResultCelebration.tsx | `/result` 路由；mount 消费一次性 sessionStorage 哨兵 `ttt.result.just-won.v1`（读后即清、恰消费一次、StrictMode 免疫），命中渲染 WinConfetti，未命中零渲染；哨兵契约（key + write/consume helper）单一真相在本文件，ResultNavigator import 写入侧 |
+| /online 直达门控宿主 | OnlineGateMount.tsx | `/online` 路由；mount 期 identity bootstrap（localStorage→store，与 RoomGateMount 同源含 legacy 清扫）；无名就地打开 RoomGateDialog（showModal 棋盘 inert），onReject 有意不关弹框（拒绝静默无名对局） |
 | 首页战绩静态入口 | HomeStatsEntry.tsx | `/` 路由；纯 `<Link href="/result?room=...">`，零请求零副作用；store 有 roomName 时渲染「查看 <room> 的战绩 →」链接，无 roomName 时不渲染；testid `home-stats-entry` + `home-stats-link` |
 | 单机战绩面板 | OfflineStatsPanel.tsx | `/offline` 路由；StatsGrid 无条件直显，无名有名一致；零网络 |
 | 入口 CTA + 拦截 | StartGameButton.tsx | `requireName` prop：online CTA 默认 true，无名点击 dispatch `ttt:room-required` Window CustomEvent（不导航，不调 startGame）；offline CTA 传 false 直行 |
-| 阶段→导航 | ResultNavigator.tsx | `/online` 路由；phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语） |
+| 阶段→导航 | ResultNavigator.tsx | `/online` 路由；phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语）；won（仅胜局）push 前写 `ttt.result.just-won.v1` 哨兵（ResultCelebration 消费放庆祝） |
 | 音效偏好 | SoundToggle.tsx | 保证水合安全的「默认静音」控件 |
 | 通用基础组件 | ui/Button.tsx、ui/Card.tsx | 透传额外 props，QA 属性可以传入 |
 
@@ -26,7 +28,7 @@
 - 用窄的 Zustand selector 读取游戏状态（`roomName` / `phase` / `board` 等），不要订阅整个 store。
 - 只有交互组件使用客户端模式；展示型基础组件保持 server-compatible。
 - 颜色、间距、字体、圆角和动效都来自全局 Tailwind v4 tokens。
-- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、start-offline、start-online、offline-stats、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link。
+- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、result-celebration、start-offline、start-online、offline-stats、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link。
 - 可访问名称使用中文，并通过既有 live region 播报变化。
 - 全局 *:focus-visible 规则拥有 focus ring；组件不要重复声明。
 - 组件测试与组件同目录；SoundToggle 是现有 RTL/SSR 模式。
