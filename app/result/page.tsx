@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
+import { ResultCelebration } from '@/components/ResultCelebration';
 import { loadRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { type GameStats } from '@/lib/game';
@@ -36,6 +37,16 @@ export const dynamic = 'force-dynamic';
  *
  * 旧书签 `?name=` 按 "无 room" 走 fallback（不做 301 — portfolio
  * 无保留价值；用户书签迁移动机低，fallback 文案引导重新创建房间）。
+ *
+ * W-A (ulw-result-win-celebration): <ResultCelebration> is mounted in
+ * BOTH returns (fallback + branches 2/3). The island renders nothing
+ * unless the one-shot sessionStorage sentinel written by
+ * ResultNavigator is present, so the three render branches above are
+ * structurally unchanged and zero user-visible copy is added. The
+ * fallback mount is defensive: the win path always pushes a whitelisted
+ * room (branches 2/3), but mounting in both returns guarantees the
+ * sentinel is consumed exactly once on every /result load — a stale
+ * marker can never leak into a later bookmark visit.
  */
 type SearchParams = Promise<{ room?: string | string[]; name?: string | string[] }>;
 
@@ -78,6 +89,7 @@ export default async function ResultPage({
               </Link>
             </div>
           </Card>
+          <ResultCelebration />
         </main>
       </ViewTransition>
     );
@@ -144,6 +156,7 @@ export default async function ResultPage({
             </Button>
           </Link>
         </div>
+        <ResultCelebration />
       </main>
     </ViewTransition>
   );

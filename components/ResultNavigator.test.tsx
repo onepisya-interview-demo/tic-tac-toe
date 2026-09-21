@@ -3,6 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { act } from 'react';
 import { ResultNavigator } from './ResultNavigator';
+import { JUST_WON_SENTINEL_KEY } from './ResultCelebration';
 import { useGameStore } from '@/lib/store';
 
 const routerPush = vi.fn();
@@ -13,6 +14,7 @@ vi.mock('next/navigation', () => ({
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.sessionStorage.clear();
   routerPush.mockClear();
   useGameStore.setState({
     phase: 'idle',
@@ -189,5 +191,59 @@ describe('components/ResultNavigator (W2 ulw-room-migration-home-landing: ?room=
       useGameStore.setState({ phase: 'won', winner: 'X' });
     });
     expect(routerPush).toHaveBeenCalledWith('/result?room=%E6%88%BF%20%E9%97%B4');
+  });
+
+  // W-A (ulw-result-win-celebration D-1/D-2): won writes the one-shot
+  // sentinel before the push; drawn and every guarded-off path never do.
+  it('N11: witnessed won → writes the just-won sentinel before pushing (D-1)', () => {
+    useGameStore.setState({ roomName: 'alice' });
+    render(<ResultNavigator mode="online" />);
+    act(() => {
+      useGameStore.setState({ phase: 'won', winner: 'X' });
+    });
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBe('1');
+    expect(routerPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('N12: witnessed drawn → pushes but never writes the sentinel (D-2 draws have no celebration)', () => {
+    useGameStore.setState({ roomName: 'bob', phase: 'playing', currentPlayer: 'X' });
+    render(<ResultNavigator mode="online" />);
+    act(() => {
+      useGameStore.setState({ phase: 'drawn' });
+    });
+    expect(routerPush).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
+  });
+
+  it('N13: offline won → no push, no sentinel (guarded-off path stays celebration-free)', () => {
+    useGameStore.setState({ roomName: 'alice', mode: 'offline' });
+    render(<ResultNavigator mode="offline" />);
+    act(() => {
+      useGameStore.setState({ phase: 'won', winner: 'X' });
+    });
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
+  });
+
+  it('N14: won with empty roomName → no push, no sentinel (defensive guard covers the write too)', () => {
+    useGameStore.setState({ roomName: null });
+    render(<ResultNavigator mode="online" />);
+    act(() => {
+      useGameStore.setState({ phase: 'won', winner: 'X' });
+    });
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
+  });
+
+  it('N15: stale won on mount (no witnessed transition) → no push, no sentinel rewrite', () => {
+    useGameStore.setState({
+      roomName: 'alice',
+      phase: 'won',
+      winner: 'X',
+      winLine: [0, 1, 2],
+    });
+    render(<ResultNavigator mode="online" />);
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
   });
 });

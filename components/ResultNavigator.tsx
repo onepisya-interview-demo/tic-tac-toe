@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameStore, type GamePhase } from '@/lib/store';
+import { writeJustWonSentinel } from '@/components/ResultCelebration';
 
 type Props = {
   /**
@@ -47,6 +48,16 @@ type Props = {
  *    back through `idle`/`playing`, which overwrites `prevPhaseRef`
  *    to the non-terminal value so the next genuine in-lifecycle win
  *    can push again.
+ *  - W-A (ulw-result-win-celebration D-1/D-2): on a witnessed
+ *    transition to 'won' (wins only — 'drawn' never writes), the
+ *    navigator sets the one-shot sessionStorage sentinel
+ *    `ttt.result.just-won.v1` immediately before the push. The
+ *    /result island `ResultCelebration` consumes it (read + clear)
+ *    to fire the arrival confetti exactly once; a reload, bookmark,
+ *    or home stats entry finds no sentinel and stays plain. The
+ *    sentinel write sits inside the same guarded block as the push
+ *    (online mode + witnessed win + non-empty room), so every path
+ *    that navigates to /result without it stays celebration-free.
  *  - StrictMode double mount: refs persist across the intentional
  *    double-invocation, so the second mount run sees the value the
  *    first run wrote.
@@ -67,6 +78,11 @@ export function ResultNavigator({ mode }: Props) {
     if (prev === 'won' || prev === 'drawn') return;
     const room = (roomName ?? '').trim();
     if (room === '') return;
+    if (phase === 'won') {
+      // Wins only (D-2). Written before the push so the sentinel is
+      // already in place when /result's ResultCelebration mounts.
+      writeJustWonSentinel();
+    }
     router.push(`/result?room=${encodeURIComponent(room)}`);
   }, [mode, phase, roomName, router]);
 
