@@ -1,10 +1,11 @@
 # ulw: 质量加固与优化波（v2）——测试加深 + review + 消融 + 优化 + dev/main 对比 + 反思沉淀
 
 - 日期: 2026-09-22
-- 状态: **drafting-v2**（已吸收主公二批补充；§九余量裁决点待补齐后定稿派发）
+- 状态: **ready-for-approval**（v2.1：§九裁决已全部入档；待主公最终审批，通过后才派发执行）
 - 分支: dev
 - 基线: tag `dev-stable-20260922` @ `6c1a972`（前置 tag 已完成）；origin/dev 同步至 58eb271，Vercel 已部署新版
 - v1→v2 变更: 新增 W-DIFF（dev/main 对比）、W-RF（反思沉淀为可复用资产）、§三 证据优先-验证方法论红线（pstack 融入）、§五 执行拓扑（herdr tab / fresh codex / Pi 分工 / omo 钩子）、§四 波次细化为单会话工单卡
+- v2→v2.1 变更: 主公六项裁决入档（§九）——消融双对象、review 全仓、findings 全修 + 纯内部重构授权、`@deprecated` 保留豁免、mutation 移至最末（W-MUT 独立工单）、Pi 定位修正（原子化修改 + 大上下文探索 + 可调命令行）；状态 drafting → ready-for-approval
 - 关联: `.omo/plans/ulw-font-preload-residual-20260922.md` D-1（并入 W-OPT）
 
 ## 一、目标（主公指令汇总，七件套）
@@ -59,26 +60,27 @@
 
 ## 四、波次与工单拆分（每卡 = 单会话可完成；ulw- 前缀触发 omo 工作流）
 
-> 拆分原则：整体计划跨多会话执行；每张工单绑定一个 fresh 会话（子代理或 herdr agent runtime），完成判据全部可跑。依赖序 W-T0 → W-T；W-RV ∥ W-T（只读与测试互斥面）；W-OPT 消费前两者；W-DIFF、W-RF 独立可并行；W-AB、W-V 收口。
+> 拆分原则：整体计划跨多会话执行；每张工单绑定一个 fresh 会话（子代理或 herdr agent runtime），完成判据全部可跑。依赖序：W-T0 → W-T；W-RV ∥ W-T（只读与测试互斥面）∥ W-DIFF；W-OPT-a/b/c 消费 W-RV/W-T；W-MUT 在 W-T 与 W-OPT-c 全部完成后进行（Q4 裁决，可与 W-AB 并行）；W-AB 依赖 W-OPT 完成；W-RF 于全波收口前；W-V 压轴。
 
 | 工单 | 目标（一句话） | 完成判据（可跑） | runtime | 依赖 |
 | --- | --- | --- | --- | --- |
 | W-T0 | 修 coverage 工具链 PARSE_ERROR，产出含 components/ 的完整报告；vmThreads 评估（只评估不动，有实据另立单） | `pnpm test:coverage` exit 0 且报告含 components/ 行 | fresh codex | — |
-| W-T | 盲区表逐项补齐（分支覆盖优先）+ mutation 触发评估（lib/game.ts / lib/store.ts） | coverage 报告盲区清零或书面豁免清单；`pnpm vitest run` 全绿 | fresh codex | W-T0 |
-| W-RV | 五维只读评审 §2.5 清单，findings 带 file:line + 分级 | findings 报告（每条带证据指针）；不改任何文件 | fresh codex（只读） | — |
+| W-T | 盲区表逐项补齐（分支覆盖优先；`@deprecated` 面按裁决豁免不补）+ mutation 移出本卡（见 W-MUT） | coverage 报告盲区清零（deprecated 面书面豁免）；`pnpm vitest run` 全绿 | fresh codex | W-T0 |
+| W-RV | 五维只读评审，**范围 = 全仓**（§2.5 功能面四提交 + 高危存量面 + 全部 lib/components/app/sw.js），findings 带 file:line + 分级 | 全仓 findings 报告（每条带证据指针）；不改任何文件 | fresh codex（只读） | — |
 | W-OPT-a | D-1 落地：layout 拆 preload + sw-console-hygiene 强化 + sw.js 注释同步 | 强化版探针 exit 0（含 Link 头零 font 断言 + reload 场景）；六层门禁全绿 | fresh codex | plan 已裁决 |
-| W-OPT-b | 性能优化：bundle 定性（gzip 后 vendor/app 占比）+ 可行动项实施（每项前后 profile/size 对比） | 每个 accepted win 一个 commit，带 before/after 实测值（hillclimb 纪律） | fresh codex | W-RV |
-| W-OPT-c | 代码优化：消费 W-RV findings 逐条处置（fix / dismiss 带反证） | findings 处置表全覆盖，无静默忽略 | fresh codex | W-RV、W-T |
+| W-OPT-b | 性能优化，**优先级序：bundle → 渲染 → 网络缓存**（bundle 先定性 gzip 后 vendor/app 占比；每项可行动优化带前后实测） | 每个 accepted win 一个 commit，带 before/after 实测值（hillclimb 纪律） | fresh codex | W-RV |
+| W-OPT-c | 代码优化：**W-RV findings 全修**（fix；dismiss 须带具体反证）+ **授权范围内纯内部重构**（DRY/拆复杂度/减层，行为不变） | findings 处置表 100% 覆盖；重构提交行为不变证明（vitest 全绿 + 相关探针绿） | fresh codex | W-RV、W-T |
 | W-DIFF | dev vs main 差异对比报告（§2.4 四维度）+ main 推进建议 | 对比报告入 docs/（分类占比、行为变化、风险面、建议）；数据全带 git 指针 | Pi（只读 git 分析 + 报告） | — |
 | W-RF | 反思蒸馏：本波时间花销与需求对齐复盘 → 可复用资产（需求 intake checklist / 调度模板修订 / docs 经验条目） | 资产清单落库（每条带本波实例佐证）；见 §六 反思输入 | distiller 席 | 全波收口前 |
-| W-AB | 消融实验（对象待 §九 Q1 裁决） | baseline vs ablated 对比数据 + keep/kill 结论，配 TSV 决策日志 | scientist 席 | §九 Q1 |
-| W-V | fresh-context 对抗终验（全波产出）+ V13 报告入档 | 终验报告 ACCEPT；信产物不信自报 | fresh 终验席 | 全部 |
+| W-AB | 消融实验**双对象**（Q1 裁决）：(a) 本波优化变更 baseline vs ablated 因果对比（如 D-1 前后警告频次/包体/耗时）；(b) 验证门禁组件消融（候选：commit-audit R4 trailer 门 / 探针层 / coverage 门，按仓库先例 `agents-orthogonality-audit` 范式选代表组件） | (a)(b) 各带对比数据 + keep/kill/校准结论，配 TSV 决策日志 | scientist 席 | W-OPT 完成 |
+| W-MUT | mutation 测试（Q4 裁决：耗时大，**其他所有事情完成之后**再进行；对象 lib/game.ts / lib/store.ts 高危面） | Stryker 报告 + 存活 mutant 处置表（kill / 书面保留理由） | fresh codex | W-T、W-OPT-c 完成 |
+| W-V | fresh-context 对抗终验（全波产出）+ V13 报告入档 | 终验报告 ACCEPT；信产物不信自报 | fresh 终验席 | 全部（W-MUT 后） |
 
 ## 五、执行拓扑（herdr 纪律 + runtime 分工）
 
 - **herdr tab 优先**（不 split pane）；`herdr --session <name> tab create` → `agent start <name> --kind codex` → `agent prompt --wait --until done` → `agent get/read` 轮询。
 - **fresh codex 多席**为默认执行体（跨文件修复/测试/评审）；**old session** 仅用于强接续任务（如 W-OPT 内部跨日续作，须先 session-pickup：把既有轨迹当权威，不重推）。
-- **Pi**（`/Users/onepisya/.vite-plus/bin/pi`，0 插件 bash/read/write/edit）：只读 git 分析、批量文件挖掘、探针小修、脚本验证类工单（W-DIFF 类）；**禁派跨文件重构**（无 LSP，能力边界见 AGENTS.md §运行时能力边界）。
+- **Pi**（`/Users/onepisya/.vite-plus/bin/pi`，Q5 确认 + 定位修正）：**原子化工具**——单文件小修改、文件读取与探索（1M 大上下文优势，适合快速扫全仓）、调用命令行工具（git/rg/curl 等）；W-DIFF 类分析报告、探针小修、脚本验证均适用。**仍禁跨文件重构**（无 LSP，能力边界见 AGENTS.md §运行时能力边界）。
 - 每席独立 git worktree（`git worktree add ../ttt-<seat> -b ulw/<wave>`，终验席 `--detach`）；QA 端口分片；rebase + ff-only 合入保线性；委派先 teach-back，产出独立验证前视为未完成。
 - omo 钩子：工单 plan 文件名一律 `ulw-` 前缀；主公侧可用 `$omo:ulw-plan / ulw-loop / ulw-research / start-work / ultrawork` 驱动。
 
@@ -105,11 +107,12 @@
 
 六层门禁；禁 `--no-verify`；禁 `git add . / -A`；push 等主公指令；主 worktree :3000 dev 在线时禁 build（波次构建走独立 worktree）；NEXT.JS 16 agent-rules 块不可动；CONTEXT.md 术语契约（产出物零 `_Avoid_` 别名）。
 
-## 九、待主公补充（v2 余量）
+## 九、主公裁决记录（2026-09-22，全部入档，plan 定稿）
 
-- **Q1 消融对象**：（a）本波优化变更的 baseline vs ablated 因果对比，还是（b）验证门禁组件消融（仓库先例范式），或两者？
-- **Q2 优化偏好**：性能优先级（bundle / 渲染 / 网络缓存 / 测试速度）？纯内部重构是否授权，还是仅修 findings？
-- **Q3 review 范围**：仅 §2.5 清单，还是扩展全仓核心面？
-- **Q4 测试加深边界**：mutation 本波是否触发？`@deprecated` 旧面补测试还是随退役清理？
-- **Q5 已部分回答**：执行形态按 §五（herdr tab + fresh codex 多席 + Pi 只读 + old session 接续）——确认或修正。
-- **Q6 其他补充**：主公后续信息继续并入。
+- **Q1 消融对象：两者都做** → W-AB 拆双对象 (a) 优化变更因果对比 + (b) 验证门禁组件消融（先例范式）。
+- **Q2 优化优先级：bundle → 渲染 → 网络缓存**；**纯内部重构授权**；**findings 也需要修** → W-OPT-b 优先级序入卡；W-OPT-c 扩容为 findings 全修 + 行为不变的内部重构。
+- **Q3 review 范围：全仓** → W-RV 扩容（功能面四提交 + 高危存量 + 全部 lib/components/app/sw.js）。
+- **Q4 测试加深边界：`@deprecated` 保留**（豁免不补、不删）；**mutation 耗时大，其他所有事情完成之后再进行** → mutation 移出 W-T，独立为 W-MUT，依赖 W-T + W-OPT-c，W-V 前完成。
+- **Q5 执行形态：确认**；Pi 上下文大，可帮助快速进行文件修改或文件读取与探索；它是原子化工具，但也可以让它调用命令行工具 → §五 Pi 定位已修正。
+- **Q6 其他补充：暂时没有**。
+- **审批门**：本 plan 待主公最终审批；通过后按 §四依赖序派发，未通过不改任何文件。
