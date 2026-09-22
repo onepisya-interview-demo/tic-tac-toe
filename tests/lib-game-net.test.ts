@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchRoomStats, postMerge, postOutcome, postRoomSession } from '@/lib/game-net';
+import {
+  fetchRoomStats,
+  postMerge,
+  postOutcome,
+  postResetRoomStats,
+  postRoomSession,
+} from '@/lib/game-net';
 
 // lib/game-net.ts is the browser-side HTTP wrapper for the per-room
 // RESTful surface. These tests pin the { ok, reason } result
@@ -229,6 +235,50 @@ describe('lib/game-net / postOutcome', () => {
       }),
     );
     const r = await postOutcome('ghost', 'draw');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe('http-error');
+      expect(r.status).toBe(404);
+    }
+  });
+});
+
+describe('lib/game-net / postResetRoomStats', () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('POSTs to /api/rooms/{room}/stats/reset with no body and returns the zeroed stats', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const r = await postResetRoomStats('alice');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.stats).toEqual({
+        totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0,
+      });
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/rooms/alice/stats/reset',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // Endpoint contract: no request body (D-2).
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBeUndefined();
+  });
+
+  it('returns ok:false http-error status=404 when the room row is absent (no silent create)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', {
+        status: 404,
+        headers: { 'content-type': 'application/problem+json' },
+      }),
+    );
+    const r = await postResetRoomStats('ghost');
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toBe('http-error');

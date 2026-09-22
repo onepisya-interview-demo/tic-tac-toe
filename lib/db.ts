@@ -391,6 +391,40 @@ export async function recordOutcomeForRoom(
 }
 
 /**
+ * Per-room ledger reset (W-R, ulw-online-reset-and-result-fresh D-1).
+ *
+ * 清空 = 清零保留房间身份。load → 命中则 upsert `emptyStats()`（全零
+ * 行，room 身份原样保留）并返回 `{ ok: true, stats }`；缺失则返回
+ * `{ ok: false, reason: 'not-found' }` — 与 recordOutcomeForRoom 同款
+ * 具名结果（防静默建档：reset 一个不存在的房间不许偷渡成建档复活）。
+ *
+ * 为什么否决 DELETE：room 行是身份（`game_stats.room TEXT UNIQUE`，
+ * registerOrLoginRoom 的幂等进入依赖它）。DELETE 之后下一局
+ * recordOutcomeForRoom 必 404，记账闭环断裂；「清空战绩」的语义是清
+ * 计数，不是销户。
+ *
+ * 与 offline `resetOfflineStats`（清 localStorage key）的表面不对称
+ * 是有意的：本地账本清 key 即归零，key 本身不承载身份；服务端账本的
+ * row 就是跨设备身份，清 row 等价于销户 — 所以服务端只清零字段、
+ * 保留行，客户端才允许清 key。
+ */
+export type ResetRecordResult =
+  | { ok: true; stats: GameStats }
+  | { ok: false; reason: 'not-found' };
+
+export async function resetRecordByRoom(
+  room: string,
+): Promise<ResetRecordResult> {
+  const existing = await loadRecordByRoom(room);
+  if (existing === null) {
+    return { ok: false, reason: 'not-found' };
+  }
+  const zero = emptyStats();
+  await upsertRecordByRoom(room, zero);
+  return { ok: true, stats: zero };
+}
+
+/**
  * Idempotent empty-row bootstrap for "create a room on device A, pick
  * it up on device B" vertical slice. Reads the row; if absent,
  * upserts emptyStats() under the trimmed room and returns the

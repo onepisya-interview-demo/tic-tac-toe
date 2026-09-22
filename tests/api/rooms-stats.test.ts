@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-// tests/api/rooms-stats.test.ts — route-level coverage for the three
-// /api/rooms/{room}/stats/* handlers (W1 ulw-room-migration-home-landing):
+// tests/api/rooms-stats.test.ts — route-level coverage for the four
+// /api/rooms/{room}/stats/* handlers (W1 ulw-room-migration-home-landing;
+// W-R ulw-online-reset-and-result-fresh adds reset):
 //   GET  /api/rooms/{room}/stats          — read-only row lookup
 //   POST /api/rooms/{room}/stats/merge    — cross-device fold (per-field add)
 //   POST /api/rooms/{room}/stats/outcomes — server-authoritative accumulator
+//   POST /api/rooms/{room}/stats/reset    — zero counters, keep the identity row
 //
 // Imports each route file's exported function directly and stubs out
 // lib/db so we can pin the contract — room whitelist
@@ -20,10 +22,12 @@ import path from 'node:path';
 const loadRecordMock = vi.fn();
 const mergeRecordMock = vi.fn();
 const recordOutcomeForRoomMock = vi.fn();
+const resetRecordMock = vi.fn();
 vi.doMock('@/lib/db', () => ({
   loadRecordByRoom: loadRecordMock,
   mergeRecordByRoom: mergeRecordMock,
   recordOutcomeForRoom: recordOutcomeForRoomMock,
+  resetRecordByRoom: resetRecordMock,
 }));
 
 const loadStatsRoute = async () => {
@@ -48,6 +52,13 @@ const loadOutcomesRoute = async () => {
     recordOutcomeForRoom: recordOutcomeForRoomMock,
   }));
   return import('@/app/api/rooms/[room]/stats/outcomes/route');
+};
+const loadResetRoute = async () => {
+  vi.resetModules();
+  vi.doMock('@/lib/db', () => ({
+    resetRecordByRoom: resetRecordMock,
+  }));
+  return import('@/app/api/rooms/[room]/stats/reset/route');
 };
 
 /** Assert a problem+json response shape: status, content-type, and the
@@ -75,6 +86,7 @@ beforeEach(() => {
   loadRecordMock.mockReset();
   mergeRecordMock.mockReset();
   recordOutcomeForRoomMock.mockReset();
+  resetRecordMock.mockReset();
 });
 
 afterEach(() => {
@@ -407,5 +419,66 @@ describe('app/api/rooms/[room]/stats/outcomes/route — POST', () => {
       );
       await expectProblemJson(res, 500, 'db-unavailable');
     });
+  });
+});
+
+describe('app/api/rooms/[room]/stats/reset/route — POST', () => {
+  it('returns 422 problem+json (invalid-room-name) when room has a control char', async () => {
+    const { POST } = await loadResetRoute();
+    const res = await POST(
+      new Request('http://localhost/api/rooms/bad%07name/stats/reset', {
+        method: 'POST',
+      }),
+      ctxParams('bad\x07name'),
+    );
+    await expectProblemJson(res, 422, 'invalid-room-name', 'Invalid room name');
+  });
+
+  it('returns 200 { stats: all-zero } when resetRecordByRoom zeroes the existing row', async () => {
+    resetRecordMock.mockResolvedValue({
+      ok: true,
+      stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
+    });
+    const { POST } = await loadResetRoute();
+    const res = await POST(
+      new Request('http://localhost/api/rooms/alice/stats/reset', {
+        method: 'POST',
+      }),
+      ctxParams('alice'),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/json');
+    const body = await res.json();
+    expect(body).toEqual({
+      stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
+    });
+    expect(resetRecordMock).toHaveBeenCalledWith('alice');
+  });
+
+  it('returns 404 problem+json (stats-not-found) when the room row is absent (no silent create)', async () => {
+    resetRecordMock.mockResolvedValue({ ok: false, reason: 'not-found' });
+    const { POST } = await loadResetRoute();
+    const res = await POST(
+      new Request('http://localhost/api/rooms/ghost/stats/reset', {
+        method: 'POST',
+      }),
+      ctxParams('ghost'),
+    );
+    const body = await expectProblemJson(res, 404, 'stats-not-found', 'Room stats not found');
+    expect(body.detail).toContain('ghost');
+  });
+
+  it('accepts an empty body (endpoint contract: the route never reads the body)', async () => {
+    resetRecordMock.mockResolvedValue({
+      ok: true,
+      stats: { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
+    });
+    const { POST } = await loadResetRoute();
+    // No body, no content-type — mirrors the browser thin shell that
+    // POSTs without a payload (lib/game-net.ts:postResetRoomStats).
+    const res = await POST(new Request('http://localhost/api/rooms/alice/stats/reset', { method: 'POST' }), ctxParams('alice'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stats.totalGames).toBe(0);
   });
 });

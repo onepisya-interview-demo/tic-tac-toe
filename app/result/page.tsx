@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
 import { ResultCelebration } from '@/components/ResultCelebration';
+import { ResetRoomStatsButton } from '@/components/ResetRoomStatsButton';
 import { loadRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { type GameStats } from '@/lib/game';
@@ -140,6 +141,13 @@ export default async function ResultPage({
           <Card>
             <div className="flex flex-col gap-3" data-testid="result-stats">
               <StatsGrid stats={stats} />
+              {/* W-R (ulw-online-reset-and-result-fresh D-3): 清空入口只在
+                  有账本的分支 3 — 分支 2 无可清之物不挂，loadError 与
+                  fallback 不挂。room 由上方 normalizeRoom 结果传入，
+                  SSR 零 localStorage 读。 */}
+              <div className="flex justify-end">
+                <ResetRoomStatsButton room={room} />
+              </div>
             </div>
           </Card>
         )}

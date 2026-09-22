@@ -481,6 +481,92 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
   // succeeds」 test: reproducing it requires splitting the cached
   // client state across two phases, which adds machinery beyond the
   // service contract being asserted.
+
+  // ── W-R (ulw-online-reset-and-result-fresh D-1): resetRecordByRoom ──
+  // 清空 = 清零保留房间身份. Absent row → { ok:false, reason:
+  // 'not-found' } (防静默建档, same family as recordOutcomeForRoom);
+  // present row → upsert emptyStats() and return the zeroed row. The
+  // identity row survives (UNIQUE), so recordOutcomeForRoom keeps
+  // working right after a reset — the closed loop is pinned below.
+
+  it('resetRecordByRoom on existing row → ok:true with every field zeroed (incl. currentStreak); row identity preserved', async () => {
+    const {
+      registerOrLoginRoom,
+      upsertRecordByRoom,
+      resetRecordByRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      await registerOrLoginRoom('reset-alice');
+      // Seed non-zero counters incl. a signed streak so every field's
+      // zeroing is observable.
+      await upsertRecordByRoom('reset-alice', {
+        totalGames: 5,
+        xWins: 3,
+        oWins: 1,
+        draws: 1,
+        currentStreak: -2,
+      });
+      const result = await resetRecordByRoom('reset-alice');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.stats).toEqual({
+          totalGames: 0,
+          xWins: 0,
+          oWins: 0,
+          draws: 0,
+          currentStreak: 0,
+        });
+      }
+      // Row persists under the same room — identity kept, not DELETE.
+      const row = await loadRecordByRoom('reset-alice');
+      expect(row).toEqual({
+        totalGames: 0,
+        xWins: 0,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 0,
+      });
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('resetRecordByRoom on unknown room returns { ok: false, reason: \'not-found\' } and creates no row (不静默建档)', async () => {
+    const { resetRecordByRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    try {
+      const result = await resetRecordByRoom('ghost');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('not-found');
+      }
+      expect(await loadRecordByRoom('ghost')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('resetRecordByRoom keeps the ledger usable: recordOutcomeForRoom lands on the zeroed row (身份保留闭环)', async () => {
+    const { registerOrLoginRoom, resetRecordByRoom, recordOutcomeForRoom, closeDb } = await import('@/lib/db');
+    try {
+      await registerOrLoginRoom('reset-bob');
+      await resetRecordByRoom('reset-bob');
+      const after = await recordOutcomeForRoom('reset-bob', 'X');
+      expect(after.ok).toBe(true);
+      if (after.ok) {
+        expect(after.stats).toEqual({
+          totalGames: 1,
+          xWins: 1,
+          oWins: 0,
+          draws: 0,
+          currentStreak: 1,
+        });
+      }
+    } finally {
+      await closeDb();
+    }
+  });
   // ── W-SYNC wave 2 (ulw-ux-mobile-sync plan): per-name ledger via game_stats.name ──
   // Mirrors the recordAndSave surface but rows are keyed by `name` (TEXT PK)
   // and rows are absent on first read instead of being seeded — loadRecordByRoom

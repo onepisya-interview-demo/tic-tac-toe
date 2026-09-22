@@ -61,6 +61,11 @@ _Avoid_: 「同步一局」
 `GET /api/rooms/{room}/stats`；404 由 `lib/game-net.ts:fetchRoomStats` 翻译成 `{stats:null}`，展示层零分支。响应只入组件 state（W3 起唯一调用方是 `/result?room=` RSC SSR 直读 DB；首页零 `/api/*`，A1 红线）。
 _Avoid_: 「拉取同步」
 
+**清空（reset-room-stats）**：
+`POST /api/rooms/{room}/stats/reset`，无 body；服务端清零计数、保留房间身分行（`game_stats.room` UNIQUE 不删），row 缺失返 404 `stats-not-found`（防静默建档）。service 真源 `lib/db.ts:resetRecordByRoom`。
+_Avoid_: 「删除房间」「清空房间」（清的是计数，不是身份）
+_Usage_: `/result?room=` 有账本分支（stats 非 null）挂 `ResetRoomStatsButton` → 确认弹框 → 清零 → `router.refresh()` 重读全零行。
+
 ### 哨兵（sentinel）
 
 泛称至少要限定是哪一个；两者的共同点仅是「防止某件事重演」。
@@ -119,6 +124,7 @@ _Avoid_: 与 vitest 单测混称「测试」
 ## Relationships
 
 - **进入房间** 是 **合并** 的前置（409 契约）；**合并并清空** = 进入房间 → 合并 → 清本地 + 写合并基线哨兵
+- **清空** 只作用于 **服务端战绩**（清零计数），**房间** 身分行保留；与 **记局** 共享 404 防静默建档契约，与 **刷新** 在 `/result` 组成「清零 → 重读」闭环
 - **pendingSyncCount** 由 **本地战绩** 与 **合并基线哨兵** 推导；**防重弹哨兵** 只作用于弹框时机，两者不可互相替代
 - **pure-local** 约束 offline 路径零 **合并**、零 **记局**；上服只经用户主动确认的弹框
 - **房间**（W3 概念）三实例互不直写：本地 ↔ 服务端只经 **合并**；服务端 → UI 只经 **刷新**（`/result` RSC SSR 直读）

@@ -1,8 +1,9 @@
 // Browser-side HTTP helpers for the per-room server-authoritative
-// RESTful surface (W1 + W2 ulw-room-migration-home-landing).
+// RESTful surface (W1 + W2 ulw-room-migration-home-landing; W-R
+// ulw-online-reset-and-result-fresh adds the fifth endpoint).
 //
 // Thin transport wrapper. Every helper targets exactly one of the
-// four app/api/rooms/* endpoints and preserves the { ok, reason } result
+// five app/api/rooms/* endpoints and preserves the { ok, reason } result
 // contract from the prior W3 lib/solo-net.ts:
 //
 //   { ok: true,  value: T }                            — 2xx, body parsed
@@ -21,7 +22,9 @@
 // return dialog is the sole consumer of `postMerge` + `postRoomSession`
 // (run as a register-then-merge sequence); RoomGateDialog is the sole
 // consumer of `postRoomSession`; SyncConfirmDialog uses
-// `postRoomSession` + `postMerge` for the merge flow.
+// `postRoomSession` + `postMerge` for the merge flow; the /result
+// island `ResetRoomStatsButton` is the sole consumer of
+// `postResetRoomStats`.
 
 import { type GameStats } from './game';
 
@@ -163,6 +166,32 @@ export async function postOutcome(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ outcome }),
       },
+    );
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { stats: GameStats };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}
+
+/**
+ * POST /api/rooms/{room}/stats/reset (no body) → { stats: GameStats }.
+ * Zeroes the per-room counters while keeping the room row (the
+ * identity) intact — lib/db.ts:resetRecordByRoom. The service refuses
+ * a silent create: the route answers 404 problem+json when the row is
+ * absent, surfaced here as http-error status=404 for the caller to
+ * translate in place.
+ */
+export async function postResetRoomStats(
+  room: string,
+): Promise<FetchResult<{ stats: GameStats }>> {
+  try {
+    const r = await withTimeout(
+      `/api/rooms/${encodeRoom(room)}/stats/reset`,
+      { method: 'POST' },
     );
     if (!r.ok) {
       return { ok: false, reason: 'http-error', status: r.status };
