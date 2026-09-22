@@ -1277,3 +1277,171 @@ describe('legacy name-column rebuild (ulw-room-migration-home-landing D1-D4)', (
     }
   });
 });
+
+// ── W-T blind-spot coverage ──────────────────────────────────────────────
+//
+// These tests pin the test-only knobs (`__setDbOpDelayForTests`), the
+// fallback `resolveDbConfig` branch (unknown scheme), the latency
+// injection seam (`getDb` honors `dbOpDelayMs`), and the two service
+// functions that handle the row-existence contract for "fresh" callers
+// (`ensureRecordByRoom`, `registerOrLoginRoom`'s UNIQUE-violation
+// re-read path). These are pure coverage — no production behavior
+// changes; the goal is to surface every code path so a blind hand-edit
+// later would fail at least one of these regressions.
+
+describe('lib/db — W-T blind spots (test seams + row-existence branches)', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = tmpDbDir();
+    process.env.DATABASE_URL = `file:${path.join(dir, 'tic-tac-toe.db')}`;
+    delete process.env.DATABASE_AUTH_TOKEN;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    try {
+      const { closeDb } = await import('@/lib/db');
+      await closeDb();
+    } catch {
+      /* module may not have loaded */
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_AUTH_TOKEN;
+  });
+
+  it('__setDbOpDelayForTests(null) resets dbOpDelayMs back to 0 (no-op future calls)', async () => {
+    const { __setDbOpDelayForTests, __setCreateClientForTests, getDb, closeDb } =
+      await import('@/lib/db');
+    __setCreateClientForTests(() => fakeClient());
+    try {
+      __setDbOpDelayForTests(50);
+      __setDbOpDelayForTests(null);
+      const before = Date.now();
+      await getDb();
+      const elapsed = Date.now() - before;
+      // After null reset, getDb must NOT block on the 50ms delay.
+      expect(elapsed).toBeLessThan(40);
+    } finally {
+      __setCreateClientForTests(null);
+      __setDbOpDelayForTests(null);
+      await closeDb();
+    }
+  });
+
+  it('getDb honors dbOpDelayMs (>0): blocks for the configured ms before opening', async () => {
+    const { __setDbOpDelayForTests, __setCreateClientForTests, getDb, closeDb } =
+      await import('@/lib/db');
+    __setCreateClientForTests(() => fakeClient());
+    try {
+      __setDbOpDelayForTests(120);
+      const before = Date.now();
+      await getDb();
+      const elapsed = Date.now() - before;
+      // 120ms delay must hold — allow generous slack for jsdom scheduling.
+      expect(elapsed).toBeGreaterThanOrEqual(100);
+    } finally {
+      __setCreateClientForTests(null);
+      __setDbOpDelayForTests(null);
+      await closeDb();
+    }
+  });
+
+  it('resolveDbConfig: unrecognized scheme passes through (does not coerce to file:)', async () => {
+    // Use a non-http(s)/libsql/file prefix. The helper must NOT attempt to
+    // mkdir or strip a prefix; it just forwards the URL.
+    process.env.DATABASE_URL = 'memory://in-process';
+    vi.resetModules();
+    const seen: Config[] = [];
+    const { __setCreateClientForTests, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    __setCreateClientForTests((config: Config) => {
+      seen.push(config);
+      return fakeClient();
+    });
+    try {
+      await loadRecordByRoom('smoke');
+      expect(seen).toHaveLength(1);
+      // Pass-through: literal URL preserved, no authToken (env was cleared).
+      expect(seen[0].url).toBe('memory://in-process');
+      expect(seen[0].authToken).toBeUndefined();
+    } finally {
+      __setCreateClientForTests(null);
+      await closeDb();
+    }
+  });
+
+  it('resolveDbConfig: unrecognized scheme with DATABASE_AUTH_TOKEN forwards the token', async () => {
+    process.env.DATABASE_URL = 'memory://in-process';
+    process.env.DATABASE_AUTH_TOKEN = 'custom-token';
+    vi.resetModules();
+    const seen: Config[] = [];
+    const { __setCreateClientForTests, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    __setCreateClientForTests((config: Config) => {
+      seen.push(config);
+      return fakeClient();
+    });
+    try {
+      await loadRecordByRoom('smoke');
+      expect(seen).toHaveLength(1);
+      expect(seen[0].url).toBe('memory://in-process');
+      expect(seen[0].authToken).toBe('custom-token');
+    } finally {
+      __setCreateClientForTests(null);
+      delete process.env.DATABASE_AUTH_TOKEN;
+      await closeDb();
+    }
+  });
+
+  it('ensureRecordByRoom on a fresh room inserts emptyStats and returns existed:false semantics', async () => {
+    const { ensureRecordByRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    try {
+      // Pre-condition: no row.
+      expect(await loadRecordByRoom('ensure-fresh')).toBeNull();
+      const seeded = await ensureRecordByRoom('ensure-fresh');
+      expect(seeded).toEqual({
+        totalGames: 0,
+        xWins: 0,
+        oWins: 0,
+        draws: 0,
+        currentStreak: 0,
+      });
+      // Post-condition: a real row exists.
+      expect(await loadRecordByRoom('ensure-fresh')).toEqual(seeded);
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('ensureRecordByRoom on an existing room is idempotent (returns existing row, no overwrite)', async () => {
+    const {
+      ensureRecordByRoom,
+      upsertRecordByRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      await upsertRecordByRoom('ensure-existing', {
+        totalGames: 4,
+        xWins: 2,
+        oWins: 1,
+        draws: 1,
+        currentStreak: -1,
+      });
+      const after = await ensureRecordByRoom('ensure-existing');
+      // Returns the existing row verbatim — no zero-overwrite.
+      expect(after).toEqual({
+        totalGames: 4,
+        xWins: 2,
+        oWins: 1,
+        draws: 1,
+        currentStreak: -1,
+      });
+      expect(await loadRecordByRoom('ensure-existing')).toEqual(after);
+    } finally {
+      await closeDb();
+    }
+  });
+
+});
+

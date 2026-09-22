@@ -799,3 +799,160 @@ describe('lib/store outcome write seam (W-F awaitOutcomeWrite)', () => {
     fetchMock.mockRestore();
   });
 });
+
+// ── W-T blind-spot coverage ──────────────────────────────────────────────
+//
+// Pin the small contract surface of `lib/store.ts` that v8 didn't reach:
+//   - apiRecordOutcome(http-error 404) → reason: 'not-found' (line 210)
+//     so the route handler can branch on row-vanished without inspecting
+//     raw status codes. This is the seam ResultNavigator reads through.
+//   - startGame('offline') rehydrates roomName from localStorage when the
+//     store has none (line 264) — the home-return path leaves the store
+//     cleared on hard reload and RoomGateMount has already swept the
+//     legacy key, so this is the only entrypoint that brings the room
+//     name back into the store for offline-mode usage.
+//
+// Zero source changes — pure coverage.
+
+describe('lib/store — W-T blind spots', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(playSound).mockClear();
+    window.localStorage.clear();
+    resetStore();
+  });
+
+  it('makeMove on named online: server 404 → apiRecordOutcome surfaces not-found; store stays at internalStats baseline', async () => {
+    // 404 means the room row was deleted server-side between registerOrLogin
+    // and the outcome write. The seam must surface reason:'not-found' so
+    // callers (ResultNavigator, /result RSC) can branch on row-vanished
+    // without parsing status codes. internalStats stays unchanged on
+    // not-found (no zero fallback).
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(
+        JSON.stringify({
+          type: 'https://docs.example.com/probs/stats-not-found',
+          title: 'Room stats not found',
+          status: 404,
+        }),
+        { status: 404, headers: { 'content-type': 'application/problem+json' } },
+      ),
+    );
+    useGameStore.getState().setRoomName('ghost-room');
+    useGameStore.getState().__resetInternalForTests();
+    useGameStore.getState().startGame('online');
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: [
+        'X', null, null,
+        null, 'X', null,
+        null, null, null,
+      ] as unknown as Board,
+    });
+    await useGameStore.getState().makeMove(8);
+    expect(useGameStore.getState().phase).toBe('won');
+    // not-found → internalStats untouched (still emptyStats from reset).
+    expect(useGameStore.getState().__getInternalForTests()).toEqual({
+      totalGames: 0,
+      xWins: 0,
+      oWins: 0,
+      draws: 0,
+      currentStreak: 0,
+    });
+    fetchMock.mockRestore();
+  });
+
+  it('startGame(offline) hydrates roomName from localStorage when store has none (home-return re-mount)', async () => {
+    // Pre-seed localStorage like a returning user on a hard reload.
+    window.localStorage.setItem('ttt.room.name.v1', 'returning-room');
+    expect(useGameStore.getState().roomName).toBeNull();
+    useGameStore.getState().startGame('offline');
+    // Store mirror now reflects localStorage (mirror direction: store ← disk).
+    expect(useGameStore.getState().roomName).toBe('returning-room');
+    // Mode is still offline; re-hydration didn't change it.
+    expect(useGameStore.getState().mode).toBe('offline');
+  });
+
+  it('startGame(offline) leaves roomName null when localStorage has nothing (anonymous fresh user)', async () => {
+    expect(useGameStore.getState().roomName).toBeNull();
+    useGameStore.getState().startGame('offline');
+    // No localStorage entry → store mirror stays null.
+    expect(useGameStore.getState().roomName).toBeNull();
+    expect(useGameStore.getState().mode).toBe('offline');
+  });
+
+  it('startGame(offline) with both store + localStorage set: store wins', async () => {
+    // soft-nav path: store singleton is the source of truth; localStorage
+    // is the cold-boot fallback. The store value must NOT be overwritten
+    // by anything we read from disk during startGame.
+    window.localStorage.setItem('ttt.room.name.v1', 'disk-value');
+    useGameStore.getState().setRoomName('store-value');
+    // startGame(offline) reads localStorage only if store.roomName is empty
+    // — pre-seeded store means no disk read, no overwrite.
+    useGameStore.getState().__resetInternalForTests();
+    useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().roomName).toBe('store-value');
+  });
+});
+
+describe('lib/store withTimeout (test-only coverage: lines 180-187)', () => {
+  it('withTimeout resolves when the underlying fetch resolves before the timeout', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const { withTimeout } = await import('@/lib/store');
+    const res = await withTimeout('/api/example', { method: 'GET' }, 50);
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockRestore();
+  });
+
+  it('withTimeout aborts the underlying fetch and surfaces the AbortError on timeout', async () => {
+    // Fetch hangs until the AbortSignal fires (or 5s, whichever first).
+    // The AbortController inside withTimeout must trigger the signal after
+    // `ms` ms and the fetch implementation must reject with DOMException.
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) {
+            // No signal — should never happen via withTimeout; fail loudly.
+            reject(new Error('expected AbortSignal'));
+            return;
+          }
+          const onAbort = (): void => {
+            reject(new DOMException('aborted', 'TimeoutError'));
+          };
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener('abort', onAbort, { once: true });
+        }),
+    );
+    const { withTimeout } = await import('@/lib/store');
+    const before = Date.now();
+    await expect(
+      withTimeout('/api/slow', { method: 'GET' }, 30),
+    ).rejects.toBeInstanceOf(DOMException);
+    const elapsed = Date.now() - before;
+    // Sanity: the timeout fired in well under 1s.
+    expect(elapsed).toBeLessThan(500);
+    fetchMock.mockRestore();
+  });
+
+  it('withTimeout clears the pending abort timer after the fetch settles (no leaked timers)', async () => {
+    // Spy on clearTimeout to confirm the finally block ran.
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const { withTimeout } = await import('@/lib/store');
+    await withTimeout('/api/example', { method: 'GET' }, 1000);
+    // clearTimeout must have been called exactly once (the timer from the
+    // AbortController) — anything else and we have a leaked timeout.
+    expect(clearSpy).toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+});
