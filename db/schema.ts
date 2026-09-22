@@ -30,6 +30,16 @@ import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
  * tests/db/db.test.ts: D1-D4 pin the contract.
  */
 export const gameStats = sqliteTable('game_stats', {
+  // W-RV P3 #9 dismiss: id 故意不加 autoincrement() 注解。SQLite 主键
+  // 若类型为 INTEGER PRIMARY KEY，会自动绑定 ROWID（除非表声明
+  // WITHOUT ROWID），新行 ID = max(ROWID)+1，deleted id 不复用。
+  // autoincrement 关键字（来自 SQLite autoincrement 子句）只在
+  // 「禁止 ROWID 复用」时才有意义——本表无删除路径（resetRecordByRoom
+  // upsert 空 stats 而非 DELETE row），ROWID 复用不构成回归。
+  // 显式 .autoincrement() 会生成 `INTEGER PRIMARY KEY AUTOINCREMENT`，
+  // 引入 sqlite_sequence 系统表与额外写入开销，无收益。
+  // 若未来迁出 SQLite 或启用 WITHOUT ROWID，需重审（迁移计划
+  // 单独立项，不在本波）。
   id: integer('id').primaryKey(),
   totalGames: integer('total_games').notNull().default(0),
   xWins: integer('x_wins').notNull().default(0),

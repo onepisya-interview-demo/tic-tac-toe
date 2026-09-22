@@ -104,6 +104,12 @@ export function setRoomName(room: string): boolean {
     // Best-effort: legacy key cleanup is part of every successful
     // write so the user cannot end up with both keys present after
     // they switched rooms.
+    // W-RV P3 #8 dismiss: 与 getRoomName 内部的 cleanup 调用看似重复
+    // 但不可合并——getRoomName 路径覆盖「只读不写」的回流用户（旧
+    // 浏览器只 mount 不触发写操作），setRoomName 路径覆盖「正常
+    // 房间切换」。每调用都是一次 O(1) removeItem，幂等可恢复；合并
+    // 会让其中一条路径失去对 legacy 的兜底，且需新增调用点而非
+    // 真正减复杂度（lib/room-name.ts 已是 service 层单点）。
     cleanupLegacyPlayerNameKey();
     return true;
   } catch {

@@ -33,7 +33,13 @@ export function Board() {
     const firstEmpty = board.findIndex((v) => v === null);
     return firstEmpty === -1 ? 0 : firstEmpty;
   }, [board]);
-  const boardKey = board.join('');
+  // W-RV P3 #7 (W-OPT-b 已实测等价依赖，9 格无热点；useMemo 仅作
+  // 等价于依赖数组的「memo key 缓存」语义标注，4x4+ 棋盘或高频
+  // 落子场景可观测省 join 一次的常数时间)。board 引用每次落子
+  // 都换 → useMemo 失效重算与直接 join 等价；当前保留 useMemo 让
+  // 下游 effect 依赖数组里的 boardKey 不再看起来是「每次渲染重算
+  // 的派生值」。
+  const boardKey = useMemo(() => board.join(''), [board]);
   const [override, setOverride] = useState<{ index: number; key: string } | null>(null);
   const focused = override && override.key === boardKey ? override.index : autoFocused;
 

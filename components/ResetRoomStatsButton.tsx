@@ -64,6 +64,14 @@ export function ResetRoomStatsButton({ room }: ResetRoomStatsButtonProps) {
     const dlg = dialogRef.current;
     if (!dlg) return;
     const onCancel = (e: Event): void => {
+      // W-RV P3 #6 dismiss: preventDefault 是显式否决 <dialog>.close
+      // 的 ESC 默认动作，然后走 React setState 路径（useEffect 监听
+      // [open] → false 后调 dlg.close()）。如果去掉 preventDefault，
+      // ESC 会让 dlg.open 立刻翻成 false 但 React state 仍是 true；
+      // useEffect 依赖数组 [open] 未变不会再触发 dlg.close()，
+      // 弹框看起来「关了」但 DOM 实际关、React state 错位会导致
+      // 下次 open=true 时 useEffect 的「dlg.open === true 跳过
+      // close」分支误命中，弹框打不开。当前契约优先保守路径。
       e.preventDefault();
       setError(null);
       setOpen(false);
