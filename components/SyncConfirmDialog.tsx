@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 import { isRoomName } from '@/lib/room-name';
 import { postMerge, postRoomSession } from '@/lib/game-net';
 import { loadOfflineStats } from '@/lib/offline-stats';
@@ -269,13 +270,9 @@ export function SyncConfirmDialog({
         )}
       </div>
       {error ? (
-        <p
-          className="text-small text-text-secondary mb-4"
-          data-testid="sync-confirm-error"
-          role="alert"
-        >
-          同步失败：{error}
-        </p>
+        <div className="mb-4">
+          <Alert data-testid="sync-confirm-error">同步失败：{error}</Alert>
+        </div>
       ) : null}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button

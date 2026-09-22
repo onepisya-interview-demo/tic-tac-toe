@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatsGrid } from '@/components/ui/StatsGrid';
+import { OutcomeErrorBanner } from '@/components/OutcomeErrorBanner';
 import { ResultCelebration } from '@/components/ResultCelebration';
 import { ResetRoomStatsButton } from '@/components/ResetRoomStatsButton';
 import { loadRecordByRoom } from '@/lib/db';
@@ -90,6 +91,7 @@ export default async function ResultPage({
               </Link>
             </div>
           </Card>
+          <OutcomeErrorBanner />
           <ResultCelebration />
         </main>
       </ViewTransition>
@@ -164,6 +166,7 @@ export default async function ResultPage({
             </Button>
           </Link>
         </div>
+        <OutcomeErrorBanner />
         <ResultCelebration />
       </main>
     </ViewTransition>

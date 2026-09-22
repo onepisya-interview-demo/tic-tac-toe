@@ -99,4 +99,39 @@ describe('components/ResetRoomStatsButton (W-R ulw-online-reset-and-result-fresh
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(routerRefresh).not.toHaveBeenCalled();
   });
+
+  it('R5: aborted (8s 超时) → 独立文案「清空请求超时，请稍后重试」+ 弹框保持', async () => {
+    // 案② d: 超时与一般网络错需独立文案, user 区分「断网」「超时」。
+    // 旧实现里所有非 404 都被合并进「清空失败，请稍后再试。」, 不可区分。
+    // mock 让 fetch 直接 reject aborted (代表 abort signal 已 fired) —
+    // 不依赖 lib/game-net withTimeout 的 8s 计时器, 跑得快。
+    const user = userEvent.setup();
+    fetchSpy.mockImplementation(async () => {
+      throw new DOMException('aborted', 'TimeoutError');
+    });
+    render(<ResetRoomStatsButton room="alice" />);
+    await user.click(screen.getByTestId('reset-room-stats'));
+    await user.click(screen.getByTestId('reset-room-confirm'));
+    const err = await screen.findByTestId('reset-room-error');
+    expect(err).toHaveTextContent('清空请求超时，请稍后重试');
+    // 弹框保持打开 — user 可重试或取消。
+    expect(screen.getByTestId('reset-room-dialog')).toHaveAttribute('open');
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it('R6: 5xx http-error → 通用兜底「清空失败，请稍后再试。」', async () => {
+    // 案② d 兜底文案, 与 404 / aborted 三分支互不重叠。
+    const user = userEvent.setup();
+    fetchSpy.mockResolvedValue(
+      new Response(
+        '{"type":"https://docs.example.com/probs/internal","title":"Internal","status":500}',
+        { status: 500, headers: { 'content-type': 'application/problem+json' } },
+      ),
+    );
+    render(<ResetRoomStatsButton room="alice" />);
+    await user.click(screen.getByTestId('reset-room-stats'));
+    await user.click(screen.getByTestId('reset-room-confirm'));
+    const err = await screen.findByTestId('reset-room-error');
+    expect(err).toHaveTextContent('清空失败，请稍后再试。');
+  });
 });

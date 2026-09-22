@@ -863,6 +863,52 @@ describe('lib/store — W-T blind spots', () => {
     fetchMock.mockRestore();
   });
 
+  it('makeMove on named online: postOutcome fails (network-error) → outcomeError set; phase stays "won"', async () => {
+    // 案② c: 旧实现 r.ok=false 时静默 return, user 不知战报未上服。
+    // 修复后: outcomeError 状态被填入, OutcomeErrorBanner 据此渲染
+    // Alert。phase / board 推进保持, user 仍能看到胜利 + 上服未落定。
+    // 用 network-error (fetch 直接抛) 模拟失败 — 比 aborted 路径快,
+    // 不依赖 withTimeout 的 8s 定时器。
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new TypeError('Failed to fetch'); // → reason: 'network-error'
+    });
+    useGameStore.getState().setRoomName('timeout-room');
+    useGameStore.getState().__resetInternalForTests();
+    useGameStore.getState().startGame('online');
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: [
+        'X', null, null,
+        null, 'X', null,
+        null, null, null,
+      ] as unknown as Board,
+    });
+    const before = Date.now();
+    await useGameStore.getState().makeMove(8);
+    const after = Date.now();
+    // phase / board: 推进保持 (won), user 看到胜利动画
+    expect(useGameStore.getState().phase).toBe('won');
+    expect(useGameStore.getState().winner).toBe('X');
+    // outcomeError: 已填入, 含 reason + at 时间戳
+    const err = useGameStore.getState().outcomeError;
+    expect(err).not.toBeNull();
+    expect(err!.reason).toBe('network-error');
+    expect(err!.at).toBeGreaterThanOrEqual(before);
+    expect(err!.at).toBeLessThanOrEqual(after);
+    fetchMock.mockRestore();
+  });
+
+  it('startGame(restart of outcomeError) clears the banner via the new-game branch', () => {
+    // 案② c: 下一次 makeMove / restart 必须清空 outcomeError, 否则
+    // OutcomeErrorBanner 会一直显示旧失败提示。直接 setOutcomeError(null)
+    // 是单点翻转; startGame / restart 路径也走 outcomeError: null。
+    useGameStore.getState().setOutcomeError({ reason: 'aborted', at: Date.now() });
+    expect(useGameStore.getState().outcomeError).not.toBeNull();
+    useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().outcomeError).toBeNull();
+  });
+
   it('startGame(offline) hydrates roomName from localStorage when store has none (home-return re-mount)', async () => {
     // Pre-seed localStorage like a returning user on a hard reload.
     window.localStorage.setItem('ttt.room.name.v1', 'returning-room');

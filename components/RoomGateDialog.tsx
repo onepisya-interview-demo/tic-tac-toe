@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 import { isRoomName } from '@/lib/room-name';
 import { postRoomSession } from '@/lib/game-net';
 
@@ -222,13 +223,9 @@ export function RoomGateDialog({
         )}
       </div>
       {error ? (
-        <p
-          className="text-small text-text-secondary mb-4"
-          data-testid="room-gate-error"
-          role="alert"
-        >
-          创建失败：{error}
-        </p>
+        <div className="mb-4">
+          <Alert data-testid="room-gate-error">创建失败：{error}</Alert>
+        </div>
       ) : null}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button

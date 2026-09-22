@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 import { postResetRoomStats } from '@/lib/game-net';
 
 /**
@@ -92,10 +93,15 @@ export function ResetRoomStatsButton({ room }: ResetRoomStatsButtonProps) {
     try {
       const r = await postResetRoomStats(room);
       if (!r.ok) {
+        // 案② d: 超时独立文案（区别于一般网络错）— TURSO HTTP 8s 兜底
+        // 触发的 aborted reason 在原来被合并进通用兜底文案, 用户看不出
+        // 是断网还是服务端真出错。
         setError(
           r.reason === 'http-error' && r.status === 404
             ? '房间不存在，无法清空。'
-            : '清空失败，请稍后再试。',
+            : r.reason === 'aborted'
+              ? '清空请求超时，请稍后重试'
+              : '清空失败，请稍后再试。',
         );
         return;
       }
@@ -147,13 +153,9 @@ export function ResetRoomStatsButton({ room }: ResetRoomStatsButtonProps) {
           该房间的全部战绩将被清零，此操作不可撤销。
         </p>
         {error ? (
-          <p
-            className="text-small text-text-secondary mb-4"
-            data-testid="reset-room-error"
-            role="alert"
-          >
-            {error}
-          </p>
+          <div className="mb-4">
+            <Alert data-testid="reset-room-error">{error}</Alert>
+          </div>
         ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button

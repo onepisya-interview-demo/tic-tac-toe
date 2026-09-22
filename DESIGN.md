@@ -30,6 +30,10 @@
 | `accent` | `#34D399` (emerald-400) | Primary CTA, current-player indicator, X marker |
 | `accent-hover` | `#6EE7B7` (emerald-300) | Hover on accent |
 | `accent-muted` | `rgba(52,211,153,0.12)` | Accent surface tint |
+| `danger` | `#F87171` (red-400) | Error text/foreground — dark-bg 对比度 ≥4.5:1 |
+| `danger-strong` | `#FCA5A5` (red-300) | Error emphasis (icon stroke) |
+| `danger-surface` | `rgba(248,113,113,0.12)` | Error block 背景 |
+| `danger-border` | `rgba(248,113,113,0.35)` | Error block 边框 |
 | `player-x` | `#34D399` | X marker (emerald) |
 | `player-o` | `#FAFAFA` | O marker (white) |
 

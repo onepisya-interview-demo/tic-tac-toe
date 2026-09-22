@@ -73,6 +73,14 @@ export interface GameState {
    * D-4 permits clearing without migration.
    */
   roomName: string | null;
+  /**
+   * 案② c: 最近一次 online 记局失败的提示（非 null 时由
+   * OutcomeErrorBanner 渲染 Alert，含 reason + at 时间戳；
+   * user 主动关闭或下一次 makeMove / restart 自动清空）。
+   * 旧实现里 r.ok === false 时静默 return, 用户不知战报未上服,
+   * /result 会渲染旧行——本字段是该静默路径的可见化。
+   */
+  outcomeError: { reason: string; at: number } | null;
 }
 
 export interface GameActions {
@@ -119,6 +127,12 @@ export interface GameActions {
    * resolves immediately.
    */
   awaitOutcomeWrite: () => Promise<void>;
+  /**
+   * 案② c: dismiss / refresh outcomeError. Pass null to clear.
+   * OutcomeErrorBanner 的关闭按钮 / 下一次 makeMove / restart
+   * 都会调它, 收敛状态翻转单点。
+   */
+  setOutcomeError: (e: { reason: string; at: number } | null) => void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -131,6 +145,7 @@ const initial: GameState = {
   winner: null,
   winLine: null,
   roomName: null,
+  outcomeError: null,
 };
 
 // Internal stats cache (NOT in GameState type). For offline mode,
@@ -290,6 +305,7 @@ export const useGameStore = create<GameStore>((set) => ({
       winner: null,
       winLine: null,
       mode: resolvedMode,
+      outcomeError: null, // 案② c: 新局清旧失败提示
     });
   },
 
@@ -340,7 +356,13 @@ export const useGameStore = create<GameStore>((set) => ({
       const r = await trackOutcomeWrite(
         apiRecordOutcome(s.roomName as string, win.player),
       );
-      if (r.ok) internalStats = r.value.stats;
+      if (r.ok) {
+        internalStats = r.value.stats;
+      } else {
+        // 案② c: 失败不再吞, 用 outcomeError 通知 user。phase / board
+        // 推进保持, user 看得到胜利也看得到上服未落定。
+        set({ outcomeError: { reason: r.reason, at: Date.now() } });
+      }
       return;
     }
 
@@ -363,7 +385,12 @@ export const useGameStore = create<GameStore>((set) => ({
       }
       // W-F：同 win 分支——在途写登记进 seam（成败皆落定后清）。
       const r = await trackOutcomeWrite(apiRecordOutcome(s.roomName as string, 'draw'));
-      if (r.ok) internalStats = r.value.stats;
+      if (r.ok) {
+        internalStats = r.value.stats;
+      } else {
+        // 案② c: 同 win 分支 — outcomeError 兜底
+        set({ outcomeError: { reason: r.reason, at: Date.now() } });
+      }
       return;
     }
 
@@ -381,6 +408,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentPlayer: null,
       winner: null,
       winLine: null,
+      outcomeError: null, // 案② c: 重启清旧失败提示
     });
   },
 
@@ -427,5 +455,12 @@ export const useGameStore = create<GameStore>((set) => ({
       // 行为零回退。现网 apiRecordOutcome 契约上不 reject
       // （postOutcome 全 catch），此 catch 是对未来的防御。
     }
+  },
+
+  setOutcomeError: (e) => {
+    // 案② c: 单点翻转 outcomeError 状态；调用方: OutcomeErrorBanner
+    // 关闭按钮、__resetInternalForTests、startGame / restart (见上)。
+    // store 是浏览器内单例 (AGENTS §代码地图), set 直接命中共享 state。
+    set({ outcomeError: e });
   },
 }));

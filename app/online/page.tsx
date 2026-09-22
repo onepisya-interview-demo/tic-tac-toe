@@ -4,6 +4,7 @@ import { Board } from '@/components/Board';
 import { Button } from '@/components/ui/Button';
 import { GameShell } from '@/components/GameShell';
 import { OnlineGateMount } from '@/components/OnlineGateMount';
+import { OutcomeErrorBanner } from '@/components/OutcomeErrorBanner';
 import { PlayController } from '@/components/PlayController';
 import { RestartButton } from '@/components/RestartButton';
 import { ResultNavigator } from '@/components/ResultNavigator';
@@ -45,6 +46,7 @@ export default function PlayPage() {
         </>
       }
     >
+      <OutcomeErrorBanner />
       <PlayController>
         <Board />
       </PlayController>
