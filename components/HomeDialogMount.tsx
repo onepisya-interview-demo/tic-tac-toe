@@ -15,6 +15,7 @@ import {
   pendingSyncCount,
   persistLastMergedLocal,
 } from '@/lib/offline-stats';
+import { afterViewTransition } from '@/lib/view-transition';
 
 /**
  * Home-return sync dialog mount
@@ -80,7 +81,12 @@ export function HomeDialogMount() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingSnapshot(pending);
       setInitialName(roomName);
-      setOpen(true);
+      // 案① a: 错峰开启 — 推迟到当前路由过渡 (150ms .page + 250ms root)
+      // 结束后再 setOpen(true), 避免 SyncConfirmDialog 被烘进 root 快照,
+      // 走 250ms UA 默认交叉淡化与旧页重合（'穿模' 缺陷）。BR-1 触发
+      // 条件不变, 只动开启时机。afterViewTransition 600ms safety 上限
+      // 防浏览器卡顿; 详见 lib/view-transition.ts。
+      afterViewTransition(() => setOpen(true));
     }
   }, [pathname]);
 

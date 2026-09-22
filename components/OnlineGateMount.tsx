@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { RoomGateDialog } from '@/components/RoomGateDialog';
 import { useGameStore } from '@/lib/store';
 import { getRoomName } from '@/lib/room-name';
+import { afterViewTransition } from '@/lib/view-transition';
 
 /**
  * OnlineGateMount (ulw-result-win-celebration W-A2, D-4) — the
@@ -87,9 +88,13 @@ export function OnlineGateMount() {
     // No name anywhere: the page itself requires a room — open the
     // gate in place. showModal() keeps the board inert behind it.
     // Mount-once decision (same shape as RoomGateDialog's open-sync
-    // effect); not a cascading-render hazard.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpen(true);
+    // effect); not a cascading-render hazard. 案① b: 与 home→online
+    // 路由过渡同窗, 错峰开启防 '穿模'。callback 内的 setOpen 是
+    // effect 同步路径, 同五处已有 set-state-in-effect 边界处理。
+    afterViewTransition(
+       
+      () => setOpen(true),
+    );
   }, [setStoreName]);
 
   async function handleConfirm(room: string): Promise<void> {

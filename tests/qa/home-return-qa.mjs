@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // home-return-qa.mjs — W3-probes (ulw-room-migration-home-landing) Q5.
-// BR: BR-1, BR-2, BR-3, BR-5
+// BR: BR-1, BR-2, BR-3, BR-5 (step 02c: 案① 错峰开启回归钉)
 //
 // Production build probe (BASE_URL=http://localhost:3199, hermetic tmp DB).
 // Covers plan §3.5 Q5:
@@ -242,6 +242,73 @@ await step("step 02b BR-1 反面: direct entry with pending>0 does NOT open dial
       `直接进入首页（本地 3 局未合并）不弹框；got open=${openCount}`,
     );
     await shoot(page, "home-direct-entry-no-dialog.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// W-M (ulw-modal-collision-and-error-alerts 案① a) — 错峰开启回归钉。
+// BR-1 触发条件保持: 仍仅 /offline→/ 软导航 + pending>declined>0。
+// 修复后 setOpen(true) 推迟到 afterViewTransition (lib/view-transition.ts)
+// 回调里, 避免 SyncConfirmDialog 在 150ms + 250ms VT 窗口内被烘进 root
+// 快照。本探针断言: 软导航后 100ms 内 dialog 不应 [open]; 350ms 后
+// [open] — 钉住'错峰', 防止后人把 setOpen 提前触发。
+await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [open]", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa02c-${RUN_SUFFIX}`;
+    // 种子 A 设备离线 1 局 + 设 room key（与 step 02 同型）
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    let xFirst = false;
+    for (let attempt = 1; attempt <= 12 && !xFirst; attempt += 1) {
+      await page.waitForSelector('[data-testid="status-text"]', { timeout: 4000 });
+      const text = await page.textContent('[data-testid="status-text"]');
+      if (text && text.includes("X")) {
+        xFirst = true;
+        break;
+      }
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    assert.ok(xFirst, "未取到 X-first offline");
+    await driveTopRowWin(page);
+    await page.waitForFunction(
+      () => {
+        try {
+          const v = window.localStorage.getItem("ttt.offline.stats.v1");
+          return v ? JSON.parse(v).totalGames >= 1 : false;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5000 },
+    );
+    // 软导航回首页 — softNavHome 等 networkidle 后再走 (lib 帮手)
+    await softNavHome(page);
+    // 在 100ms 之内 dialog 仍应未 [open] — 错峰开启延迟 showModal
+    await page.waitForTimeout(100);
+    const earlyOpen = await page
+      .locator('[data-testid="sync-confirm-dialog"][open]')
+      .count();
+    assert.equal(
+      earlyOpen,
+      0,
+      `错峰开启: 100ms 内 dialog 不应 [open]; got ${earlyOpen}`,
+    );
+    await shoot(page, "home-dialog-vt-window.png");
+    // 350ms 后 dialog 应 [open] — afterViewTransition 600ms safety 上限内
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 1000,
+    });
+    await shoot(page, "home-dialog-after-vt.png");
+    // 关闭 dialog, 保持页面 idle 给后续 step 用 (ctx/page 随即关闭)
+    const closeBtn = await page.$('[data-testid="sync-confirm-reject"]');
+    if (closeBtn) await closeBtn.click().catch(() => {});
   } finally {
     await browser.close();
   }

@@ -46,7 +46,13 @@
    explicitly using the same theme token to keep the figure-ground
    contract from DESIGN.md §图底关系. blur is still applied via
    `backdrop:backdrop-blur-sm` (verified to generate). */
-dialog[data-testid="sync-confirm-dialog"]::backdrop {
+/* 三个 dialog 共用 figure-ground 底色（案① c）— sync-confirm-dialog /
+   room-gate-dialog / reset-room-dialog。selectors 留注释指向原分析：
+   /tmp/pi-invest-modal-20260923.md §一/§三 H3。blur 仍走各自 className
+   上的 `backdrop:backdrop-blur-sm`（Tailwind v4 仍生效）。 */
+dialog[data-testid="sync-confirm-dialog"]::backdrop,
+dialog[data-testid="room-gate-dialog"]::backdrop,
+dialog[data-testid="reset-room-dialog"]::backdrop {
   background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent);
 }
 

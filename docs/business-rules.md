@@ -8,7 +8,7 @@
 
 | # | 规则 | 正向场景（什么时候发生） | 反面场景（什么时候**不**发生） | 探针 |
 | --- | --- | --- | --- | --- |
-| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框 | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹 | `tests/qa/home-return-qa.mjs`（负向 step + step02/04） + `components/HomeDialogMount.test.tsx` |
+| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框（`afterViewTransition` 推迟 showModal 出 150/250ms VT 窗口） | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹；弹框开启不与 VT 快照同窗 | `tests/qa/home-return-qa.mjs`（负向 step + step02/02b/02c/04） + `components/HomeDialogMount.test.tsx` |
 | BR-2 | 首页「开始对战」零拦截 | 无名点开始 → RoomGateDialog 引导；有名点开始 → 直接进对局 | 首页起战不因合并弹框被拦（弹框不抢焦点导航） | `tests/qa/home-return-qa.mjs` step03 + `tests/qa/online-direct-qa.mjs` |
 | BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
 | BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
