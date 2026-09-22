@@ -175,3 +175,18 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 - L0 全部已内联 [AGENTS.md](../AGENTS.md) 主项目块
 - L1 每一行 digest 在 AGENTS.md 主项目块的「L1 路由指针」节对应一行
 - L2 全部按需读——本节是按需参考页
+
+## 追加（路由化后新增，2026-09-22 起）
+
+> 本节收录 AGENTS.md §反模式迁移之后新增的条目，与上方 L0/L1/L2 同一判定框架。
+
+### L1-27：绿测试自证陷阱（spec 缺反面场景 + characterization 锁死错误行为）
+
+三个互锁的失效模式（实证：learnings §32 合并弹框事件）：
+1. **验收只写正向场景**——「什么时候弹」写了，「什么时候不弹」没写，洞被测试固化成契约，六层门禁对着错误契约全绿。反面场景是验收的必备半边。
+2. **把「当前行为」当「正确行为」锁死**——行为保持型重构（slop 清理 / characterization test）的前提是当前行为正确；此前应先过 `docs/business-rules.md` 清单。
+3. **业务规则不外化**——用户可见的触发时机/拦截规则若只存在于主公脑中，每个 wave 都可能重新踩。必须落 `docs/business-rules.md` 条目 + tests/qa 可执行探针。
+
+### L1-28：route-scoped 组件用自身 ref 记「上一个路径」
+
+只在 `/` 挂载的组件离开 `/` 即卸载，组件内 ref/`prevPathname` 在软导航下永远拿不到来源路由。正确机制：layout 层挂不卸载的 `NavPrevTracker`（`useLayoutEffect` 写 sessionStorage）+ 页级 consume-on-read（硬刷新天然无标记）。实证：`components/NavPrevTracker.tsx` + `HomeDialogMount` BR-1 触发条件。

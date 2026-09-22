@@ -8,10 +8,9 @@ import {
   loadDeclinedPending,
   writeDeclinedPending,
 } from '@/components/SyncConfirmDialog';
+import { consumeNavPrev } from '@/components/NavPrevTracker';
 import { useGameStore } from '@/lib/store';
 import {
-  OFFLINE_LAST_MERGED_LOCAL_KEY,
-  OFFLINE_STATS_KEY,
   clearOfflineStats,
   pendingSyncCount,
   persistLastMergedLocal,
@@ -19,13 +18,28 @@ import {
 
 /**
  * Home-return sync dialog mount
- * (ulw-name-login-one-truth W3 + ulw-room-migration-home-landing W2).
+ * (ulw-name-login-one-truth W3 + ulw-room-migration-home-landing W2;
+ * trigger semantics re-decreed 2026-09-22 — BR-1, docs/business-rules.md).
  *
- * The home page renders this client component once. Its mount effect
- * decides whether to open the SyncConfirmDialog based on:
+ * The home page renders this client component once. On mount it consumes
+ * the root-layout NavPrevTracker's previous-route marker and opens the
+ * SyncConfirmDialog only on the「离线局 → 首页」soft-navigation transition:
+ *
+ *   arm  = consumeNavPrev() === '/offline'   (and pathname === '/')
  *   pending = max(0, local.totalGames - lastMergedLocal)
  *   declined = sessionStorage[ttt.offline.sync-declined.v1]
- *   → open when pending > declined (D3 决策 + A3 验收)
+ *   → open when armed && pending > declined && pending > 0
+ *
+ * BR-1 反面场景 (2026-09-22 主公 decree; learnings §32):
+ *   - 直接打开 / 硬刷新首页（含 pending > 0）：不弹——consume-on-read 使
+ *     刷新天然无标记。
+ *   - 从 /online、/result 回首页：不弹——tracker 只记 /offline 来源。
+ *   - 同会话 pending 无增量（≤ declined 哨兵）：不重弹。
+ *
+ * Retired (were W3/W2 defence-in-depth triggers; superseded by BR-1):
+ * focus / visibilitychange / storage / ttt:offline-stats-changed
+ * re-evaluation listeners. A session that never visited /offline must not
+ * be prompted, per decree — the listeners' only effect was opening.
  *
  * W4 F1: the `lastMergedLocal` baseline is 0 right after a successful
  * merge (clearOfflineStats() already ran), so `pending === local`. The
@@ -35,31 +49,12 @@ import {
  * pending < local and the text under-reported the payload — see
  * V4 MINOR-F1 and lib/offline-stats.ts:OFFLINE_LAST_MERGED_LOCAL_KEY.)
  *
- * Trigger coverage (A3 / B-T4):
- *  - Initial mount after a soft-navigation return to `/` (Next App
- *    Router re-runs the effect when pathname changes back to '/').
- *  - Hard reload on `/` (initial mount fires).
- *  - Tab refocus / bfcache restore via `focus` + `visibilitychange`.
- *  - `ttt:offline-stats-changed` custom event (dispatched after every
- *    offline game settles, so a long-running session that never leaves
- *    home still re-evaluates — defence in depth). W2 (room migration)
- *    preserved this listener because its only refetch consumer
- *    (OnlineStatsCard, retired in the W2 client wave) was removed;
- *    pendingSyncCount re-evaluation is the surviving contract
- *    (R-3 red line).
- *
  * On confirm success: clear local + write syncedServerTotal to the
  * server-merged row's totalGames + clearDeclinedPending.
  *
- * On reject: writeDeclinedPending(snapshot) so the same-session
- * re-mount doesn't re-open the dialog for the same pending value
- * (sessionStorage lives until the tab is closed).
- *
- * W2 (room migration): the localStorage sentinel swap (playerName →
- * roomName; the pre-rename spelling is retired) does NOT affect this
- * component — the offline ledger is keyed on `ttt.offline.*` keys,
- * which never held the name concept. The setStoreName → setRoomName
- * rename is the only call-site touch.
+ * On reject: writeDeclinedPending(snapshot) so a same-visit re-entry
+ * doesn't re-open the dialog for the same pending value (sessionStorage
+ * lives until the tab is closed).
  */
 export function HomeDialogMount() {
   const pathname = usePathname();
@@ -71,35 +66,22 @@ export function HomeDialogMount() {
   useEffect(() => {
     if (pathname !== '/') return;
 
-    function evaluate(): void {
-      const pending = pendingSyncCount();
-      const declined = loadDeclinedPending();
-      if (pending > declined && pending > 0) {
-        const roomName = useGameStore.getState().roomName ?? '';
-        setPendingSnapshot(pending);
-        setInitialName(roomName);
-        setOpen(true);
-      }
+    // BR-1 arm check. Consume-on-read: the marker survives exactly one
+    // home landing, so a hard reload finds nothing and stays silent.
+    if (consumeNavPrev() !== '/offline') return;
+
+    const pending = pendingSyncCount();
+    const declined = loadDeclinedPending();
+    if (pending > declined && pending > 0) {
+      const roomName = useGameStore.getState().roomName ?? '';
+      // Mount-time external read (sessionStorage marker + localStorage
+      // ledger) opening the dialog — same documented boundary pattern as
+      // the five existing set-state-in-effect disables in components/.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPendingSnapshot(pending);
+      setInitialName(roomName);
+      setOpen(true);
     }
-    evaluate();
-    window.addEventListener('focus', evaluate);
-    document.addEventListener('visibilitychange', evaluate);
-    window.addEventListener('ttt:offline-stats-changed', evaluate);
-    const onStorage = (e: StorageEvent): void => {
-      if (
-        e.key === OFFLINE_STATS_KEY ||
-        e.key === OFFLINE_LAST_MERGED_LOCAL_KEY
-      ) {
-        evaluate();
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener('focus', evaluate);
-      document.removeEventListener('visibilitychange', evaluate);
-      window.removeEventListener('ttt:offline-stats-changed', evaluate);
-      window.removeEventListener('storage', onStorage);
-    };
   }, [pathname]);
 
   function handleReject(): void {
@@ -138,14 +120,6 @@ export function HomeDialogMount() {
     if (name && !useGameStore.getState().roomName) {
       setStoreName(name);
     }
-    // W2: re-evaluate pendingSyncCount on a fresh home-return by
-    // firing the same custom event the offline game-settle path
-    // uses. (Pre-W2 this was OnlineStatsCard's refetch signal; the
-    // card is gone — the listener still matters for the sync
-    // dialog's own re-evaluation cycle.)
-    window.dispatchEvent(
-      new CustomEvent('ttt:offline-stats-changed', { detail: { source: 'merge' } }),
-    );
   }
 
   return (

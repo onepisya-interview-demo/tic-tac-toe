@@ -39,6 +39,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 提交策略：[`docs/commit-policy.md`](docs/commit-policy.md)
 - herdr session 协议：[`docs/herdr-session-hygiene.md`](docs/herdr-session-hygiene.md)
 - 需求对齐协议：[`docs/requirement-intake.md`](docs/requirement-intake.md)
+- 业务规则清单（decree + 正反面场景 + 探针映射）：[`docs/business-rules.md`](docs/business-rules.md)
 - 运行时能力边界：[`.omo/plans/agent-runtime-boundaries.md`](.omo/plans/agent-runtime-boundaries.md)
 - 调度者四层职责（设计记录）：[`.omo/plans/dispatcher-roles-retrospective.md`](.omo/plans/dispatcher-roles-retrospective.md)
 

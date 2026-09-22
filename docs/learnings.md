@@ -238,3 +238,25 @@ commit `0f49375`（feat(audit-policy): make commitlint run transitively on audit
 教训：项目支持双语时，规范必须 prescriptive 不要 permissive——写明"默认中文 + 封闭例外清单"，agent 才有明确默认路径。检查点（audit R1-R5 + commitlint）只能卡结构不能卡语言倾向；语言默认必须在规范层显式规定，检查器补不上这一层。改写落地：AGENTS.md「### 中文提交（默认）」，三条例外（外部工具/库/API 的 token、外部文档/链接标题、用户显式要求英文），清单之外一律中文。
 
 Plan: .omo/plans/zh-default-commit-message.md
+
+### 32. 绿测试 ≠ 业务正确——合并弹框「直接进首页也弹」事件（e83b526 波，2026-09-22）
+
+主公在 e83b526（slop 清理提交）后发现：直接打开首页时合并战绩弹框出现，违背业务规定「仅从单机离线游戏回到首页才提示」。逐语义比对证明 e83b526 无辜（新旧谓词逐行等价、接线不变）；真根因是 W3（161d7cb）定下的触发设计——任何首页挂载 + pending>0 就弹（含硬刷新/直接进入），且 `HomeDialogMount.test.tsx` 把「seed pending>0 → render → 弹框」钉成期望行为。spec（A3）只写了「solo→回首页弹」与「首页直接起战不弹」，从未钉「直接打开首页不弹」——**spec 有洞，测试把洞固化成了契约，六层门禁对着错误契约全绿**。
+
+#### 轴 1：六层门禁全是 code-vs-spec，没有一层验 spec-vs-intent
+
+vitest 验代码符合测试、探针验页面符合脚本——「脚本写的是不是主公真正要的」没有任何机器层能验证，只有 aligned 门（人）能拦。业务规则若只存在于主公脑中而未外化为可执行探针，它穿透所有 wave。落地：业务规则真源 `docs/business-rules.md`（每条 decree 正向 + **反面**场景 + 探针映射），AGENTS.md L2 挂指针。
+
+#### 轴 2：验收必须写反面场景
+
+只写「什么时候弹/什么时候做」的验收必然留洞。A3 补丁：反面场景（什么时候**不**弹/不做）是验收条款的必备半边，缺这半边的验收视为未完成对齐。
+
+#### 轴 3：行为保持型重构的前提是「当前行为 = 正确行为」
+
+remove-ai-slops Phase 2「先锁行为」（characterization test）如果对错误行为执行，会把错误钉得更死。slop pass 之前应先过一遍 business-rules 清单——本次 4 文件清理恰好没碰弹框路径是运气不是流程。
+
+#### 触发机制教训（补充）
+
+「组件在 A 页挂载、需要知道从哪来」不能靠组件内 ref 记 pathname——离开 A 页即卸载。正确机制：**layout 层挂不卸载的 NavPrevTracker**（`useLayoutEffect` 写 sessionStorage，保证先于页级 passive effect）+ 页级 consume-on-read（使硬刷新天然无标记）。
+
+Plan: .omo/plans/ulw-home-merge-trigger-spec-20260922.md

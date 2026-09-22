@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { NavPrevTracker } from "@/components/NavPrevTracker";
 import "./globals.css";
 
 // Both fonts opt out of next/font's `preload` (D-1). Both sporadic
@@ -154,6 +155,7 @@ export default function RootLayout({
         <meta name="twitter:data2" content="Open source · MIT" />
       </head>
       <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
+        <NavPrevTracker />
         {children}
         <Analytics />
         <ServiceWorkerRegister />

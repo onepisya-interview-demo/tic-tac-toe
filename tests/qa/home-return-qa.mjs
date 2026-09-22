@@ -71,6 +71,18 @@ function captureSessionStorage(page) {
   return page.evaluate(() => ({ ...window.sessionStorage }));
 }
 
+// BR-1 helper (2026-09-22 decree): return home the way a real user does —
+// the in-app「返回首页」Link (client-side navigation). page.goto would be a
+// hard reload = direct entry, which must NOT open the dialog (反面场景);
+// the NavPrevTracker marker only exists on soft navigations.
+async function softNavHome(page) {
+  await Promise.all([
+    page.waitForURL(/\/$/, { timeout: 8000 }),
+    page.locator('a[href="/"]').first().click(),
+  ]);
+  await page.waitForLoadState("networkidle");
+}
+
 // W3 helper: seed a name + offline stats to prime the home-return dialog.
 // Uses fresh context (B-device equivalent) so we don't pollute the top-level ctx.
 async function seedOfflineGameOnDeviceA(browser, base, runSuffix, games = 1, name) {
@@ -183,8 +195,8 @@ await step("step 02 offline game → home return → dialog with room copy (A3 f
     );
     const localBefore = await captureLocalStorage(page);
     assert.ok(localBefore[OFFLINE_KEY] !== undefined, "local offline stats 存在");
-    // 回首页
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    // 回首页（BR-1：软导航经 in-app「返回首页」Link；goto = 硬刷新不弹）
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
@@ -195,6 +207,40 @@ await step("step 02 offline game → home return → dialog with room copy (A3 f
     // 弹框 title 应是「合并战绩」（W3 仍保留）
     const title = await page.textContent('[data-testid="sync-confirm-title"]');
     assert.ok(title && title.includes("合并"), `弹框标题含「合并」`);
+  } finally {
+    await browser.close();
+  }
+});
+
+// BR-1 step 02b (NEW, 2026-09-22 decree) — 直接进入首页（硬加载）不弹。
+// 反面场景探针：本地已有 3 局未合并，直接 goto '/'（等价冷开/硬刷新），
+// NavPrevTracker 无软导航标记 → 弹框必须不开。这是 learnings §32 事件的
+// 回归钉——此前 467 测试全绿但该业务规定被破坏，因为没有任何探针钉它。
+await step("step 02b BR-1 反面: direct entry with pending>0 does NOT open dialog", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k }) =>
+        window.localStorage.setItem(
+          k,
+          JSON.stringify({ totalGames: 3, xWins: 2, oWins: 0, draws: 1, currentStreak: 2 }),
+        ),
+      { k: OFFLINE_KEY },
+    );
+    // 硬刷新 = 直接进入：无软导航标记
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="home-page"]');
+    await page.waitForTimeout(400);
+    const openCount = await page
+      .locator('[data-testid="sync-confirm-dialog"][open]')
+      .count();
+    assert.equal(
+      openCount,
+      0,
+      `直接进入首页（本地 3 局未合并）不弹框；got open=${openCount}`,
+    );
+    await shoot(page, "home-direct-entry-no-dialog.png");
   } finally {
     await browser.close();
   }
@@ -288,8 +334,8 @@ await step("step 04 reject: zero /api/* writes + sessionStorage sentinel", async
         writesAfter.push({ method: req.method(), url: req.url() });
       }
     });
-    // 回首页 → 弹框开
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    // 回首页 → 弹框开（BR-1 软导航）
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
@@ -351,13 +397,13 @@ await step("step 05 same-session pending stale: no re-dialog", async () => {
       },
       { timeout: 5000 },
     );
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
     await page.click('[data-testid="sync-confirm-reject"]');
     await page.waitForTimeout(300);
-    // 同会话刷新：sessionStorage 保留 → 不重弹
+    // 刷新不重弹：BR-1 直接进入无 tracker 标记 + sessionStorage 哨兵双保险
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(400);
     const reOpen = await page.locator('[data-testid="sync-confirm-dialog"][open]').count();
@@ -394,8 +440,8 @@ await step("step 06 pending > declined sentinel → re-dialog with N=2 copy", as
     assert.ok(xFirst, "未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForTimeout(1400);
-    // 第 1 次保留本地 → 哨兵 = 1
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    // 第 1 次保留本地 → 哨兵 = 1（BR-1 软导航回首页）
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
@@ -416,8 +462,8 @@ await step("step 06 pending > declined sentinel → re-dialog with N=2 copy", as
     assert.ok(xFirst2, "第 2 局未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForTimeout(1400);
-    // pending = 2 > declined = 1 → 重弹
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    // pending = 2 > declined = 1 → 重弹（BR-1 软导航回首页）
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 4000,
     });
@@ -531,9 +577,10 @@ await step("step 08 merge + clear full path (postRoomSession + postMerge + local
         writes.push({ method: req.method(), url: req.url() });
       }
     });
-    // 回首页触发弹框
-    await page.reload({ waitUntil: "load" });
-    await page.waitForTimeout(2000); // settle RoomGateMount hydration
+    // 回首页触发弹框（BR-1：经 /offline 软导航回首页才带 tracker 标记；
+    // 直接 reload 首页 = 直接进入，反面场景不弹——见 step 02b）
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await softNavHome(page);
     await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
     await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
       timeout: 6000,

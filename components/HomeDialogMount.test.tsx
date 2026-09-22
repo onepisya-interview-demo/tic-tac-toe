@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, act, fireEvent } from '@testing-library/react';
 
+// Mutable pathname surface: HomeDialogMount only mounts on '/', so the
+// transition itself is simulated via the NavPrevTracker marker (what the
+// root-layout tracker would have written), not by remounting elsewhere.
+const navState = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/',
+  usePathname: () => navState.pathname,
   useRouter: () => ({ push: vi.fn() }),
 }));
 
 import { HomeDialogMount } from './HomeDialogMount';
+import { NAV_PREV_KEY } from './NavPrevTracker';
 import {
   OFFLINE_LAST_MERGED_LOCAL_KEY,
   OFFLINE_STATS_KEY,
@@ -21,7 +26,14 @@ fetchSpy.mockImplementation(async () =>
   new Response('{}', { status: 404 }),
 );
 
+// BR-1 arm helper: simulate the NavPrevTracker marker a soft-nav
+// '/offline' → '/' transition would have written (consume-on-read).
+function armFromOffline(): void {
+  window.sessionStorage.setItem(NAV_PREV_KEY, '/offline');
+}
+
 beforeEach(() => {
+  navState.pathname = '/';
   window.localStorage.clear();
   window.sessionStorage.clear();
   fetchSpy.mockClear();
@@ -48,7 +60,7 @@ afterEach(() => {
   fetchSpy.mockReset();
 });
 
-describe('components/HomeDialogMount (home-return sync dialog)', () => {
+describe('components/HomeDialogMount (home-return sync dialog, BR-1)', () => {
   it('no-op when pendingSyncCount is 0 (fresh home with no offline games)', () => {
     expect(pendingSyncCount()).toBe(0);
     render(<HomeDialogMount />);
@@ -59,8 +71,8 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
     expect(dlg.textContent).toContain('本机 0 局');
   });
 
-  it('opens the SyncConfirmDialog when pendingSyncCount > declined sentinel', async () => {
-    // Seed 3 offline games locally.
+  it("BR-1 反面: direct entry / hard refresh does NOT open even with pending > declined", () => {
+    // Seed 3 offline games locally; no NavPrevTracker marker → no arm.
     persistOfflineStats({
       totalGames: 3,
       xWins: 2,
@@ -69,6 +81,23 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       currentStreak: 2,
     });
     expect(pendingSyncCount()).toBe(3);
+    render(<HomeDialogMount />);
+    const dlg = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
+    expect(dlg).not.toBeNull();
+    expect(dlg.hasAttribute('open')).toBe(false);
+    expect(dlg.textContent).not.toContain('本机 3 局');
+  });
+
+  it('opens only on the /offline → / soft-nav transition (armed marker + pending > declined)', async () => {
+    persistOfflineStats({
+      totalGames: 3,
+      xWins: 2,
+      oWins: 0,
+      draws: 1,
+      currentStreak: 2,
+    });
+    expect(pendingSyncCount()).toBe(3);
+    armFromOffline();
     const { findByTestId } = render(<HomeDialogMount />);
     const dlg = await findByTestId('sync-confirm-dialog');
     // The dialog desc披露 the current pendingGamesCount; when open=true,
@@ -76,7 +105,22 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
     expect((dlg as HTMLElement).textContent).toContain('本机 3 局');
   });
 
-  it('does NOT open when pending <= declined sentinel (D3 decision: 保留本地 no-reopen)', async () => {
+  it("BR-1 反面: arriving from /online does NOT open (tracker marker is route-specific)", () => {
+    persistOfflineStats({
+      totalGames: 3,
+      xWins: 2,
+      oWins: 0,
+      draws: 1,
+      currentStreak: 2,
+    });
+    window.sessionStorage.setItem(NAV_PREV_KEY, '/online');
+    render(<HomeDialogMount />);
+    const dlg = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
+    expect(dlg.hasAttribute('open')).toBe(false);
+    expect(dlg.textContent).not.toContain('本机 3 局');
+  });
+
+  it('does NOT open when pending <= declined sentinel (D3 decision: 保留本地 no-reopen)', () => {
     persistOfflineStats({
       totalGames: 4,
       xWins: 2,
@@ -88,6 +132,7 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
     window.sessionStorage.setItem(SYNC_DECLINED_KEY, '4');
     expect(pendingSyncCount()).toBe(4);
     expect(loadDeclinedPending()).toBe(4);
+    armFromOffline();
     render(<HomeDialogMount />);
     // Dialog rendered but the live pendingGamesCount is 0 (open=false path).
     const dlg = document.querySelector('[data-testid="sync-confirm-dialog"]');
@@ -105,7 +150,8 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       draws: 1,
       currentStreak: 1,
     });
-    // (declined is unset → 0; pending=5 → opens)
+    // (declined is unset → 0; pending=5 → opens on the armed transition)
+    armFromOffline();
     useGameStore.getState().setRoomName('alice');
     const { findByTestId } = render(<HomeDialogMount />);
     const dlg = await findByTestId('sync-confirm-dialog');
@@ -133,8 +179,9 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       draws: 2,
       currentStreak: 2,
     });
-    // pending = 7, declined = 0 → opens with snapshot 7.
+    // pending = 7, declined = 0 → opens on the armed transition.
     expect(pendingSyncCount()).toBe(7);
+    armFromOffline();
     const { findByTestId } = render(<HomeDialogMount />);
     const dlg = await findByTestId('sync-confirm-dialog');
     expect((dlg as HTMLElement).textContent).toContain('本机 7 局');
@@ -146,14 +193,10 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
     });
     expect(loadDeclinedPending()).toBe(7);
     expect(pendingSyncCount()).toBe(7);
-    // next evaluate: pending(7) > declined(7) is false → no reopen.
+    // next armed re-entry: pending(7) > declined(7) is false → no reopen.
   });
 
-  it('re-evaluation: ttt:offline-stats-changed fires a fresh pending check', async () => {
-    render(<HomeDialogMount />);
-    const before = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
-    expect(before.textContent).not.toContain('本机 2 局');
-    // Now the player finishes an offline game and the custom event fires.
+  it("retired trigger: ttt:offline-stats-changed does NOT open the dialog (BR-1)", () => {
     persistOfflineStats({
       totalGames: 2,
       xWins: 1,
@@ -161,18 +204,20 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       draws: 1,
       currentStreak: 1,
     });
-    await act(async () => {
+    render(<HomeDialogMount />);
+    const before = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
+    expect(before.hasAttribute('open')).toBe(false);
+    // The W3/W2 defence-in-depth listener is retired per BR-1: a session
+    // that never visited /offline must not be prompted.
+    act(() => {
       window.dispatchEvent(new CustomEvent('ttt:offline-stats-changed'));
     });
     const after = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
-    expect(after.textContent).toContain('本机 2 局');
+    expect(after.hasAttribute('open')).toBe(false);
+    expect(after.textContent).not.toContain('本机 2 局');
   });
 
-  it('storage event on the OFFLINE_STATS_KEY triggers re-evaluation', async () => {
-    render(<HomeDialogMount />);
-    const before = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
-    expect(before.textContent).not.toContain('本机 3 局');
-    // Another tab's localStorage write.
+  it("retired trigger: storage event on OFFLINE_STATS_KEY does NOT open the dialog (BR-1)", () => {
     persistOfflineStats({
       totalGames: 3,
       xWins: 2,
@@ -180,7 +225,11 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       draws: 1,
       currentStreak: 2,
     });
-    await act(async () => {
+    render(<HomeDialogMount />);
+    const before = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
+    expect(before.hasAttribute('open')).toBe(false);
+    // Another tab's localStorage write must not prompt this tab.
+    act(() => {
       window.dispatchEvent(
         new StorageEvent('storage', {
           key: OFFLINE_STATS_KEY,
@@ -189,7 +238,8 @@ describe('components/HomeDialogMount (home-return sync dialog)', () => {
       );
     });
     const after = document.querySelector('[data-testid="sync-confirm-dialog"]') as HTMLElement;
-    expect(after.textContent).toContain('本机 3 局');
+    expect(after.hasAttribute('open')).toBe(false);
+    expect(after.textContent).not.toContain('本机 3 局');
   });
 });
 
@@ -248,6 +298,7 @@ describe('components/HomeDialogMount handleConfirm integration (test-only covera
       return new Response('{}', { status: 404 });
     });
 
+    armFromOffline();
     render(<HomeDialogMount />);
     const { screen } = await import('@testing-library/react');
     const dlg = await screen.findByTestId('sync-confirm-dialog');
@@ -290,6 +341,7 @@ describe('components/HomeDialogMount handleConfirm integration (test-only covera
       );
     });
 
+    armFromOffline();
     render(<HomeDialogMount />);
     const { screen } = await import('@testing-library/react');
     const dlg = await screen.findByTestId('sync-confirm-dialog');
