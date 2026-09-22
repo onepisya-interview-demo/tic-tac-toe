@@ -9,15 +9,21 @@
 // Why /_next/static/** is NOT in CACHEABLE_RE: Vercel's edge immutable-
 // caches every /_next/static/** response with max-age=31536000, which is
 // already a 0 ms cache hit from the browser's HTTP cache. Routing those
-// requests through the SW adds zero benefit and breaks next/font's
-// `preload` optimization: Chromium tracks the <link rel=preload> entry
-// on the network response and only marks it "consumed" when the
-// matching @font-face request hits the same response. When the SW
-// hijacks the @font-face request with its own Response object, the
-// preload is stranded → "preloaded using link preload but not used"
-// warning. Returning /_next/static/** to the network lets Vercel's
-// immutable cache satisfy both requests from the same entry, so the
-// preload is consumed and no warning fires.
+// requests through the SW adds zero benefit, so /_next/static/** flows
+// untouched through the SW to the edge cache / browser HTTP cache.
+//
+// Font preload history (D-1): the SW used to be blamed for stranding the
+// next/font preload entry (SW hijacking the @font-face request →
+// "preloaded using link preload but not used"). Fix fa76a39 returned
+// /_next/static/** to the network, and the residual sporadic warnings
+// (Chromium's 304-Not-Modified preload false positive, Bug 517439604 +
+// stale Vercel Early Hints across deploys) were rooted out entirely by
+// removing the font preload itself at the layout layer — Geist and
+// Geist_Mono now use `preload: false` in app/layout.tsx. Fonts load
+// through the normal CSS @font-face path with font-display: swap and
+// the auto-generated size-adjusted fallback; no preload entry exists
+// for the SW to interact with anymore.
+// Plan: .omo/plans/ulw-font-preload-residual-20260922.md §2.4/§三.
 //
 // Lifecycle:
 //   install   → skipWaiting so a fresh SW can activate immediately.
@@ -76,8 +82,9 @@ self.addEventListener("fetch", (event) => {
   // else) bypass the SW entirely. Caching the RSC payload would
   // reintroduce B-3 (RSC stale data — commit fd4a66f doc); caching
   // /api/stats would block live stats writes from ever reaching the DB;
-  // caching /_next/static/** would strand the next/font preload entry
-  // (see file header). Letting the browser handle the request via its
+  // /_next/static/** is already edge-immutable-cached (see file header —
+  // and since D-1 there is no next/font preload entry at all). Letting
+  // the browser handle the request via its
   // default network path also removes the SW-scope promise that was
   // generating "Uncaught (in promise) TypeError: Failed to fetch" noise
   // when the network failed mid-flight.

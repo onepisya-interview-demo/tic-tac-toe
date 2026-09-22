@@ -2,18 +2,31 @@
 // sw-console-hygiene.mjs — Service Worker / font preload hygiene probe.
 //
 // Hard assertions (PASS / FAIL):
-//   (a) Loading `/` and `/play` on a production build produces no
-//       "preloaded using link preload" console warning. Root cause B-A:
-//       the SW's CACHEABLE_RE used to match /_next/static/**, which
-//       intercepted the next/font preload link and stranded it from
-//       Chromium's preload cache. Stripping that branch returns the
-//       font request to the network, where Vercel's immutable
-//       Cache-Control makes the preload → @font-face match actually
-//       consume the preload entry.
-//   (b) After loading `/` and `/play` (and waiting for cache.put to
-//       flush), caches.open('tic-tac-toe-v1').keys() contains zero
-//       /_next/static/ entries. Re-verifies (a) at the Cache Storage
-//       level — the SW must not be in the path for hashed bundles.
+//   (a) Loading `/`, `/online` and `/offline` on a production build:
+//       (i) the `Link` response header(s) carry zero `rel=preload` +
+//       `as=font` entries, (ii) the served HTML carries zero
+//       <link rel=preload as=font> elements, and (iii) the console is
+//       free of "preloaded using link preload" warnings. D-1 (font
+//       preload residual plan §三) removed next/font preloading at the
+//       layout layer entirely (Geist/Geist_Mono preload:false): both
+//       sporadic warning sources — Chromium's 304-Not-Modified preload
+//       false positive (Bug 517439604, fixed ~Chrome 141) and stale
+//       Vercel Early Hints entries across deploys — root in the preload
+//       entry's existence, so the entry itself must stay gone.
+//       (Historical root cause B-A: the SW's CACHEABLE_RE used to match
+//       /_next/static/**, which intercepted the next/font preload link
+//       and stranded it from Chromium's preload cache; fixed in
+//       fa76a39 — that class of warning is now moot with no preload
+//       entry at all, but the assertion stays as the regression gate.)
+//   (a2) After loading the three routes, reload() each of them and
+//       re-assert zero "preloaded using link preload" console warnings
+//       on the cached-revisit path — the reproduction matrix showed
+//       reload + 304 is the main sporadic path.
+//   (b) After loading `/`, `/online` and `/offline` (and waiting for
+//       cache.put to flush), caches.open('tic-tac-toe-v1').keys()
+//       contains zero /_next/static/ entries. Re-verifies (a) at the
+//       Cache Storage level — the SW must not be in the path for hashed
+//       bundles.
 //   (c) public/sw.js source: the non-cacheable GET pass-through no
 //       longer wraps fetch() in respondWith (would otherwise produce
 //       "Uncaught (in promise) TypeError: Failed to fetch" noise on
@@ -82,8 +95,12 @@ try {
     page.on("console", (msg) => {
       if (msg.type() === "warning" || msg.type() === "error") {
         // Forward to the harness log so a human reviewer can correlate
-        // the hard-assertion gate with the raw console stream.
-        console.log(`     [console:${msg.type()}] ${msg.text()}`);
+        // the hard-assertion gate with the raw console stream. The
+        // location URL also answers the LOW side-question of which
+        // resource produced the recurring [console:error] 404 noise
+        // (preload plan §四 change 2, non-blocking).
+        const loc = msg.location()?.url ? ` (from ${msg.location().url})` : "";
+        console.log(`     [console:${msg.type()}] ${msg.text()}${loc}`);
       }
     });
     page.on("pageerror", (err) => {
@@ -114,7 +131,7 @@ try {
     );
   });
 
-  await step("02 hard(a) `/` and `/play` console: no 'preloaded using link preload'", async () => {
+  await step("02 hard(a) three routes: zero font preload in Link headers, HTML and console", async () => {
     // Add the init script once: install a console.warn shim that hoists
     // warnings into a global so we can inspect them after navigation.
     await page.addInitScript(() => {
@@ -127,19 +144,87 @@ try {
         return origWarn(...args);
       };
     });
+    // D-1 hard gate: collect every same-name `Link` response header (the
+    // server may emit several) and flag any entry that combines
+    // rel=preload with as=font. Entries are comma-separated at the top
+    // level and each starts with `<uri>`, so split on commas that
+    // precede a `<` to keep per-entry parameters intact.
+    const fontPreloadEntries = (linkValues) => {
+      const hits = [];
+      for (const value of linkValues) {
+        for (const entry of value.split(/,\s*(?=<)/)) {
+          if (/rel\s*=\s*["']?preload/i.test(entry) && /as\s*=\s*["']?font/i.test(entry)) {
+            hits.push(entry.trim());
+          }
+        }
+      }
+      return hits;
+    };
     const samples = [];
-    for (const url of [`${BASE}/`, `${BASE}/online`]) {
+    for (const url of [`${BASE}/`, `${BASE}/online`, `${BASE}/offline`]) {
+      const resp = await page.goto(url, { waitUntil: "networkidle" });
+      await page.waitForTimeout(500);
+      const linkHeaders = (await resp.headersArray())
+        .filter((h) => h.name.toLowerCase() === "link")
+        .map((h) => h.value);
+      const headerHits = fontPreloadEntries(linkHeaders);
+      const collected = await page.evaluate(() => ({
+        location: location.pathname,
+        htmlPreloads: document.querySelectorAll('link[rel="preload"][as="font"]').length,
+        warnings: (window.__consoleWarnings ?? []).slice(),
+      }));
+      samples.push({
+        url: collected.location,
+        linkHeaders,
+        headerHits,
+        htmlPreloads: collected.htmlPreloads,
+        warnings: collected.warnings,
+      });
+      // Reset the captured warnings between routes.
+      await page.evaluate(() => {
+        window.__consoleWarnings = [];
+      });
+    }
+    const headerBad = samples.filter((s) => s.headerHits.length > 0);
+    assert.equal(
+      headerBad.length,
+      0,
+      `Link header still carries font preload entries (D-1 regression): ${JSON.stringify(headerBad)}`,
+    );
+    const htmlBad = samples.filter((s) => s.htmlPreloads > 0);
+    assert.equal(
+      htmlBad.length,
+      0,
+      `HTML still carries <link rel=preload as=font> elements (D-1 regression): ${JSON.stringify(htmlBad.map((s) => ({ url: s.url, count: s.htmlPreloads })))}`,
+    );
+    const consoleBad = samples
+      .map((s) => ({
+        url: s.url,
+        hit: s.warnings.filter((w) => /preloaded using link preload/i.test(w)),
+      }))
+      .filter((s) => s.hit.length > 0);
+    if (consoleBad.length > 0) {
+      throw new Error(
+        `font preload warning present on ${JSON.stringify(consoleBad)}; full samples=${JSON.stringify(samples)}`,
+      );
+    }
+  });
+
+  await step("03 hard(a2) reload each route: console stays free of preload warnings", async () => {
+    // The reproduction matrix (preload plan §2.3) showed reload + 304
+    // Not Modified is the main sporadic path of the Chromium false
+    // positive. With the preload entries removed (D-1) the warning must
+    // be impossible on the cached-revisit path too.
+    const samples = [];
+    for (const url of [`${BASE}/`, `${BASE}/online`, `${BASE}/offline`]) {
       await page.goto(url, { waitUntil: "networkidle" });
+      await page.reload({ waitUntil: "networkidle" });
       await page.waitForTimeout(500);
       const collected = await page.evaluate(() => ({
         location: location.pathname,
         warnings: (window.__consoleWarnings ?? []).slice(),
       }));
       samples.push({ url: collected.location, warnings: collected.warnings });
-      // Reset the captured warnings between routes.
-      await page.evaluate(() => {
-        window.__consoleWarnings = [];
-      });
     }
     const bad = samples
       .map((s) => ({
@@ -148,13 +233,11 @@ try {
       }))
       .filter((s) => s.hit.length > 0);
     if (bad.length > 0) {
-      throw new Error(
-        `font preload warning present on ${JSON.stringify(bad)}; full samples=${JSON.stringify(samples)}`,
-      );
+      throw new Error(`font preload warning present after reload on ${JSON.stringify(bad)}`);
     }
   });
 
-  await step("03 hard(b) caches['tic-tac-toe-v1'] has no /_next/static/ entries", async () => {
+  await step("04 hard(b) caches['tic-tac-toe-v1'] has no /_next/static/ entries", async () => {
     // Drive the same-origin fetch loop so the SW has a chance to
     // populate whatever it intends to populate. Then dump Cache
     // Storage and assert the _next/static prefix is empty.
@@ -186,7 +269,7 @@ try {
     );
   });
 
-  await step("04 hard(c) public/sw.js source passes pass-through + catch guards", async () => {
+  await step("05 hard(c) public/sw.js source passes pass-through + catch guards", async () => {
     const src = readFileSync(SW_PATH, "utf8");
     // Strip block + line comments so documentation / 注释 cannot
     // masquerade as code that satisfies the assertions.
@@ -235,64 +318,41 @@ try {
     );
   });
 
-  await step("05 real-surface proof: font preload response is NOT from service worker", async () => {
-    // Headless Chromium does not surface the Chromium-internal
-    // "preloaded using link preload but not used" warning via
-    // console.warn (it is a Chromium DevTools diagnostic, not a page
-    // log). The mechanism that triggers the warning, however, is well
-    // understood: when the SW intercepts the @font-face request, the
-    // preload entry never matches → warning. We verify the fix at the
-    // observable HTTP layer: the font preload response must NOT be
-    // served from the service worker. After the fix, Vercel's
-    // immutable cache (or the local Next start) satisfies the request
-    // directly, the SW stays out of the way, and the preload entry is
-    // consumed by the matching @font-face.
-    // F5 (W4): read the actual font URL from the page preload link
-    // so the probe works against any BASE_URL (default :3000 in dev,
-    // :3101 in QA). The hash probe is the source of truth for which
-    // asset to inspect; the origin was hard-coded before and would
-    // always FAIL on :3101.
-    const fontUrl = await page.evaluate((base) => {
-      const link = document.querySelector('link[rel="preload"][as="font"]');
-      if (link) {
-        const href = link.getAttribute('href') ?? '';
-        if (href.startsWith('http')) return href;
-        return new URL(href, base).toString();
-      }
-      // Fall back to the production hash if the page has no preload
-      // link (older builds / font preloads disabled). Source of
-      // truth: production HTML observed at commit 31d56f6.
-      return `${base}/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2`;
-    }, BASE);
-    let fromSw = null;
-    let status = null;
-    const onResp = async (resp) => {
-      if (resp.url() === fontUrl) {
-        try {
-          fromSw = await resp.fromServiceWorker();
-          status = resp.status();
-        } catch {}
-      }
-    };
-    page.on("response", onResp);
-    try {
-      // Reload /play so the page performs a full font preload +
-      // @font-face request cycle; the response listener catches the
-      // preload response specifically.
-      await page.goto(`${BASE}/online`, { waitUntil: "networkidle" });
-      await page.waitForTimeout(500);
-    } finally {
-      page.off("response", onResp);
-    }
-    assert.equal(status, 200, `font preload response status ${status} (expected 200)`);
+  await step("06 real-surface proof: zero font preload entries on the live page", async () => {
+    // D-1 (preload plan §三): next/font preloading was removed at the
+    // layout layer (Geist/Geist_Mono preload:false), so the old proof —
+    // "the font preload response must not be served from the service
+    // worker" — has no subject anymore: there is no preload entry to
+    // race against the SW, and the F5 fallback that probed a hardcoded
+    // production font hash is gone with it. Per the plan, this step now
+    // asserts the absence itself: a fresh navigation of a production
+    // route must serve zero <link rel=preload as=font> elements (and
+    // zero as=font entries in the Link response header). Either present
+    // means the D-1 removal regressed. The SW-out-of-path property for
+    // /_next/static/** stays guarded at the cache level (step 04) and
+    // the source level (step 05).
+    const resp = await page.goto(`${BASE}/online`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    const htmlPreloads = await page.evaluate(
+      () => document.querySelectorAll('link[rel="preload"][as="font"]').length,
+    );
+    const linkHeaderHits = (await resp.headersArray())
+      .filter((h) => h.name.toLowerCase() === "link")
+      .flatMap((h) => h.value.split(/,\s*(?=<)/))
+      .filter((entry) => /rel\s*=\s*["']?preload/i.test(entry) && /as\s*=\s*["']?font/i.test(entry));
     assert.equal(
-      fromSw,
-      false,
-      `font preload response was served from the service worker (fromServiceWorker=${fromSw}); the SW must NOT be in the path for /_next/static/** after the fix.`,
+      htmlPreloads,
+      0,
+      `live page still carries ${htmlPreloads} <link rel=preload as=font> element(s) — D-1 removal regressed`,
+    );
+    assert.equal(
+      linkHeaderHits.length,
+      0,
+      `live page Link header still carries font preload entries — D-1 removal regressed: ${JSON.stringify(linkHeaderHits)}`,
     );
   });
 
-  await step("06 soft(d) offline reload produces no SW unhandled rejection", async () => {
+  await step("07 soft(d) offline reload produces no SW unhandled rejection", async () => {
     // Best-effort: page-level 'pageerror' rarely surfaces SW
     // unhandled rejections directly, so this step logs the diagnostic
     // and PASSES regardless of SW-only events. The hard assertion
