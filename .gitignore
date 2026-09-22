@@ -132,3 +132,4 @@ reports/
 # herdr session registry (machine-local, never commit)
 # =====================================================
 /.omo/sessions.local.md
+/.zcode
