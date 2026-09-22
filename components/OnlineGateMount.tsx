@@ -99,7 +99,14 @@ export function OnlineGateMount() {
     setStoreName(room);
     startGame('online');
     setOpen(false);
-    router.push('/online'); // same-route push — harmless no-op, kept for parity
+    // W-RV P3 #5：/online → /online 同路由 push 是 no-op（next/router
+    // 不会重新触发导航），但保留是为与 RoomGateMount.handleConfirm
+    // 路径对齐（参见 components/RoomGateMount.tsx handleConfirm 的
+    // `router.push(href)` 调用——pendingNav.href 可能指向任意路由，
+    // 含 /online 同路由；删掉会让两个 mount 行为不一致）。fire-and-forget
+    // 是 next/router 的契约，无 await；失败时弹框已关，UI 已切到
+    // playing phase，副作用无。
+    router.push('/online');
   }
 
   // Intentionally a no-op: see header. The gate does not yield.

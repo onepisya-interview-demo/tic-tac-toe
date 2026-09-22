@@ -120,6 +120,14 @@ export function HomeDialogMount() {
     // home-return has pending = local - 0 = local — the dialog
     // text "本机 N 局" always matches the data the next merge
     // would actually send.
+    // W-RV P3 #11：清空三连是防御性的——SyncConfirmDialog.runMergeSequence
+    // 已成功 postRoomSession + postMerge（服务端 row 已更新），并把
+    // merged row forward 给本 hook；理论上前两步之一失败应该 throw
+    // 而不让本函数执行。clearOfflineStats() / clearDeclinedPending()
+    // 双调与 persistLastMergedLocal(0) 形成「post-merge local 必须
+    // 干净」的不变量：合并后再开 dialog 只能由下次新离线局累加触发，
+    // 不会因为残留 pendingSyncCount 让用户误以为还有未合并局。
+    // 幂等 + 单点失败可恢复，保留。
     persistLastMergedLocal(0);
     clearOfflineStats();
     clearDeclinedPending();

@@ -321,7 +321,14 @@ export async function upsertRecordByRoom(
  * two devices' independent sessions and the "服务器是权威累加点"
  * contract says the post-sync row carries every game's contribution
  * without dropping any (counts stay exact; streak becomes a
- * best-effort signed heuristic — README 边界注 covers it).
+ * best-effort signed heuristic — the resulting currentStreak is the
+ * sum of two independent sequences, NOT a chronologically ordered
+ * run). W-RV P2 #1 dismiss: real-life scenario is a single user with
+ * the same X/O symbol across two devices (no interleaving opponents),
+ * so the signed-sum rarely produces a confusing streak; if a future
+ * product surface ever crosses symbols (multi-user / ranked play) the
+ * fix is to track per-game history in a sibling table and merge by
+ * timestamp, not to patch this function.
  *
  * Lifted to a pure exported function so tests can pin the math
  * without sqlite, and so route handlers can call it after the

@@ -150,6 +150,16 @@ let pendingOutcomeWrite: Promise<unknown> | null = null;
  * W-F seam 读侧：当前是否有在途的 online 记局写。ResultNavigator 在
  * push `/result` 前探测——有在途写才 await；无在途写（offline /
  * anonymous-online）保持同步 push，与旧 fire-and-forget 行为零差异。
+ *
+ * W-RV P2 #3：sanctioned consumer 仅 `components/ResultNavigator.tsx`
+ * （push `/result` 前 await 在途写，W-F D-6）。测试面 `tests/store/store.test.ts`
+ * 也读此函数（seam 三态断言）。其他模块若新增调用方需审 seam 契约——
+ * module-level 单例跨组件树，生命周期不与 React 渲染同步（参见
+ * `pendingOutcomeWrite` 上方注释）。
+ *
+ * 勿为新调用方暴露：seam 是写入 `lib/store.ts:makeMove` online 分支
+ * 的内部状态；外部读路径会绕过 ResultNavigator 的卸载 guard，可能
+ * 在 push 后撞 `setState on unmounted` 类风险。
  */
 export function hasPendingOutcomeWrite(): boolean {
   return pendingOutcomeWrite !== null;
@@ -252,6 +262,13 @@ export const useGameStore = create<GameStore>((set) => ({
     if (resolvedMode === 'offline') {
       // Reload semantics: an offline session resumes from the browser-
       // persisted baseline so accumulation survives page reloads.
+      // W-RV P3 #10: 本分支读 localStorage 是同步的浏览器路径假设——
+      // 调用方都在浏览器同步栈内（RestartButton、StartGameButton
+      // onClick、PlayController 重启链），不走 SSR / 测试态。
+      // 若未来 startGame('offline') 被异步/SSR 路径触发，需先把
+      // localStorage 读移到 mount effect（AGENTS §本项目反模式
+      // 「localStorage 只在 mount effect 读」只放宽到了 offline
+      // 重启分支，因为这条分支语义就是「重置就加载离线账本」）。
       internalStats = loadOfflineStats();
       // Rehydrate the room name from localStorage when the store
       // booted without one (SSR first frame, fresh page navigation,
