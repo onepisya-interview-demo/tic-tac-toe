@@ -1,7 +1,7 @@
 # ulw: 质量加固与优化波（v2）——测试加深 + review + 消融 + 优化 + dev/main 对比 + 反思沉淀
 
 - 日期: 2026-09-22
-- 状态: **ready-for-approval**（v2.1：§九裁决已全部入档；待主公最终审批，通过后才派发执行）
+- 状态: **executing**（2026-09-22 主公下达 `/goal 执行计划` 执行令 = §九审批门通过；按 §四依赖序派发）
 - 分支: dev
 - 基线: tag `dev-stable-20260922` @ `6c1a972`（前置 tag 已完成）；origin/dev 同步至 58eb271，Vercel 已部署新版
 - v1→v2 变更: 新增 W-DIFF（dev/main 对比）、W-RF（反思沉淀为可复用资产）、§三 证据优先-验证方法论红线（pstack 融入）、§五 执行拓扑（herdr tab / fresh codex / Pi 分工 / omo 钩子）、§四 波次细化为单会话工单卡
