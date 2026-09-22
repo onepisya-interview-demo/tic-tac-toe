@@ -1,4 +1,5 @@
 // offline-mode-qa.mjs — Integration probe for the solo practice mode
+// BR: BR-4
 // (ulw-solo-mode-split-view-transitions C4). One real Chromium +
 // production build. Proves the solo contract end to end:
 //   1. Home renders the dual CTA (start-online + start-offline).

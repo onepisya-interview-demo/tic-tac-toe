@@ -8,16 +8,27 @@
 
 | # | 规则 | 正向场景（什么时候发生） | 反面场景（什么时候**不**发生） | 探针 |
 | --- | --- | --- | --- | --- |
-| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框 | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹 | `home-return-qa.mjs`（负向 step + step02/04）+ `HomeDialogMount.test.tsx` |
-| BR-2 | 首页「开始对战」零拦截 | 无名点开始 → RoomGateDialog 引导；有名点开始 → 直接进对局 | 首页起战不因合并弹框被拦（弹框不抢焦点导航） | `home-return-qa.mjs` step03 + `online-direct-qa.mjs` |
-| BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `home-return-qa.mjs` step03 强断言 |
-| BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `offline-qa.mjs` / `offline-mode-qa.mjs` |
-| BR-5 | POST /merge 仅用户主动确认 | 弹框点「合并并清空」才发 merge | 确认前零调用；409 防静默建档；用户拒绝 = 零网络写 | `home-return-qa.mjs` step04/05 + `merge-sync-qa.mjs` |
-| BR-6 | 同名并发 last-write-wins | 两设备同名并发合并，后写胜出 | —（无例外） | `concurrent-surface-qa.mjs` |
-| BR-7 | 重置清零保留身份 | POST /reset 清零战绩，房间名保留 | 重置不丢身份；前端入口需确认 | `room-reset-qa.mjs` |
-| BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `online-direct-qa.mjs` |
-| BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `HomeDialogMount` 关联组件测试 |
-| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `merge-sync-qa.mjs` |
+| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框 | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹 | `tests/qa/home-return-qa.mjs`（负向 step + step02/04） + `components/HomeDialogMount.test.tsx` |
+| BR-2 | 首页「开始对战」零拦截 | 无名点开始 → RoomGateDialog 引导；有名点开始 → 直接进对局 | 首页起战不因合并弹框被拦（弹框不抢焦点导航） | `tests/qa/home-return-qa.mjs` step03 + `tests/qa/online-direct-qa.mjs` |
+| BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
+| BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
+| BR-5 | POST /merge 仅用户主动确认 | 弹框点「合并并清空」才发 merge | 确认前零调用；409 防静默建档；用户拒绝 = 零网络写 | `tests/qa/home-return-qa.mjs` step04/05 + `tests/qa/merge-sync-qa.mjs` |
+| BR-6 | 同名并发 last-write-wins | 两设备同名并发合并，后写胜出 | —（无例外） | `tests/qa/concurrent-surface-qa.mjs` |
+| BR-7 | 重置清零保留身份 | POST /reset 清零战绩，房间名保留 | 重置不丢身份；前端入口需确认 | `tests/qa/room-reset-qa.mjs` |
+| BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `tests/qa/online-direct-qa.mjs` |
+| BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |
+| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/merge-sync-qa.mjs` |
+
+
+## 探针列格式约定（机器可校验）
+
+> 2026-09-23 立。`tests/qa/commit-audit.mjs` R6（`auditBrProbeBinding`）双向机械校验本表与探针文件的耦合。改动探针列 = 同步 PR；缺格式 = R6 阻断。
+
+- **路径统一仓库根相对**：每个引用必须是仓库根相对路径（如 `tests/qa/home-return-qa.mjs`、`components/HomeDialogMount.test.tsx`），用反引号包裹；禁止裸文件名（`home-return-qa.mjs` 已退役，禁止新加）。
+- **多个探针用「 + 」分隔**；步骤细节可放在括号里（如 `tests/qa/home-return-qa.mjs` step03 强断言）——R6 仅校验文件存在与头注释，步骤描述是给人看的。
+- **探针头必须反向引用 BR**：每个被引用的探针/测试文件，前 20 行内须含 `// BR: BR-N[, BR-M]` 行（逗号分隔、按升序）。R6 检查文件首 20 行是否含 BR-N 文本。
+- **缺探针条目标 `⚠ 未探针化`**：探针列直接写 `⚠ 未探针化` 即可豁免 R6；R6 只校验有路径的探针。
+- **R6 失效 = 阻断**：`--branch dev` 模式跑全分支 audit，R6 失败 exit 1、commit-msg hook 同步阻止提交。
 
 ## 维护约定
 

@@ -9,7 +9,8 @@
 // Exit 0 when all checks pass; exit 1 when any fail.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -163,6 +164,77 @@ function checkMessage(label, raw, opts = {}) {
   return { label, subject, body, footer, findings, botAuthored: Boolean(opts.botAuthored) };
 }
 
+
+// R6 (BR ↔ probe two-way binding). Repo-state check that runs only in
+// --branch mode (per-commit --message-file mode skips it). Walks the
+// probe column of every BR row in docs/business-rules.md and verifies
+// each backtick-quoted path (a) exists in the repo and (b) the file's
+// first 20 lines mention the BR number. Rows whose probe column carries
+// "⚠ 未探针化" are exempt (decree-level "no probe yet" markers stay
+// under doc-level constraint, not the mechanical audit).
+function auditBrProbeBinding(repoRoot) {
+  const findings = [];
+  const mdPath = path.join(repoRoot, "docs", "business-rules.md");
+  let raw;
+  try {
+    raw = readFileSync(mdPath, "utf8");
+  } catch {
+    return findings;
+  }
+  for (const row of parseBrRows(raw)) {
+    if (row.exempt) continue;
+    for (const probe of row.probes) {
+      const absPath = path.join(repoRoot, probe);
+      if (!existsSync(absPath)) {
+        findings.push({ rule: "R6", msg: `${row.br}: probe file not found: ${probe}` });
+        continue;
+      }
+      let headText;
+      try {
+        headText = readFileSync(absPath, "utf8").split("\n").slice(0, 20).join("\n");
+      } catch {
+        continue;
+      }
+      if (!headText.includes(row.br)) {
+        findings.push({ rule: "R6", msg: `${row.br}: probe file ${probe} header missing BR reference (first 20 lines do not contain ${row.br})` });
+      }
+    }
+  }
+  return findings;
+}
+
+// Parse the BR table in docs/business-rules.md. Returns one entry per
+// BR-N row: { br, probes, exempt }. Rows are identified by a leading
+// "| BR-N |" header cell; the probe column is the LAST cell. Path tokens
+// are extracted from backticks. Exemption is detected when the probe
+// column carries "⚠ 未探针化" (kept as a comment-only marker).
+function parseBrRows(md) {
+  const rows = [];
+  for (const line of md.split("\n")) {
+    const m = /^\|\s*(BR-\d+)\s*\|/.exec(line);
+    if (!m) continue;
+    const br = m[1];
+    // Markdown tables wrap every row in `|`; trim the wrapping pipes before
+    // splitting so the probe column is the last non-empty cell, not the
+    // empty trailing fragment a raw split would yield.
+    const cells = line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+    const probeCell = cells[cells.length - 1] ?? "";
+    const exempt = /⚠\s*未探针化/.test(probeCell);
+    if (exempt) {
+      rows.push({ br, probes: [], exempt: true });
+      continue;
+    }
+    const probes = [];
+    const re = /`([^`]+)`/g;
+    let pm;
+    while ((pm = re.exec(probeCell)) !== null) {
+      probes.push(pm[1]);
+    }
+    rows.push({ br, probes, exempt: false });
+  }
+  return rows;
+}
+
 function main() {
   if (args.messageFile) {
     const raw = readFileSync(args.messageFile, "utf8");
@@ -224,8 +296,22 @@ function main() {
       }
     }
   }
+
+  // R6 (BR ↔ probe two-way binding): repo-state check, --branch mode only.
+  // Decoupled from the per-commit `failures` counter used for the `pass` math:
+  // the R6 count is added to `failures` AFTER `pass` is computed, so the
+  // existing branch-mode summary shape (total / pass / skip / fail) keeps
+  // describing the commit walk; `failures` reflects R6 too so the exit code
+  // is FAIL when either dimension breaks.
+  const passCount = results.length - failures - skips;
+  for (const f of auditBrProbeBinding(process.cwd())) {
+    failures++;
+    console.log(`FAIL  R6       ${f.msg}`);
+    console.log(`        R6: ${f.msg}`);
+  }
+
   console.log("");
-  console.log(`branch=${branch} total=${results.length} pass=${results.length - failures - skips} skip=${skips} fail=${failures}`);
+  console.log(`branch=${branch} total=${results.length} pass=${passCount} skip=${skips} fail=${failures}`);
   process.exit(failures === 0 ? 0 : 1);
 }
 

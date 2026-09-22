@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // online-direct-qa.mjs — W-A2 (ulw-result-win-celebration D-4) probes.
+// BR: BR-2, BR-8
 //
 // Production build probe (BASE_URL, hermetic tmp DB). Covers plan §5:
 //   F7  直达 /online 有名 — mount 期 identity bootstrap（localStorage →

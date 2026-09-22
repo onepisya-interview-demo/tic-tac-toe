@@ -1,4 +1,5 @@
 // pure-local-qa.mjs — End-to-end probe for the W3-probes pure-local contract (post room migration).
+// BR: BR-4
 // (ulw-room-migration-home-landing W3-probes; preserves the W2 pure-local contract — name→room token swap).
 // One real Chromium + production build (pnpm build && pnpm start on
 // :3101). Probes three A1/A2/A3 acceptance criteria:

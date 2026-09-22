@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -208,5 +208,165 @@ describe('commit-audit --branch main dependabot exemption', () => {
     const idx = humanBlock.findIndex((l) => l.startsWith(`FAIL  ${fixture.human}`));
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(humanBlock[idx]).not.toContain('(dependabot)');
+  });
+});
+
+// R6 (BR ↔ probe two-way binding) integration tests for --branch mode.
+// Builds a fixture repo whose docs/business-rules.md references a mix of
+// probe files: one happy (exists + BR header), one missing (path not in
+// repo), one headerless (file exists but no BR ref), and one exempt
+// (probe column marked ⚠ 未探针化). Asserts the audit flags the missing +
+// headerless bindings as R6, exempts the marker row, and reports 0 R6
+// findings for a separate all-happy fixture.
+const R6_TMP = mkdtempSync(path.join(tmpdir(), 'commit-audit-r6-'));
+afterAll(() => {
+  rmSync(R6_TMP, { recursive: true, force: true });
+});
+
+const R6_FIXTURE_IDENT = {
+  GIT_AUTHOR_NAME: 'R6 Author',
+  GIT_AUTHOR_EMAIL: 'r6@example.com',
+  GIT_COMMITTER_NAME: 'R6 Author',
+  GIT_COMMITTER_EMAIL: 'r6@example.com',
+};
+
+const R6_FIXTURE_MSG = [
+  'test(audit): fixture commit for R6 BR↔probe binding tests',
+  '',
+  'WHAT: seed a temporary git repo with docs/business-rules.md and probe',
+  'files so the audit subprocess can exercise R6 end-to-end.',
+  'WHY: the R6 unit tests need a deterministic fixture; a real commit',
+  'on main is required because commit-audit --branch mode walks history.',
+  'HOW: write the fixture files then commit them with a Conventional',
+  'subject + lore trailers so R1-R5 stay green and only R6 findings fire.',
+  '',
+  'Confidence: high',
+  'Scope-risk: narrow',
+  'Plan: .omo/plans/fixture.md',
+  '',
+].join('\n');
+
+// Build a fixture repo with a controlled BR table + probe set. Rows:
+//   BR-A -> tests/qa/good-probe.mjs    (exists, header has BR-A ref)   ok
+//   BR-B -> tests/qa/missing-probe.mjs  (referenced but absent)         FAIL (missing)
+//   BR-C -> tests/qa/headerless-probe.mjs (exists, no BR ref in header) FAIL (header)
+//   BR-D -> ⚠ 未探针化 marker                                             exempt
+function initR6MixedFixture(): { repo: string } {
+  const repo = path.join(R6_TMP, `mixed-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+
+  const probesDir = path.join(repo, 'tests', 'qa');
+  const docsDir = path.join(repo, 'docs');
+  mkdirSync(probesDir, { recursive: true });
+  mkdirSync(docsDir, { recursive: true });
+
+  writeFileSync(
+    path.join(probesDir, 'good-probe.mjs'),
+    '// BR: BR-1\n// happy probe fixture\nconsole.log("good");\n',
+    'utf8',
+  );
+  // missing-probe.mjs intentionally NOT created.
+
+  writeFileSync(
+    path.join(probesDir, 'headerless-probe.mjs'),
+    '// no BR ref here\nconsole.log("headerless");\n',
+    'utf8',
+  );
+
+  writeFileSync(
+    path.join(docsDir, 'business-rules.md'),
+    [
+      '# Fixture business rules',
+      '',
+      '| # | 规则 | 探针 |',
+      '| --- | --- | --- |',
+      '| BR-1 | happy rule | `tests/qa/good-probe.mjs` |',
+      '| BR-2 | missing file rule | `tests/qa/missing-probe.mjs` |',
+      '| BR-3 | headerless rule | `tests/qa/headerless-probe.mjs` |',
+      '| BR-4 | exempt rule | ⚠ 未探针化 |',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  writeFileSync(path.join(repo, 'f.txt'), 'init\n', 'utf8');
+  gitIn(repo, ['add', '.'], { ...R6_FIXTURE_IDENT });
+  gitIn(repo, ['commit', '--no-gpg-sign', '-m', R6_FIXTURE_MSG], { ...R6_FIXTURE_IDENT });
+  return { repo };
+}
+
+// Build a fixture repo whose BR table only references probe files that
+// exist with correct BR headers. Used to prove R6 reports zero findings
+// when the binding is intact.
+function initR6HappyFixture(): { repo: string } {
+  const repo = path.join(R6_TMP, `happy-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+
+  const probesDir = path.join(repo, 'tests', 'qa');
+  const docsDir = path.join(repo, 'docs');
+  mkdirSync(probesDir, { recursive: true });
+  mkdirSync(docsDir, { recursive: true });
+
+  writeFileSync(
+    path.join(probesDir, 'good-only-probe.mjs'),
+    '// BR: BR-9\n// happy-only probe fixture\nconsole.log("good");\n',
+    'utf8',
+  );
+
+  writeFileSync(
+    path.join(docsDir, 'business-rules.md'),
+    [
+      '# Fixture business rules (happy)',
+      '',
+      '| # | 规则 | 探针 |',
+      '| --- | --- | --- |',
+      '| BR-9 | all good | `tests/qa/good-only-probe.mjs` |',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  writeFileSync(path.join(repo, 'f.txt'), 'init\n', 'utf8');
+  gitIn(repo, ['add', '.'], { ...R6_FIXTURE_IDENT });
+  gitIn(repo, ['commit', '--no-gpg-sign', '-m', R6_FIXTURE_MSG], { ...R6_FIXTURE_IDENT });
+  return { repo };
+}
+
+describe('commit-audit --branch main R6 BR↔probe binding', () => {
+  const mixed = initR6MixedFixture();
+  const mixedResult = runBranchAudit(mixed.repo);
+
+  it('flags probe files that the BR table references but the repo lacks (R6 check A)', () => {
+    expect(mixedResult.stdout).toMatch(
+      new RegExp(`R6:.*BR-2.*probe file not found.*missing-probe\\.mjs`, 's'),
+    );
+  });
+
+  it('flags probe files that exist but lack the BR reference in their header (R6 check B)', () => {
+    expect(mixedResult.stdout).toMatch(
+      new RegExp(`R6:.*BR-3.*header missing BR reference.*headerless-probe\\.mjs`, 's'),
+    );
+  });
+
+  it('honors the ⚠ 未探针化 exemption: exempt rows produce no R6 finding', () => {
+    expect(mixedResult.stdout).not.toMatch(/R6:.*BR-4/);
+  });
+
+  it('does not flag correct bindings: BR-A produces no R6 finding', () => {
+    expect(mixedResult.stdout).not.toMatch(/R6:.*BR-1/);
+  });
+
+  it('emits the R6 summary failure line in the branch-mode footer', () => {
+    // Mixed fixture: 1 commit that passes R1-R5 + 2 R6 failures. The branch
+    // summary line reports both; total covers commits only, fail covers both.
+    expect(mixedResult.stdout).toContain('total=1');
+    expect(mixedResult.stdout).toContain('fail=2');
+  });
+
+  const happy = initR6HappyFixture();
+  const happyResult = runBranchAudit(happy.repo);
+
+  it('emits zero R6 findings when the BR↔probe binding is fully correct', () => {
+    expect(happyResult.stdout).not.toMatch(/R6:/);
   });
 });

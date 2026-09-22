@@ -1,4 +1,5 @@
 // merge-sync-qa.mjs — DISABLED for W2 + W3 (ulw-name-login-one-truth).
+// BR: BR-5, BR-10
 //
 // Why disabled: /solo no longer renders the 「同步」 button or
 // SyncConfirmDialog (W2 纯净化 wave). All probe steps depend on

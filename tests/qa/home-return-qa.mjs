@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // home-return-qa.mjs — W3-probes (ulw-room-migration-home-landing) Q5.
+// BR: BR-1, BR-2, BR-3, BR-5
 //
 // Production build probe (BASE_URL=http://localhost:3199, hermetic tmp DB).
 // Covers plan §3.5 Q5:

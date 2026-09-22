@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // room-reset-qa.mjs — W-R (ulw-online-reset-and-result-fresh §1) probe.
+// BR: BR-7
 //
 // Production build probe (BASE_URL, hermetic tmp DB). Covers plan §1:
 //   N1  负对照：未知房间 API 直调 reset → 404 problem+json

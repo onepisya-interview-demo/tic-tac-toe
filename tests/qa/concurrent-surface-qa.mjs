@@ -1,4 +1,5 @@
 // concurrent-surface-qa.mjs — Two chromium contexts each drive a top-row
+// BR: BR-6
 // win against the same server, assert the server's authoritative stats
 // row reflects BOTH wins (totalGames===2, xWins+oWins===2). The 50/50
 // randomizeFirstPlayer means each side may win as X or O; the assertion
