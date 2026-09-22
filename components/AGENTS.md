@@ -15,11 +15,12 @@
 | 房间弹框宿主 | RoomGateMount.tsx | 首页挂载的 client 宿主；监听 `ttt:room-required` CustomEvent（detail 携带 `{ mode, href }`），打开 RoomGateDialog；同时执行挂载期 identity bootstrap（localStorage `ttt.room.name.v1` → store）+ `cleanupLegacyPlayerNameKey()` 一次性 legacy 清除 |
 | 房间弹框 | RoomGateDialog.tsx | 原生 `<dialog>`；单输入 + 主 CTA「创建并进入」/ 次 CTA「取消」 + n/24 计数 + ESC 关 + reduced-motion 无动效 + 初焦落主 CTA（requestAnimationFrame 模式，参照 SyncConfirmDialog F3 修复）；提交即 `postRoomSession(trimmed)` → 200 ok 后经 `onConfirm(room, existed)` 回调交宿主全权处理（localStorage + store 双写、`startGame`、导航均归调用方——弹框与路由解耦）；422 / aborted / network-error → 就地错误文案，零持久层写入，零导航；宿主两个：RoomGateMount（首页）+ OnlineGateMount（/online） |
 | /result 庆祝岛 | ResultCelebration.tsx | `/result` 路由；mount 消费一次性 sessionStorage 哨兵 `ttt.result.just-won.v1`（读后即清、恰消费一次、StrictMode 免疫），命中渲染 WinConfetti，未命中零渲染；哨兵契约（key + write/consume helper）单一真相在本文件，ResultNavigator import 写入侧 |
+| /result 清空战绩岛 | ResetRoomStatsButton.tsx | `/result` 路由分支 3（stats 有行）专属；「清空战绩」→ 原生 `<dialog>` 确认（主「清空」/ 次「取消」、ESC、reduced-motion、rAF 初焦落主 CTA）；确认后 `postResetRoomStats(room)` 成功 → `router.refresh()` 直读全零行；404/通用错就地展示弹框保持打开；room 由 RSC normalize 后 prop 传入（SSR 零 localStorage 读） |
 | /online 直达门控宿主 | OnlineGateMount.tsx | `/online` 路由；mount 期 identity bootstrap（localStorage→store，与 RoomGateMount 同源含 legacy 清扫）；无名就地打开 RoomGateDialog（showModal 棋盘 inert），onReject 有意不关弹框（拒绝静默无名对局） |
 | 首页战绩静态入口 | HomeStatsEntry.tsx | `/` 路由；纯 `<Link href="/result?room=...">`，零请求零副作用；store 有 roomName 时渲染「查看 <room> 的战绩 →」链接，无 roomName 时不渲染；testid `home-stats-entry` + `home-stats-link` |
 | 单机战绩面板 | OfflineStatsPanel.tsx | `/offline` 路由；StatsGrid 无条件直显，无名有名一致；零网络 |
 | 入口 CTA + 拦截 | StartGameButton.tsx | `requireName` prop：online CTA 默认 true，无名点击 dispatch `ttt:room-required` Window CustomEvent（不导航，不调 startGame）；offline CTA 传 false 直行 |
-| 阶段→导航 | ResultNavigator.tsx | `/online` 路由；phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语）；won（仅胜局）push 前写 `ttt.result.just-won.v1` 哨兵（ResultCelebration 消费放庆祝） |
+| 阶段→导航 | ResultNavigator.tsx | `/online` 路由；phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语）；won（仅胜局）push 前写 `ttt.result.just-won.v1` 哨兵（ResultCelebration 消费放庆祝）；W-F：push 前 await 在途记局写（store seam `awaitOutcomeWrite`，吞错落定），/result 首帧必读已落账本；卸载后不得 push、不得写哨兵 |
 | 音效偏好 | SoundToggle.tsx | 保证水合安全的「默认静音」控件 |
 | 通用基础组件 | ui/Button.tsx、ui/Card.tsx | 透传额外 props，QA 属性可以传入 |
 
@@ -28,7 +29,7 @@
 - 用窄的 Zustand selector 读取游戏状态（`roomName` / `phase` / `board` 等），不要订阅整个 store。
 - 只有交互组件使用客户端模式；展示型基础组件保持 server-compatible。
 - 颜色、间距、字体、圆角和动效都来自全局 Tailwind v4 tokens。
-- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、result-celebration、start-offline、start-online、offline-stats、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link。
+- 保留稳定 test ID：board、cell-N、cell-N-mark、status-bar、stat-value、sound-toggle、confetti、result-celebration、start-offline、start-online、offline-stats、offline-stats-grid、sync-confirm-dialog、room-gate-dialog、room-gate-input、room-gate-submit、room-gate-cancel、room-gate-counter、room-gate-feedback、home-stats-entry、home-stats-link、reset-room-stats、reset-room-dialog、reset-room-confirm、reset-room-cancel、reset-room-error。
 - 可访问名称使用中文，并通过既有 live region 播报变化。
 - 全局 *:focus-visible 规则拥有 focus ring；组件不要重复声明。
 - 组件测试与组件同目录；SoundToggle 是现有 RTL/SSR 模式。

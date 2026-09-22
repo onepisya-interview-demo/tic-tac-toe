@@ -25,7 +25,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 结构
 
     .
-    ├── app/               # 引导页 / online / offline / result 四路由 + RESTful API 4 端点（/api/rooms/*）+ JSON-LD
+    ├── app/               # 引导页 / online / offline / result 四路由 + RESTful API 5 端点（/api/rooms/*）+ JSON-LD
     ├── components/        # 棋盘、合并弹框、房间弹框、战绩客户端组件，ui/ 基础组件
     ├── lib/               # 纯规则、客户端 store、浏览器效果、SQLite I/O、RFC 9457 helper、房间白名单
     ├── db/                # Drizzle schema：game_stats 单行表（room TEXT UNIQUE，W1 列名从 name 改名）
@@ -38,9 +38,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 | 任务 | 位置 | 说明 |
 | --- | --- | --- |
-| 路由或 API 行为 | app/ | 客户端四页路由 + Node runtime RESTful 四端点（`POST /api/rooms` + `GET /api/rooms/[room]/stats` + `POST /api/rooms/[room]/stats/merge` + `POST /api/rooms/[room]/stats/outcomes`，W3 D-3 一波迁移） |
+| 路由或 API 行为 | app/ | 客户端四页路由 + Node runtime RESTful 五端点（`POST /api/rooms` + `GET /api/rooms/[room]/stats` + `POST /api/rooms/[room]/stats/merge` + `POST /api/rooms/[room]/stats/outcomes` + `POST /api/rooms/[room]/stats/reset`，W3 D-3 一波迁移 + W-R 增 reset） |
 | 规则、战绩、持久化 | lib/game.ts、lib/store.ts、lib/db.ts、db/schema.ts | 纯规则不依赖 React/DOM；lib/db.ts 是 service 层，零 HTTP 上下文 |
-| RESTful 浏览器薄壳 | lib/game-net.ts | postRoomSession / fetchRoomStats / postMerge / postOutcome + 8s AbortController |
+| RESTful 浏览器薄壳 | lib/game-net.ts | postRoomSession / fetchRoomStats / postMerge / postOutcome / postResetRoomStats + 8s AbortController |
 | RFC 9457 problem+json | lib/api-problem.ts | problemResponse + ProblemSlug + typeUriFor |
 | 视觉和无障碍契约 | DESIGN.md、app/globals.css、components/ | 设计令牌与全局 focus 所有权是契约 |
 | 领域术语与歧义裁决 | CONTEXT.md | 语言契约：命名对齐先查此表，产出物禁用其 `_Avoid_` 别名；收录/晋升门槛见 .omo/plans/glossary-context-md.md |
@@ -55,10 +55,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | 符号/模块 | 类型 | 位置 | 引用点 | 作用 |
 | --- | --- | --- | --- | --- |
 | game | 纯规则 + 战绩 | lib/game.ts:1 | 9（4 prod + 5 test） | 棋盘、胜负、落子、连胜、streakLabel |
-| useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、`mode: 'online'\|'offline'`、apiRecordOutcome AbortController |
-| RESTful 4 endpoints | Route handlers | app/api/rooms/route.ts + app/api/rooms/[room]/stats/{route,merge/route,outcomes/route}.ts | 4 prod + 9 QA + 3 test | POST /api/rooms 进入房间幂等 `{stats,existed}` (200 + 422) + GET /api/rooms/{room}/stats (200 / 404 problem+json) + POST /api/rooms/{room}/stats/merge (200 / 409 enter-room-required 防静默建档) + POST /api/rooms/{room}/stats/outcomes (200 / 404 stats-not-found 防静默建档) |
-| lib/db service layer | DB helpers | lib/db.ts:loadRecordByRoom/upsertRecordByRoom/mergeRecordByRoom/recordOutcomeForRoom/ensureRecordByRoom/registerOrLoginRoom/accumulateMergeStats/closeDb | 7（5 prod + 2 test） | 单表 game_stats（`room TEXT UNIQUE`，W1 列名从 name 改名）的 read→mutate→upsert 单线；registerOrLoginRoom 幂等进入房间；accumulateMergeStats 纯函数 per-field 相加；零 HTTP 上下文（service/transport 分离契约，AGENTS.md §本项目反模式 + README §GraphQL 双兼容预留节）；getDb reconcile 收敛为「列集与 schema 不符即 DROP 重建」（D-4 清空许可，数据不保留） |
-| lib/game-net | 浏览器 HTTP | lib/game-net.ts:postRoomSession/fetchRoomStats/postMerge/postOutcome | 5 prod + 2 test | withTimeout 8s + `{ok,value}/{ok,reason}` 契约；fetchRoomStats 把 404 problem+json 翻译成 `{stats:null}` 让展示层零分支 |
+| useGameStore | Zustand store | lib/store.ts:72 | 10（9 prod + 1 test） | 局面阶段、落子、`mode: 'online'\|'offline'`、apiRecordOutcome AbortController；W-F seam：`pendingOutcomeWrite` + `awaitOutcomeWrite()`（在途记局写等待，吞错落定，无在途写即时 resolve） |
+| RESTful 5 endpoints | Route handlers | app/api/rooms/route.ts + app/api/rooms/[room]/stats/{route,merge/route,outcomes/route,reset/route}.ts | 5 prod + 10 QA + 3 test | POST /api/rooms 进入房间幂等 `{stats,existed}` (200 + 422) + GET /api/rooms/{room}/stats (200 / 404 problem+json) + POST /api/rooms/{room}/stats/merge (200 / 409 enter-room-required 防静默建档) + POST /api/rooms/{room}/stats/outcomes (200 / 404 stats-not-found 防静默建档) + POST /api/rooms/{room}/stats/reset (200 全零 / 404 stats-not-found 防静默建档，W-R 清零保留身份) |
+| lib/db service layer | DB helpers | lib/db.ts:loadRecordByRoom/upsertRecordByRoom/mergeRecordByRoom/recordOutcomeForRoom/resetRecordByRoom/ensureRecordByRoom/registerOrLoginRoom/accumulateMergeStats/closeDb | 7（5 prod + 2 test） | 单表 game_stats（`room TEXT UNIQUE`，W1 列名从 name 改名）的 read→mutate→upsert 单线；registerOrLoginRoom 幂等进入房间；accumulateMergeStats 纯函数 per-field 相加；零 HTTP 上下文（service/transport 分离契约，AGENTS.md §本项目反模式 + README §GraphQL 双兼容预留节）；getDb reconcile 收敛为「列集与 schema 不符即 DROP 重建」（D-4 清空许可，数据不保留） |
+| lib/game-net | 浏览器 HTTP | lib/game-net.ts:postRoomSession/fetchRoomStats/postMerge/postOutcome/postResetRoomStats | 6 prod + 2 test | withTimeout 8s + `{ok,value}/{ok,reason}` 契约；fetchRoomStats 把 404 problem+json 翻译成 `{stats:null}` 让展示层零分支 |
 | lib/api-problem | RFC 9457 helper | lib/api-problem.ts:problemResponse/ProblemSlug/typeUriFor | 4 prod + 3 test | problem+json helper；`{type,title,status,detail?}`；type 是 https 形态短 URI（`https://docs.example.com/probs/<slug>`） |
 | OfflineStatsPanel | 本地战绩展示 | components/OfflineStatsPanel.tsx:1 | 2（app/offline/page.tsx + 1 test） | `/offline` 棋盘↔战绩 view-swap；纯本地（zero network writes，零 `lib/game-net` 引用）；StatsGrid 无条件直显（无名有名一致，2026-09-20 匿名卡退役） |
 | HomeDialogMount | 首页合并弹框宿主 | components/HomeDialogMount.tsx:1 | 1 direct（app/page.tsx） | mount effect 监听 `pathname=/` + focus + visibilitychange + storage + `ttt:offline-stats-changed`（合并后重估 pendingSyncCount），`pendingSyncCount() > declinedSentinel` → 打开 SyncConfirmDialog；W3 起不再 refetch 战绩（OnlineStatsCard 已删，A1 红线） |
@@ -70,7 +70,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | lib/offline-stats | localStorage | lib/offline-stats.ts:OFFLINE_STATS_KEY/OFFLINE_LAST_MERGED_LOCAL_KEY + load/persist/clear/pendingSyncCount | 3 prod + 1 test | 浏览器战绩持久化 + 同步哨兵（防 double-count）；`pendingSyncCount()` 是单一客户端真相；旧 `SOLO_SYNCED_SERVER_KEY` 与 helpers 保留为 `@deprecated` |
 | SyncConfirmDialog | 原生 modal（房间术语化） | components/SyncConfirmDialog.tsx:1 | 1 direct（HomeDialogMount）+ 1 test | 内嵌 roomName 流 + 主「合并并清空」/ 次「保留本地」 + n/24 计数 + ESC 关 + reduced-motion；合并时自己跑 `postRoomSession` + `postMerge`（合并 row 透传 onConfirm）；409 `enter-room-required` 翻译为「需要先进入该房间」就地展示 |
 | Board | 有状态 UI | components/Board.tsx:26 | 1 direct（/online、/offline）；间接经 PlayController/ResultNavigator 等消费 | roving focus、键盘输入、落子动画 |
-| ResultNavigator | 阶段→导航 | components/ResultNavigator.tsx:1 | 1 direct（/online） | phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语）；ref 去重避免 Strict Mode 双推；won（仅胜局，D-2）push 前写 `ttt.result.just-won.v1` 哨兵（helper import 自 ResultCelebration，契约单一真相在那边） |
+| ResultNavigator | 阶段→导航 | components/ResultNavigator.tsx:1 | 1 direct（/online） | phase→'won'/'drawn' 时 push `/result?room=<roomName>`（W3 房间术语）；ref 去重避免 Strict Mode 双推；won（仅胜局，D-2）push 前写 `ttt.result.just-won.v1` 哨兵（helper import 自 ResultCelebration，契约单一真相在那边）；W-F：push 前 await 在途记局写（`awaitOutcomeWrite`，吞错落定），/result 首帧必读已落账本；卸载 guard（cleanup 后不得 push、不得写哨兵） |
+| ResetRoomStatsButton | /result 清空战绩 client 岛 | components/ResetRoomStatsButton.tsx:1 | 1 direct（app/result/page.tsx 分支 3） + 1 test | W-R（ulw-online-reset-and-result-fresh D-3/D-4）：「清空战绩」→ 原生 `<dialog>` 确认（主「清空」/ 次「取消」、ESC、reduced-motion、rAF 初焦落主 CTA）；确认后 `postResetRoomStats(room)` 成功 → `router.refresh()` 直读全零行；404「房间不存在，无法清空。」/ 通用错就地展示且弹框保持打开；room 由 RSC normalize 后 prop 传入（SSR 零 localStorage 读）；仅 stats!==null 分支挂载 |
 | StartGameButton | 入口拦截 | components/StartGameButton.tsx:1 | 2 direct（app/page.tsx 双 CTA） | `requireName` prop：online CTA 默认 true，无名点击 dispatch `ttt:room-required` Window CustomEvent（不导航、不调 startGame），由 RoomGateMount 监听打开 RoomGateDialog；offline CTA 传 false 直行 |
 | WinConfetti | 庆祝层 | components/WinConfetti.tsx:1 | 2 direct（app/offline/page.tsx、ResultCelebration） | bug B fix：hoisted 出 view-swap 容器，celebratedRef 保证胜局仅触发一次；W-A 起组件零改动被 /result 的 ResultCelebration 复用 |
 | ResultCelebration | /result 庆祝 client 岛 | components/ResultCelebration.tsx:1 | 1 direct（app/result/page.tsx，两个 return 各挂一次） + 1 test | 哨兵契约单一真相（JUST_WON_SENTINEL_KEY + write/consumeJustWonSentinel 读后即清）；mount 消费 `ttt.result.just-won.v1` 命中才渲染 WinConfetti（复用 /offline 层全部语义），未命中零渲染；「首次消费生效」免疫 StrictMode 双调用；SSR 首帧恒零庆祝；app/result/page.tsx 双挂载属防御性消费非重复渲染 |
@@ -126,6 +127,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **POST /api/rooms/{room}/stats/merge 409 防静默建档** —— W3（迁移自 W2 的同名 /api/players 契约）：服务端在 merge 前必须先 `loadRecordByRoom(room)`；row 不存在 → 409 `enter-room-required`（对齐 CONTEXT.md「进入房间」动词，W-C D-5b 自 W1 player 术语迁移；不允许「merge 一个未注册 room」被偷渡成 upsert 复活已删除账号）。弹框流强制保证先 hit `POST /api/rooms`（进入房间）才许调 /stats/merge；客户端 `SyncConfirmDialog.runMergeSequence` 把 409 翻译成「需要先进入该房间才能合并（请重新输入房间名）」就地展示，不调 onConfirm。server 端 `loadRecordByRoom` 是 merge handler 唯一的 row-existence probe（mergeRecordByRoom 内部的 read-then-upsert 是私有实现，不参与 409 判定）。
 
 - **POST /api/rooms/{room}/stats/outcomes 404 防静默建档** —— W2 契约 + W3 房间术语迁移：`recordOutcomeForRoom(room, outcome)` 服务端 read → 命中则累加 upsert → 缺失返 `{ ok: false, reason: 'not-found' }`，transport 映射 404 problem+json。拒绝「一个匿名点击路径被偷渡成已注册」。
+
+- **POST /api/rooms/{room}/stats/reset 清零保留身份、永不 DELETE 房间行（W-R，ulw-online-reset-and-result-fresh D-1/D-2）** —— service `resetRecordByRoom`：load 命中 → upsert emptyStats()（含 currentStreak 全字段清零）→ 返回全零行；缺失 404 stats-not-found 防静默建档。DELETE 行会让下一局记局必 404、记账闭环断裂——row 是身份不是数据。UI 唯一入口 = /result 分支 3 的 ResetRoomStatsButton 确认弹框（用户主动确认的破坏性操作，跨设备共享账本禁一步直清）。
+
+- **ResultNavigator push 前必须 await 在途记局写（W-F，ulw-online-reset-and-result-fresh D-6/D-7）** —— makeMove online 分支先 set phase 再 await POST outcomes；导航若不等待在途写，force-dynamic 的 /result RSC 直读 DB 会渲染旧行（主公实测「需刷新一次才见最新战绩」的根因）。store seam `pendingOutcomeWrite` + `awaitOutcomeWrite()` 吞错落定（写失败也导航，展示服务端当时真实状态）；无在途写保持同步 push（offline / anonymous-online 零行为变化）；卸载后不得 push、不得写哨兵。
 
 - **RoomGateMount 挂载期 identity bootstrap（替代 PlayerNameForm 反向 hydration，W3 cace8f4 修补）** —— W2 删除 PlayerNameForm 后挂载期 identity 恢复缺口由 RoomGateMount 接管：`RoomGateMount` 的 useEffect 读 store.roomName；若为空但 localStorage `ttt.room.name.v1` 有值，调 `setRoomName(stored)`。同时执行 `cleanupLegacyPlayerNameKey()`（旧 `ttt.player.name.v1` 单向清除）。这是 home-return 路径上 HomeStatsEntry 能立即渲染「查看 <room> 的战绩 →」链接的前提——soft-nav /offline → / 时 store 单例跨 nav 保留，但 hard reload 时 localStorage 是 source of truth，需 bootstrap 路径恢复。soft-nav 时 store 优先（最新 setRoomName）。
 - **/result 胜利庆祝由一次性 sessionStorage 哨兵 `ttt.result.just-won.v1` 门控（W-A，ulw-result-win-celebration D-1/D-2）** —— 仅 ResultNavigator 见证 phase→'won'（平局不写）push 前写入；`ResultCelebration`（/result client 岛）读后即清、恰消费一次——刷新 / 书签 / 首页「查看战绩」入口（无哨兵）零庆祝，修复旧 ResultBanner store-subscribe「上次胜局后回成绩单误重放」边界；`app/result/page.tsx` 两个 return 各挂一次属防御性消费（保证每加载恰消费一次、陈旧哨兵不泄漏），非重复渲染；零新增用户可见文案（胜利横幅文案需另行逐字送审）。新 testid：`result-celebration`（包装层）+ 既有 `confetti`。
