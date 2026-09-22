@@ -61,6 +61,34 @@ function encodeRoom(room: string): string {
 }
 
 /**
+ * Internal helper: single source of truth for the tagged
+ * {ok, value}/{ok, reason} contract that backs every exported helper
+ * below. W-OPT-c internal refactor: previously the pattern was
+ * inlined in each of the five endpoint helpers; this centralizes it
+ * so a contract change (retry on 503, header injection, JSON-parse
+ * error shape) lives in one place. fetchRoomStats keeps its inline
+ * 404 → {stats: null} mapping because it is the only endpoint with
+ * status-specific read-path translation (AGENTS §本项目反模式
+ * 「fetchRoomStats 把 404 problem+json 翻译成 {stats:null} 让展示
+ * 层零分支」).
+ */
+async function httpJson<T>(
+  url: string,
+  init: RequestInit,
+): Promise<FetchResult<T>> {
+  try {
+    const r = await withTimeout(url, init);
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as T;
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}
+
+/**
  * POST /api/rooms { room } → { stats, existed }.
  * Idempotent register-or-enter (lib/db.ts:registerOrLoginRoom):
  *   - existed:false → fresh row created
@@ -71,20 +99,11 @@ function encodeRoom(room: string): string {
 export async function postRoomSession(
   room: string,
 ): Promise<FetchResult<{ stats: GameStats; existed: boolean }>> {
-  try {
-    const r = await withTimeout('/api/rooms', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ room }),
-    });
-    if (!r.ok) {
-      return { ok: false, reason: 'http-error', status: r.status };
-    }
-    const value = (await r.json()) as { stats: GameStats; existed: boolean };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: reasonFromError(err) };
-  }
+  return httpJson<{ stats: GameStats; existed: boolean }>('/api/rooms', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ room }),
+  });
 }
 
 /**
@@ -93,6 +112,10 @@ export async function postRoomSession(
  * translate that into `{ stats: null }` so display code never
  * inspects status codes. All other non-2xx surface as
  * `{ ok: false, reason: 'http-error', status }`.
+ *
+ * Retains inline try/withTimeout (not httpJson) because of the
+ * status-specific 404 → null translation. The rest of the
+ * error-translation shape still matches httpJson exactly.
  */
 export async function fetchRoomStats(
   room: string,
@@ -127,23 +150,14 @@ export async function postMerge(
   room: string,
   stats: GameStats,
 ): Promise<FetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout(
-      `/api/rooms/${encodeRoom(room)}/stats/merge`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ stats }),
-      },
-    );
-    if (!r.ok) {
-      return { ok: false, reason: 'http-error', status: r.status };
-    }
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: reasonFromError(err) };
-  }
+  return httpJson<{ stats: GameStats }>(
+    `/api/rooms/${encodeRoom(room)}/stats/merge`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stats }),
+    },
+  );
 }
 
 /**
@@ -158,23 +172,14 @@ export async function postOutcome(
   room: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<FetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout(
-      `/api/rooms/${encodeRoom(room)}/stats/outcomes`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ outcome }),
-      },
-    );
-    if (!r.ok) {
-      return { ok: false, reason: 'http-error', status: r.status };
-    }
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: reasonFromError(err) };
-  }
+  return httpJson<{ stats: GameStats }>(
+    `/api/rooms/${encodeRoom(room)}/stats/outcomes`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ outcome }),
+    },
+  );
 }
 
 /**
@@ -188,17 +193,8 @@ export async function postOutcome(
 export async function postResetRoomStats(
   room: string,
 ): Promise<FetchResult<{ stats: GameStats }>> {
-  try {
-    const r = await withTimeout(
-      `/api/rooms/${encodeRoom(room)}/stats/reset`,
-      { method: 'POST' },
-    );
-    if (!r.ok) {
-      return { ok: false, reason: 'http-error', status: r.status };
-    }
-    const value = (await r.json()) as { stats: GameStats };
-    return { ok: true, value };
-  } catch (err) {
-    return { ok: false, reason: reasonFromError(err) };
-  }
+  return httpJson<{ stats: GameStats }>(
+    `/api/rooms/${encodeRoom(room)}/stats/reset`,
+    { method: 'POST' },
+  );
 }
