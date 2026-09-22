@@ -134,3 +134,63 @@ describe('components/ResultCelebration (ulw-result-win-celebration W-A: /result 
     expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
   });
 });
+
+describe('components/ResultCelebration — W-T blind spots (sessionStorage catch path)', () => {
+  afterEach(() => {
+    // Restore any vi.stubGlobal('window', undefined) used by the SSR guard
+    // tests so the suite-level afterEach can safely read sessionStorage.
+    vi.unstubAllGlobals();
+  });
+
+  it('consumeJustWonSentinel: sessionStorage.getItem throws → returns false (line 53 catch branch)', () => {
+    // Mock via Object.defineProperty — `window.sessionStorage` may be a
+    // getter that returns a getter-cached instance. The function reads
+    // through `window.sessionStorage.getItem`; the spy must intercept that.
+    const origGetItem = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(function (this: Storage, key) {
+        if (key === JUST_WON_SENTINEL_KEY) {
+          throw new Error('SecurityError');
+        }
+        return origGetItem.call(this, key);
+      });
+    // The catch swallows the error and returns false — no celebration
+    // can be triggered when sessionStorage is unavailable.
+    expect(consumeJustWonSentinel()).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('consumeJustWonSentinel: no key + getItem available → returns false (read path)', () => {
+    // Pre-condition: no sentinel written. The function returns false.
+    expect(consumeJustWonSentinel()).toBe(false);
+  });
+
+  it('writeJustWonSentinel: typeof window === "undefined" (SSR guard)', () => {
+    // vi.stubGlobal replaces the window identifier; we restore in
+    // afterEach via vi.unstubAllGlobals (added in this describe's
+    // afterEach below).
+    vi.stubGlobal('window', undefined);
+    expect(() => writeJustWonSentinel()).not.toThrow();
+  });
+
+  it('consumeJustWonSentinel: typeof window === "undefined" (SSR guard)', () => {
+    vi.stubGlobal('window', undefined);
+    expect(consumeJustWonSentinel()).toBe(false);
+  });
+
+  it('writeJustWonSentinel: writes "1" under the canonical key', () => {
+    writeJustWonSentinel();
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBe('1');
+  });
+
+  it('consumeJustWonSentinel after writeJustWonSentinel: returns true and clears', () => {
+    writeJustWonSentinel();
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBe('1');
+    expect(consumeJustWonSentinel()).toBe(true);
+    // Read-then-clear: the key is removed.
+    expect(window.sessionStorage.getItem(JUST_WON_SENTINEL_KEY)).toBeNull();
+    // Second consume: false (already cleared).
+    expect(consumeJustWonSentinel()).toBe(false);
+  });
+});
