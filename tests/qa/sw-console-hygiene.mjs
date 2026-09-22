@@ -87,7 +87,11 @@ async function collectConsole(page, url) {
 }
 
 const { browser, ctx, page } = await launchQA();
-let cacheSnapshot = { "tic-tac-toe-v1": [] };
+// Cache name is derived from APP_VERSION (sw.js template literal). Source-
+// level assertions at step 05 still validate the constant exists; here we
+// only seed the snapshot placeholder so the post-step log prints the real
+// shape discovered from the running SW.
+let cacheSnapshot = {};
 const pageErrors = [];
 
 try {
@@ -237,15 +241,24 @@ try {
     }
   });
 
-  await step("04 hard(b) caches['tic-tac-toe-v1'] has no /_next/static/ entries", async () => {
-    // Drive the same-origin fetch loop so the SW has a chance to
-    // populate whatever it intends to populate. Then dump Cache
-    // Storage and assert the _next/static prefix is empty.
+  await step("04 hard(b) caches have no /_next/static/ entries (cache name dynamic)", async () => {
+    // Cache name derives from APP_VERSION (sw.js template literal),
+    // so the probe must discover it via caches.keys() rather than
+    // hardcoding "tic-tac-toe-v1". Drive the same-origin fetch loop
+    // so the SW has a chance to populate whatever it intends to
+    // populate, then dump Cache Storage and assert _next/static is
+    // absent from every cache. Stale-deploy sweep (activate listener
+    // deleting non-matching caches) is checked at the source level
+    // in step 05b.
+    // Hit a representative cacheable asset (CACHEABLE_RE allow-list
+    // includes /manifest.webmanifest + /icon-*) so the SW actually
+    // writes to the cache and we can observe the version-aware name
+    // shape from the running service worker. The previous probe only
+    // loaded pages, which keep the cache empty because /_next/static/**
+    // and HTML responses bypass the SW entirely.
     await page.evaluate(async () => {
-      // Force a refetch of representative static assets; if the SW
-      // were caching them they would land in the cache by now.
-      await fetch("/").catch(() => {});
-      await fetch("/online").catch(() => {});
+      await fetch("/manifest.webmanifest").catch(() => {});
+      await fetch("/icon.svg").catch(() => {});
     });
     await page.waitForTimeout(500);
     const cacheDump = await page.evaluate(async () => {
@@ -259,13 +272,24 @@ try {
       return out;
     });
     cacheSnapshot = cacheDump;
-    const nextStatic = (cacheDump["tic-tac-toe-v1"] ?? []).filter((u) =>
-      u.includes("/_next/static/"),
+    const cacheNames = Object.keys(cacheDump);
+    assert.ok(
+      cacheNames.length > 0,
+      `expected at least one cache after page load; full cache=${JSON.stringify(cacheDump)}`,
     );
+    const allEntries = cacheNames.flatMap((n) => cacheDump[n]);
+    const nextStatic = allEntries.filter((u) => u.includes("/_next/static/"));
     assert.equal(
       nextStatic.length,
       0,
-      `expected zero /_next/static/ entries in tic-tac-toe-v1 cache, found ${JSON.stringify(nextStatic)}; full cache=${JSON.stringify(cacheDump)}`,
+      `expected zero /_next/static/ entries across all caches (${JSON.stringify(cacheNames)}), found ${JSON.stringify(nextStatic)}`,
+    );
+    // Cache names should follow the tic-tac-toe-${APP_VERSION} shape
+    // (see public/sw.js CACHE_NAME). This guards against accidental
+    // hardcoded "v1" regressions in the source.
+    assert.ok(
+      cacheNames.every((n) => /^tic-tac-toe-v[0-9][0-9.a-zA-Z-]*$/.test(n)),
+      `cache name shape unexpected; expected /^tic-tac-toe-v[0-9][0-9.a-zA-Z-]*$/, got ${JSON.stringify(cacheNames)}`,
     );
   });
 
@@ -315,6 +339,36 @@ try {
     assert.ok(
       !/_next\s*\/\s*static\s*\//.test(cacheableLineMatch[1]),
       `CACHEABLE_RE still references /_next/static/ — the fix did not land. line=${cacheableLineMatch[1]}`,
+    );
+  });
+
+  await step("05b source: activate listener sweeps caches whose name != CACHE_NAME", async () => {
+    // W-RV P2 #2 (cache versioning): a bumped APP_VERSION drives a new
+    // CACHE_NAME in the template literal, but the activate handler
+    // must actually delete the stale cache or the browser keeps
+    // serving the old /manifest.webmanifest / icon-*.png indefinitely.
+    const src = readFileSync(SW_PATH, "utf8");
+    const codeOnly = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    // Locate the activate listener body and assert it filters by CACHE_NAME.
+    const activateMatch = codeOnly.match(
+      /self\.addEventListener\(\s*["']activate["']\s*,\s*\(?event\)?\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?/,
+    );
+    assert.ok(activateMatch, `could not locate activate listener in ${SW_PATH}`);
+    const activateBody = activateMatch[0];
+    assert.ok(
+      /caches\.keys\s*\(/.test(activateBody),
+      `activate listener does not call caches.keys() — stale-cache sweep missing. body=${activateBody}`,
+    );
+    assert.ok(
+      /caches\.delete\s*\(/.test(activateBody),
+      `activate listener does not call caches.delete() — stale-cache sweep missing. body=${activateBody}`,
+    );
+    assert.ok(
+      /name\s*!==?\s*CACHE_NAME/.test(activateBody) ||
+        /name\s*===?\s*CACHE_NAME/.test(activateBody),
+      `activate listener does not filter cache names against CACHE_NAME — every cache (including the current one) would be deleted. body=${activateBody}`,
     );
   });
 
