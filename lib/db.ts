@@ -312,9 +312,6 @@ export async function upsertRecordByRoom(
 }
 
 /**
- * Close the cached client (used by tests / shutdown).
- */
-/**
  * Pure per-field addition for the cross-device merge path. Adds
  * server-side totals and client-supplied totals; currentStreak is
  * summed because the client cannot know the chronological order of

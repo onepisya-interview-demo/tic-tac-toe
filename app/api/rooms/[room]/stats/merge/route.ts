@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { loadRecordByRoom, mergeRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
-import { type GameStats } from '@/lib/game';
+import { isGameStats, type GameStats } from '@/lib/game';
 
 // W1 (ulw-room-migration-home-landing) thin transport wrapper.
 //   POST /api/rooms/{room}/stats/merge
@@ -27,23 +27,10 @@ import { type GameStats } from '@/lib/game';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function isGameStatsShape(v: unknown): v is GameStats {
-  if (typeof v !== 'object' || v === null) return false;
-  const s = v as Record<string, unknown>;
-  return (
-    typeof s.totalGames === 'number' && Number.isFinite(s.totalGames) &&
-    typeof s.xWins === 'number' && Number.isFinite(s.xWins) &&
-    typeof s.oWins === 'number' && Number.isFinite(s.oWins) &&
-    typeof s.draws === 'number' && Number.isFinite(s.draws) &&
-    typeof s.currentStreak === 'number' && Number.isFinite(s.currentStreak) &&
-    Object.keys(s).sort().join(',') === 'currentStreak,draws,oWins,totalGames,xWins'
-  );
-}
-
 function isMergeBody(v: unknown): v is { stats: GameStats } {
   if (typeof v !== 'object' || v === null) return false;
   const r = v as Record<string, unknown>;
-  if (!isGameStatsShape(r.stats)) return false;
+  if (!isGameStats(r.stats)) return false;
   for (const k of Object.keys(r)) {
     if (k !== 'stats') return false;
   }
