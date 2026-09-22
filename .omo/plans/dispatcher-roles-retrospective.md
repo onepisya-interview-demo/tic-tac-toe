@@ -234,6 +234,85 @@
 - git add . / -A；用 --no-verify 绕过 hook；手打修订文本引入复写笔误。
 ```
 
+
+### 4.1 单 session 拆分四问（操作化判据）
+
+每个工单派发前回答四问——**任一为否即回拆**：
+
+| 问 | 否 = 必须拆分 |
+| --- | --- |
+| ① **上下文预算** | 输入文件 + 产出能在单会话读毕写毕，无需中途换脑（实测阈：输入 ≤30 文件 / 产出 ≤5 文件） |
+| ② **文件面窄** | 写触面 ≤10 文件或单只读分析域 |
+| ③ **判据可跑** | 完成判据全部机器可判（exit code / 文件存在 / 指标阈值），无主观验收 |
+| ④ **产物交接** | 与其他工单只经 plan 中声明的产物交接（无进行中协调） |
+
+**本波实证**：`ulw-quality-hardening-opt-20260922.md` §四已固化「单 session 拆分四问」为本波工单拆分原则。本节把原则升级为调度者的**操作判据**——四问必答，不答不开拆。
+
+### 4.2 brief 硬性负面清单（防漂移收敛）
+
+调度者 brief 末尾必带**负面清单**段——明确「本任务不做」的事项。**W-AB 漂移实证**：本波 W-AB 工单（消融实验）原 brief 缺负面清单，席误把「优化建议」当产物主动产出 → 与 W-OPT-c 越界。**纠正一次通过的实证**：补负面清单后重派，W-AB 收敛到「消融报告 + 决策日志」，零越界。
+
+**brief 负面清单模板**：
+
+```text
+【本任务不做 / 不动】
+- 不修改 <文件/模块 A>（属 <其他工单> 范围）
+- 不发起 <动作 B>（已在 <plan §X> 决议）
+- 不产出 <产物 C>（属 <其他工单>）
+- 不更新 <AGENTS.md / CONTEXT.md>（digest sync 由调度者统一收口）
+- 不 push / 不 merge / 不发 PR（合并由调度者统一收口）
+```
+
+### 4.3 长报告落库双通道（防 scroll buffer 丢失）
+
+**问题**：herdr pane TUI 有 scroll buffer 限制——长报告（≥500 行）落盘后，pane scroll buffer 截断，调度者后期翻查不到全文。
+
+**解法**：长报告落库走**双通道**：
+
+1. **文件通道**：报告全文写入指定路径（plan §四必带「报告落点」）
+2. **终端通道**：终端输出**摘要 + 报告路径**（≤200 字），让调度者 panel 内即可见
+
+**模板**：
+
+```text
+【终端输出】
+报告已落库：<绝对路径>
+摘要：<一段 ≤200 字，含关键发现 + commit SHA + 落地建议>
+详情：见文件本体。
+```
+
+调度者收尾时主动 grep 报告落点 + 抽查摘要与全文一致性。
+
+### 4.4 commit-msg hook 隐性规则进 brief
+
+调度者 brief 必须显式列 commit-msg hook 的**隐性规则**——避免工单席凭记忆写提交，触发 hook 拒收往返：
+
+**当前 hook 硬门（commit-audit.mjs 5 条 R1-R5）**：
+
+| 规则 | 触发 | brief 必带提示 |
+| --- | --- | --- |
+| R1 | Conventional Commits / prompt() 前缀 | 「commit subject 以 feat/fix/refactor/test/docs/chore/build/ci/perf 开头」 |
+| R2 | subject ≤100 chars | 「subject 中文字符计 ≤100」 |
+| R3 | body 含 WHAT/WHY/HOW tokens | 「body 含英文 because/so that/... 或中文 因为/为了/... + via/by/with/pnpm/vitest/...」 |
+| R4 | Confidence + Scope-risk trailer | 「带 `Confidence: low\|medium\|high` + `Scope-risk: narrow\|moderate\|broad`」 |
+| R5 | 非平凡提交 Plan: footer | 「带 `Plan: .omo/plans/<slug>.md` 页脚」 |
+
+**额外项目约定**（非 hook 硬门，是项目惯例）：subject 描述首字母**避免**大写（commit log 中残留 5 条历史违反——不要继续累积）；中英文混排时 type/scope/token 留英文，描述中文。
+
+### 4.5 「0 win 合法完成态」（优化类工单）
+
+**优化类工单常被默认为「必须有 win」**——若调研后发现**无可行动项**，反而被当成「没完成」。**这是错的**。
+
+**W-OPT-b 教训**：本波 W-OPT-b「性能优化」工单，原 brief 未明示「0 win 合法」。席自报「无可优化项」时本能想「挖一挖再交」，**结果**：重新跑 profile 找边际收益，反而浪费时间且无显著 win。
+
+**协议**：优化类工单的合法完成态：
+
+1. **有 win**：每个 win 一个 commit，带 before/after 实测值（hillclimb 纪律）
+2. **0 win**：「无可优化项」+ **书面证明**——含 profile 数据 + 候选清单 + 排除理由（why not）。`0 win` 与 `N win` 同等合法
+3. **mid win**：部分可行动，保留 win + 标注未行动项（与主公/调度者协商后续是否新立工单）
+
+**brief 必含**：「完成态三选项（0 win / mid win / N win）均合法」——避免席凭本能返工。
+
 **使用说明**：模板中的工具面以本 session 的 herdr + pi/codex 环境为参照；移植到其他 harness 时保持「五段派发结构、负对照探针、capture→exit→close、独立验证」四个骨架不变，替换具体命令即可。
 
 ## 5. 反模式清单
