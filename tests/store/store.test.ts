@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { useGameStore } from '@/lib/store';
+import { hasPendingOutcomeWrite, useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats, type Board, type GameStats } from '@/lib/game';
 import { OFFLINE_STATS_KEY, loadOfflineStats } from '@/lib/offline-stats';
 import { playSound } from '@/lib/sound';
@@ -721,5 +721,81 @@ describe('lib/store pure-local (online branch POSTs outcomes; offline 100% local
     expect(stats.xWins + stats.oWins).toBe(2);
     expect(stats.draws).toBe(0);
     restore();
+  });
+});
+
+// ── W-F outcome write seam (ulw-online-reset-and-result-fresh D-6) ──
+
+describe('lib/store outcome write seam (W-F awaitOutcomeWrite)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(playSound).mockClear();
+    window.localStorage.clear();
+    resetStore();
+  });
+
+  function namedOnlineWinSetup(): void {
+    useGameStore.getState().setRoomName('alice');
+    useGameStore.getState().startGame('online');
+    useGameStore.setState({
+      phase: 'playing',
+      currentPlayer: 'X',
+      board: [
+        'X', null, null,
+        null, 'X', null,
+        null, null, null,
+      ] as unknown as Board,
+    });
+  }
+
+  it('S1: 有在途写——awaitOutcomeWrite 待其落定才 resolve，落定后 seam 清空', async () => {
+    let settle!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      () => new Promise<Response>((resolve) => { settle = resolve; }),
+    );
+    namedOnlineWinSetup();
+    void useGameStore.getState().makeMove(8);
+    expect(useGameStore.getState().phase).toBe('won');
+    expect(hasPendingOutcomeWrite()).toBe(true);
+    let settled = false;
+    const awaiting = useGameStore.getState().awaitOutcomeWrite().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    // 写未落定 → await 不提前 resolve。
+    expect(settled).toBe(false);
+    settle(new Response(
+      JSON.stringify({ stats: { totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 } }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    await awaiting;
+    expect(settled).toBe(true);
+    expect(hasPendingOutcomeWrite()).toBe(false);
+    fetchMock.mockRestore();
+  });
+
+  it('S2: 无在途写——即时 resolve（单 microtask 落定）', async () => {
+    expect(hasPendingOutcomeWrite()).toBe(false);
+    let settled = false;
+    const awaiting = useGameStore.getState().awaitOutcomeWrite().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(true);
+    await awaiting;
+  });
+
+  it('S3: 写失败（fetch 网络错）——seam 照样落定清空，awaitOutcomeWrite 吞错不抛', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      () => Promise.reject(new TypeError('Failed to fetch')),
+    );
+    namedOnlineWinSetup();
+    await expect(useGameStore.getState().makeMove(8)).resolves.toBeUndefined();
+    expect(useGameStore.getState().phase).toBe('won');
+    // 失败也落定：seam 清空，不阻塞任何 await 者。
+    expect(hasPendingOutcomeWrite()).toBe(false);
+    await expect(useGameStore.getState().awaitOutcomeWrite()).resolves.toBeUndefined();
+    fetchMock.mockRestore();
   });
 });

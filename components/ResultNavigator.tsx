@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useGameStore, type GamePhase } from '@/lib/store';
+import { hasPendingOutcomeWrite, useGameStore, type GamePhase } from '@/lib/store';
 import { writeJustWonSentinel } from '@/components/ResultCelebration';
 
 type Props = {
@@ -58,6 +58,15 @@ type Props = {
  *    sentinel write sits inside the same guarded block as the push
  *    (online mode + witnessed win + non-empty room), so every path
  *    that navigates to /result without it stays celebration-free.
+ *  - W-F (ulw-online-reset-and-result-fresh D-7): when an online
+ *    outcome write is in flight (seam in lib/store.ts), the push
+ *    waits for it to settle — success OR failure (`awaitOutcomeWrite`
+ *    swallows) — so /result's force-dynamic RSC reads the upserted
+ *    row instead of a stale one. The sentinel write moves after the
+ *    await (sentinel + push 紧邻原子). The no-pending path stays
+ *    fully synchronous. The async continuation is guarded: once this
+ *    effect cleans up (unmount / dep change), neither sentinel nor
+ *    push may fire.
  *  - StrictMode double mount: refs persist across the intentional
  *    double-invocation, so the second mount run sees the value the
  *    first run wrote.
@@ -78,12 +87,35 @@ export function ResultNavigator({ mode }: Props) {
     if (prev === 'won' || prev === 'drawn') return;
     const room = (roomName ?? '').trim();
     if (room === '') return;
-    if (phase === 'won') {
-      // Wins only (D-2). Written before the push so the sentinel is
-      // already in place when /result's ResultCelebration mounts.
-      writeJustWonSentinel();
+    // W-F 卸载竞态 guard (D-7)：下方 await 的续延可能在 cleanup 之后
+    // 才跑（卸载 / dep 变化 / StrictMode 双调用）。cleanup 一旦发生，
+    // 本导航作废——卸载后不得写哨兵、不得 push。guard 只拦「卸载」，
+    // 不拦 phase 变化：restart 引发的 effect 重跑走 prevPhaseRef 的
+    // witnessed 语义（prev 已 terminal → 早退，不二推）。
+    let cancelled = false;
+    const navigate = () => {
+      if (cancelled) return;
+      if (phase === 'won') {
+        // Wins only (D-2). W-F (D-7)：哨兵写入移到记局写落定之后、
+        // push 之前（哨兵 + push 紧邻原子），/result 的
+        // ResultCelebration 挂载时哨兵必已就位。
+        writeJustWonSentinel();
+      }
+      router.push(`/result?room=${encodeURIComponent(room)}`);
+    };
+    if (hasPendingOutcomeWrite()) {
+      // W-F (D-7)：有在途记局写——先等它落定（成败皆落定，见
+      // awaitOutcomeWrite 的吞错契约）再 push，/result 的
+      // force-dynamic RSC 直读 DB 时 UPSERT 必已落。
+      void useGameStore.getState().awaitOutcomeWrite().then(navigate);
+    } else {
+      // 无在途写（offline / anonymous-online / 写已落定）：保持同步
+      // push，与旧 fire-and-forget 行为零差异。
+      navigate();
     }
-    router.push(`/result?room=${encodeURIComponent(room)}`);
+    return () => {
+      cancelled = true;
+    };
   }, [mode, phase, roomName, router]);
 
   return null;

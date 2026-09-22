@@ -110,6 +110,15 @@ export interface GameActions {
    * write / read (D-4).
    */
   setRoomName: (name: string | null) => void;
+  /**
+   * W-F (ulw-online-reset-and-result-fresh D-6): resolve after the
+   * in-flight online outcome write (if any) settles. Swallows
+   * rejection on purpose — a failed write must not block navigation;
+   * `/result` then renders the server's real state at that moment,
+   * identical to the old fire-and-forget behavior. No pending write →
+   * resolves immediately.
+   */
+  awaitOutcomeWrite: () => Promise<void>;
 }
 
 export type GameStore = GameState & GameActions;
@@ -128,6 +137,23 @@ const initial: GameState = {
 // mirrors the last-known localStorage row; online mode mirrors the
 // server-side per-room row via fetch response.
 let internalStats: GameStats = emptyStats();
+
+// W-F (ulw-online-reset-and-result-fresh D-6): outcome write seam.
+// **为何 module-level**：与上方 internalStats 同款先例——seam 的生命
+// 周期跨组件树（写在 store action 内发起，读在任意挂载的
+// ResultNavigator），与 React 渲染无关；放进 GameState 得为纯调度
+// 状态多跑一次 setState。store 是浏览器内单例（AGENTS §代码地图），
+// module-level 变量即天然单例。
+let pendingOutcomeWrite: Promise<unknown> | null = null;
+
+/**
+ * W-F seam 读侧：当前是否有在途的 online 记局写。ResultNavigator 在
+ * push `/result` 前探测——有在途写才 await；无在途写（offline /
+ * anonymous-online）保持同步 push，与旧 fire-and-forget 行为零差异。
+ */
+export function hasPendingOutcomeWrite(): boolean {
+  return pendingOutcomeWrite !== null;
+}
 
 /**
  * Tagged result for store-internal network writes. Kept for the
@@ -188,11 +214,35 @@ async function apiRecordOutcome(
   return { ok: true, value: r.value };
 }
 
+/**
+ * W-F seam 写侧：把在途 apiRecordOutcome promise 记入 seam，供
+ * ResultNavigator 在 push /result 前 await。落定即清（成败皆清）；
+ * 自等值校验：restart 后第二局可在第一局写仍挂起时再落一子链，
+ * 只有最新 seam 才许清空。`.catch` 把链上 promise 标记为已处理——
+ * apiRecordOutcome 契约上不 reject（postOutcome 全 catch），此处
+ * 防御未来回归把 unhandled rejection 泄进浏览器。
+ */
+function trackOutcomeWrite(
+  write: Promise<StoreFetchResult<{ stats: GameStats }>>,
+): Promise<StoreFetchResult<{ stats: GameStats }>> {
+  const seam: Promise<unknown> = write.finally(() => {
+    if (pendingOutcomeWrite === seam) {
+      pendingOutcomeWrite = null;
+    }
+  });
+  seam.catch(() => {});
+  pendingOutcomeWrite = seam;
+  return write;
+}
+
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
 
   __resetInternalForTests: () => {
     internalStats = emptyStats();
+    // W-F seam：一并丢弃在途记局写，测试从确定的「无 pending」态起跑
+    //（deferred fetch mock 否则会让 seam 跨测试保持挂起）。
+    pendingOutcomeWrite = null;
   },
 
   __getInternalForTests: () => internalStats,
@@ -268,7 +318,11 @@ export const useGameStore = create<GameStore>((set) => ({
       // lib/db.ts:recordOutcomeForRoom. The server-authoritative row
       // mirrors back into internalStats so the next /result render
       // sees the latest numbers without a second fetch.
-      const r = await apiRecordOutcome(s.roomName as string, win.player);
+      // W-F：同时在途写登记进 seam（trackOutcomeWrite），供
+      // ResultNavigator push /result 前等待落定。
+      const r = await trackOutcomeWrite(
+        apiRecordOutcome(s.roomName as string, win.player),
+      );
       if (r.ok) internalStats = r.value.stats;
       return;
     }
@@ -290,7 +344,8 @@ export const useGameStore = create<GameStore>((set) => ({
         persistOfflineStats(internalStats);
         return;
       }
-      const r = await apiRecordOutcome(s.roomName as string, 'draw');
+      // W-F：同 win 分支——在途写登记进 seam（成败皆落定后清）。
+      const r = await trackOutcomeWrite(apiRecordOutcome(s.roomName as string, 'draw'));
       if (r.ok) internalStats = r.value.stats;
       return;
     }
@@ -342,5 +397,18 @@ export const useGameStore = create<GameStore>((set) => ({
       setRoomNameLocal(name);
     }
     set({ roomName: name });
+  },
+
+  awaitOutcomeWrite: async () => {
+    const pending = pendingOutcomeWrite;
+    if (pending === null) return;
+    try {
+      await pending;
+    } catch {
+      // 吞错（D-6 拍板语义）：写失败也算落定。导航不能被记局失败
+      // 卡死——/result 会渲染服务端当时真实状态，与旧 fire-and-forget
+      // 行为零回退。现网 apiRecordOutcome 契约上不 reject
+      // （postOutcome 全 catch），此 catch 是对未来的防御。
+    }
   },
 }));
