@@ -25,8 +25,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
-      include: ['lib/**', 'db/**'],
-      exclude: ['**/*.test.ts', '**/*.property.test.ts', '**/types.ts'],
+      include: ['lib/**', 'db/**', 'components/**'],
+      // `**/*.md`：目录级 AGENTS.md 是 agent 规则文档、非可执行源码。coverage 的
+      // uncovered-file 补扫按 include glob 无扩展名过滤地收集文件（BaseCoverageProvider
+      // getUntestedFilesByRoot），.md 被喂给 vite8/rolldown parseAstAsync 即抛
+      // PARSE_ERROR 并被静默剔除；在此按语义层排除（Markdown 不是覆盖率目标），
+      // 而非靠 exclude 源码目录制造盲区。
+      exclude: ['**/*.test.ts', '**/*.property.test.ts', '**/types.ts', '**/*.md'],
       thresholds: {
         lines: 80,
         functions: 80,
