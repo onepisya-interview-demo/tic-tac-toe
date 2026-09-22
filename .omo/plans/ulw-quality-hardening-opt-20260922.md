@@ -1,20 +1,17 @@
-# ulw: 质量加固与优化波——测试加深 + review + 消融 + 代码/性能优化
+# ulw: 质量加固与优化波（v2）——测试加深 + review + 消融 + 优化 + dev/main 对比 + 反思沉淀
 
 - 日期: 2026-09-22
-- 状态: **drafting**（骨架与侦察实据已入档；§七列有待主公补充信息的裁决点，补齐后定稿派发）
+- 状态: **drafting-v2**（已吸收主公二批补充；§九余量裁决点待补齐后定稿派发）
 - 分支: dev
-- 基线: tag `dev-stable-20260922` @ `6c1a972`（主公指令「修改代码前先打 tag」已完成；origin/dev 已同步至 58eb271，Vercel 已部署新版，主公确认「功能上都是我想要的内容了」）
-- 关联: `.omo/plans/ulw-font-preload-residual-20260922.md` D-1（preload 拆除，已裁决未执行，并入本波 W-OPT）
+- 基线: tag `dev-stable-20260922` @ `6c1a972`（前置 tag 已完成）；origin/dev 同步至 58eb271，Vercel 已部署新版
+- v1→v2 变更: 新增 W-DIFF（dev/main 对比）、W-RF（反思沉淀为可复用资产）、§三 证据优先-验证方法论红线（pstack 融入）、§五 执行拓扑（herdr tab / fresh codex / Pi 分工 / omo 钩子）、§四 波次细化为单会话工单卡
+- 关联: `.omo/plans/ulw-font-preload-residual-20260922.md` D-1（并入 W-OPT）
 
-## 一、目标（主公指令直译）
+## 一、目标（主公指令汇总，七件套）
 
-1. 补充**更充分的测试**；
-2. 补充 **review**（独立评审）；
-3. 补充**消融实验**；
-4. 进行**代码优化与性能优化**。
-   前置（已完成）：功能稳定 tag；执行全程不 push、不绕 hook。
+1. 更充分的**测试**；2. 独立 **review**；3. **消融实验**；4. **代码与性能优化**；5. **dev 与 main 差异对比**；6. **反思**「为什么花了这么多时间 / 需求才对齐」并沉淀为**可复用资产**；7. 全程践行**证据优先-验证**（方法论见 §三）。前置（已完成）：功能稳定 tag。
 
-## 二、侦察实据（2026-09-22，只读，tag 基线上测得）
+## 二、侦察实据（2026-09-22，tag 基线只读实测）
 
 ### 2.1 测试盲区（`pnpm test:coverage`，363/363 全绿下）
 
@@ -25,62 +22,94 @@
 | `lib/api-problem.ts` | **stmts 80%** | 96（typeUriFor 边缘形态） |
 | `lib/db.ts` | 83.9% / **branch 76.6%** | 120,171,185,436-440,473-475（getDb reconcile 与错误分支） |
 | `lib/store.ts` | 91.4% / branch 88.2% | 180-187,210,264（W-F seam 邻域） |
-| `db/schema.ts` | 50% | 42（drizzle 声明，低风险，可豁免） |
+| `db/schema.ts` | 50% | 42（drizzle 声明，建议书面豁免） |
 | **components/** | **完全不可见** | 见 2.2 工具链故障 |
 
-### 2.2 coverage 工具链故障（W-T0 修复项，盲区定位的前置）
+### 2.2 coverage 工具链故障（W-T0 前置修复项）
 
-- `@vitest/coverage-v8` 生成报告时抛 **rolldown `PARSE_ERROR`**（`parseAstAsync` 链路），导致 components/ 整目录从报告消失——当前 90% 的数字是**残缺报告**，「更充分的测试」必须先修工具链否则盲区定位失真。
-- vitest 报告：jsdom 每 file 重建 ×30（20.89s，占 57% 时长）；官方建议 `pool: 'vmThreads'` 或 `isolate: false`——测试基建提速候选（需评估隔离性代价）。
+- `@vitest/coverage-v8` 报告生成抛 **rolldown `PARSE_ERROR`**（parseAstAsync 链路）→ components/ 整目录从报告消失，90% 是**残缺数字**。
+- vitest：jsdom 每 file 重建 ×30（20.89s，57% 时长）；`pool: 'vmThreads'` 提速候选（隔离性代价需评估，与 W-T 不混装）。
 
 ### 2.3 性能面快照
 
-- bundle：最大 chunk 224KB + 160KB + 112KB（未压缩；gzip 后待定性——vendor/app 占比分析未做，W-OPT 侦察项）。
-- D-1（已裁决）：`Geist({preload:false})` 拆除 Link 头 font preload，两类偶发警告源断根；代价由 font-display:swap + Geist Fallback（size-adjust 校准）兜底。
-- 既有待办（历史缓议，不在本波强承诺）：`lib/db-path.ts` 单一常量源抽取消（RC-drift §4.1 P1-4/P1-5）。
+- bundle：最大 chunk 224KB / 160KB / 112KB（未压缩；vendor/app 占比定性未做，W-OPT 侦察项）。
+- D-1（已裁决待执行）：`Geist({preload:false})` 拆除 Link 头 font preload，双偶发源断根；代价由 font-display:swap + Geist Fallback 校准兜底。
+- 历史缓议（不强承诺）：`lib/db-path.ts` 常量源抽取消（RC-drift §4.1 P1-4/P1-5）。
 
-### 2.4 review 面（W-RV 输入清单）
+### 2.4 dev vs main 差异规模（W-DIFF 输入）
 
-功能面四提交：`9fe08a0`（reset 端点家族 + ResetRoomStatsButton）、`e15e049`（ResultNavigator W-F seam）、`1c3899e`（ResultCelebration）、`2d8f8d4`（OnlineGateMount）。高危存量面：`lib/store.ts`、`lib/db.ts`、`components/Board.tsx`、`public/sw.js`。
+`git diff main..dev --stat`：**116 提交 / 169 文件 / +21734/-1905**；merge-base `51f164c`（2026-09-15）。main 停在功能重做之前——线上用户看到的与 dev 功能面差 116 提交。对比维度：提交分类占比（feat/fix/docs/test/chore）、用户可见行为变化清单、main 缺失的 bug 修复清单（风险面）、发布建议（main 是否推进，裁决归主公）。
 
-## 三、波次草案（正交拆解，herdr 派发）
+### 2.5 review 面（W-RV 输入清单）
 
-| 波 | 内容 | 席位角色 | 产出 |
-| --- | --- | --- | --- |
-| W-T0 | coverage 工具链修复（PARSE_ERROR 定位与修复）+ vitest pool 评估 | worker.coder（小改） | 完整 coverage 报告可复现 |
-| W-T | 测试加固：§2.1 盲区逐项补齐（分支覆盖优先）+ mutation 触发评估（lib/game.ts、lib/store.ts 高危面） | worker.test | 盲区清零或显式豁免清单 |
-| W-RV | reviewer.code 只读评审 §2.4 清单（正确性/可读性/架构/安全/性能五维） | reviewer.code | patch-anchored findings |
-| W-OPT | 代码优化（消费 W-RV findings）+ 性能优化（D-1 拆除 + bundle 定性与可行动项） | worker.coder | 优化提交（逐项原子） |
-| W-AB | 消融实验（对象见 §七 Q1） | scientist.ablation | keep/kill/校准提案 |
-| W-V | fresh-context 对抗终验 + V 报告入档 | auditor.acceptance / 终验席 | V13 报告 |
-| 收尾 | digest sync（AGENTS.md 三文件）+ sessions capture + tab 清场 | 调度者 | 契约同步 |
+功能面四提交：`9fe08a0`（reset 家族）、`e15e049`（W-F seam）、`1c3899e`（ResultCelebration）、`2d8f8d4`（OnlineGateMount）。高危存量面：`lib/store.ts`、`lib/db.ts`、`components/Board.tsx`、`public/sw.js`。
 
-依赖序：W-T0 → W-T；W-RV ∥ W-T（只读与测试互斥写入面）；W-OPT 消费 W-RV + W-T；W-AB、W-V 收口。
+## 三、方法论红线：证据优先-验证（pstack 思想融入，不照抄）
 
-## 四、验收标准（草案，定稿时逐条机器化）
+吸收自 `~/.hermes/memory/knowledge/pstack-notes.md`（不安装；需全文时按其 §4 路由表 Read ROOT 源文件）。**每条吸收点配对我们已有的硬门**（主公金训：答不出强制门的不吸收）：
 
-1. coverage 完整报告（含 components/）产出且 PARSE_ERROR 消除；盲区表逐项闭合（补测试或书面豁免）。
-2. review findings 逐条处置（fix / 显式不修 + 理由），无静默忽略。
-3. D-1 落地后 `sw-console-hygiene`（强化版）全绿；Link 头零 font 条目断言生效。
-4. 六层门禁每 commit 全绿；lore trailer + Plan footer 齐全；零 push。
-5. 消融实验带 baseline/ablated 对比数据与 keep/kill 结论。
-6. 终验 fresh-context 对抗通过后 V13 入档。
+| 吸收点 | 本波落点 | 强制硬门 |
+| --- | --- | --- |
+| 「It compiles is not evidence」 | 一切 done 宣布须对照真实产物 | 六层门禁（机械）+ 终验席信产物不信汇报（协议） |
+| 5 级确定性阶梯（默认目标第 4 级「跑了，错了会响」） | 各工单完成判据必须可跑（探针/脚本/命令 exit code） | 验收标准逐条机器可判；无法到 4 级须标 `unproven` |
+| 每句结论带证据或标签（measured/inferred/guess） | review findings、消融报告、反思报告的写作规范 | reviewer/distiller 席的产出契约里写死 |
+| 验证方式 × 变更类型匹配 | UI→探针走真实流程；性能→前后 profile；存储→读回写入值；子代理产物→看 diff 不看自报 | 各波验收节按类型点名验证手段 |
+| blast-radius「别信自己的分析报告」 | 跨文件工单的影响面声明须带可跑证据 | 调度者独立抽查（抽查即复跑） |
+| show-me-your-work TSV 决策日志 | W-AB / W-V 长任务工单要求 append-only 日志（指针非散文） | 终验先查日志存在且非空 |
 
-## 五、红线（延续既有契约）
+## 四、波次与工单拆分（每卡 = 单会话可完成；ulw- 前缀触发 omo 工作流）
 
-六层门禁；禁 `--no-verify`；禁 `git add . / -A`；push 等主公指令；主 worktree :3000 dev 在线时禁 build（波次构建走独立 worktree）；herdr 每席独立 worktree、QA 端口分片、rebase + ff-only 保线性；`NEXT.JS 16 agent-rules` 块不可动。
+> 拆分原则：整体计划跨多会话执行；每张工单绑定一个 fresh 会话（子代理或 herdr agent runtime），完成判据全部可跑。依赖序 W-T0 → W-T；W-RV ∥ W-T（只读与测试互斥面）；W-OPT 消费前两者；W-DIFF、W-RF 独立可并行；W-AB、W-V 收口。
 
-## 六、风险与缓议
+| 工单 | 目标（一句话） | 完成判据（可跑） | runtime | 依赖 |
+| --- | --- | --- | --- | --- |
+| W-T0 | 修 coverage 工具链 PARSE_ERROR，产出含 components/ 的完整报告；vmThreads 评估（只评估不动，有实据另立单） | `pnpm test:coverage` exit 0 且报告含 components/ 行 | fresh codex | — |
+| W-T | 盲区表逐项补齐（分支覆盖优先）+ mutation 触发评估（lib/game.ts / lib/store.ts） | coverage 报告盲区清零或书面豁免清单；`pnpm vitest run` 全绿 | fresh codex | W-T0 |
+| W-RV | 五维只读评审 §2.5 清单，findings 带 file:line + 分级 | findings 报告（每条带证据指针）；不改任何文件 | fresh codex（只读） | — |
+| W-OPT-a | D-1 落地：layout 拆 preload + sw-console-hygiene 强化 + sw.js 注释同步 | 强化版探针 exit 0（含 Link 头零 font 断言 + reload 场景）；六层门禁全绿 | fresh codex | plan 已裁决 |
+| W-OPT-b | 性能优化：bundle 定性（gzip 后 vendor/app 占比）+ 可行动项实施（每项前后 profile/size 对比） | 每个 accepted win 一个 commit，带 before/after 实测值（hillclimb 纪律） | fresh codex | W-RV |
+| W-OPT-c | 代码优化：消费 W-RV findings 逐条处置（fix / dismiss 带反证） | findings 处置表全覆盖，无静默忽略 | fresh codex | W-RV、W-T |
+| W-DIFF | dev vs main 差异对比报告（§2.4 四维度）+ main 推进建议 | 对比报告入 docs/（分类占比、行为变化、风险面、建议）；数据全带 git 指针 | Pi（只读 git 分析 + 报告） | — |
+| W-RF | 反思蒸馏：本波时间花销与需求对齐复盘 → 可复用资产（需求 intake checklist / 调度模板修订 / docs 经验条目） | 资产清单落库（每条带本波实例佐证）；见 §六 反思输入 | distiller 席 | 全波收口前 |
+| W-AB | 消融实验（对象待 §九 Q1 裁决） | baseline vs ablated 对比数据 + keep/kill 结论，配 TSV 决策日志 | scientist 席 | §九 Q1 |
+| W-V | fresh-context 对抗终验（全波产出）+ V13 报告入档 | 终验报告 ACCEPT；信产物不信自报 | fresh 终验席 | 全部 |
 
-- vmThreads/isolate 调整可能改变测试隔离语义——W-T0 只评估、有实据再动，不与 W-T 混装。
-- bundle 224KB chunk 若为 React/Next vendor 主体，可行动空间有限（无依赖增删约束），W-OPT 只做「定性 + 可行动项」，不为压数字引入风险。
-- schema.ts 50% 为声明性代码，建议书面豁免不硬凑。
+## 五、执行拓扑（herdr 纪律 + runtime 分工）
 
-## 七、待主公补充信息（补齐后定稿）
+- **herdr tab 优先**（不 split pane）；`herdr --session <name> tab create` → `agent start <name> --kind codex` → `agent prompt --wait --until done` → `agent get/read` 轮询。
+- **fresh codex 多席**为默认执行体（跨文件修复/测试/评审）；**old session** 仅用于强接续任务（如 W-OPT 内部跨日续作，须先 session-pickup：把既有轨迹当权威，不重推）。
+- **Pi**（`/Users/onepisya/.vite-plus/bin/pi`，0 插件 bash/read/write/edit）：只读 git 分析、批量文件挖掘、探针小修、脚本验证类工单（W-DIFF 类）；**禁派跨文件重构**（无 LSP，能力边界见 AGENTS.md §运行时能力边界）。
+- 每席独立 git worktree（`git worktree add ../ttt-<seat> -b ulw/<wave>`，终验席 `--detach`）；QA 端口分片；rebase + ff-only 合入保线性；委派先 teach-back，产出独立验证前视为未完成。
+- omo 钩子：工单 plan 文件名一律 `ulw-` 前缀；主公侧可用 `$omo:ulw-plan / ulw-loop / ulw-research / start-work / ultrawork` 驱动。
 
-- **Q1 消融对象**：主公所言「消融实验」指（a）对本波优化变更做 baseline vs ablated 因果对比（如 D-1 拆除前后的警告频次/FOUT 时长），还是（b）沿用仓库先例对验证门禁组件做消融（`.omo/plans/agents-orthogonality-audit.md` 范式），或两者都要？
-- **Q2 优化偏好**：性能面优先级排序（bundle 体积 / 运行时渲染 / 网络与缓存 / 测试基建速度）；代码优化接受度（纯内部质量重构是否在授权内，还是仅修 review findings）。
-- **Q3 review 范围**：仅 §2.4 功能面四提交，还是扩展到全仓核心面（store/db/Board/sw.js 全量）？
-- **Q4 测试加深边界**：mutation 测试是否本波触发（耗时显著）；`@deprecated` 旧 surface（offline-stats 103,149）补测试还是随退役清理。
-- **Q5 执行形态**：多席并行（herdr 四席）推进，还是小波串行逐席汇报？
-- **Q6 其他补充**：主公提及「还有很多要补充的信息」——补充后并入本节或修订波次。
+## 六、W-RF 反思输入（调度者初步假设，distiller 验证/补充后成文）
+
+反思命题：**为什么花了这么多时间？需求为什么才对齐？**
+
+1. **需求对齐返工**：本波初始指令只有四个动词（测试/review/消融/优化），范围/深度/形态/边界未给，plan 起草后主公两轮补充（质量设施要求 + 执行形态约束）才收敛——根因假设：调度者未在起草前跑结构化 intake 清单，按默认假设先跑。沉淀方向：**需求 intake checklist**（范围/深度/形态/边界/验收五维，未答不起草）入 dispatcher 模板。
+2. **调研路径顺序**：preload 偶发问题先走了 14+ 场景内部复现矩阵，后才命中 Chromium 现有 bug（外部证据）——反思假设：机制级未知问题应**外部已知证据检索先行**（为什么类问题的 7 类证据源），内部复现矩阵作为确认而非发现手段。沉淀方向：调研前置模板（外部证据优先序）。
+3. **返工统计待挖**：116 提交中 fix/revert/redo 占比、V9-V12 各终验的返工条数——distiller 从 git log + session 转录定量，不凭印象。
+4. 沉淀产物候选：docs/retro-2026Q3.md（复盘五问）、dispatcher-roles-retrospective.md §4 增补、AGENTS.md 反模式增补（若有新反模式实锤）。
+
+## 七、验收标准（草案，定稿逐条机器化）
+
+1. coverage 完整报告（含 components/）可复现，PARSE_ERROR 消除；盲区逐项闭合或书面豁免。
+2. review findings 100% 处置（fix / dismiss 带具体反证），处置表入档。
+3. D-1 落地：强化版 sw-console-hygiene 全绿；Link 头零 font 条目断言生效。
+4. W-DIFF 报告入 docs/，四维度数据全带 git 指针；main 推进建议交主公裁决。
+5. W-RF 资产清单落库，每条带本波实例佐证（非空泛教训）。
+6. 消融带 baseline/ablated 数据 + keep/kill + TSV 决策日志。
+7. 每工单 commit 过六层门禁 + lore trailer + Plan footer；零 push；终验 V13 fresh-context 对抗 ACCEPT。
+
+## 八、红线（延续既有契约）
+
+六层门禁；禁 `--no-verify`；禁 `git add . / -A`；push 等主公指令；主 worktree :3000 dev 在线时禁 build（波次构建走独立 worktree）；NEXT.JS 16 agent-rules 块不可动；CONTEXT.md 术语契约（产出物零 `_Avoid_` 别名）。
+
+## 九、待主公补充（v2 余量）
+
+- **Q1 消融对象**：（a）本波优化变更的 baseline vs ablated 因果对比，还是（b）验证门禁组件消融（仓库先例范式），或两者？
+- **Q2 优化偏好**：性能优先级（bundle / 渲染 / 网络缓存 / 测试速度）？纯内部重构是否授权，还是仅修 findings？
+- **Q3 review 范围**：仅 §2.5 清单，还是扩展全仓核心面？
+- **Q4 测试加深边界**：mutation 本波是否触发？`@deprecated` 旧面补测试还是随退役清理？
+- **Q5 已部分回答**：执行形态按 §五（herdr tab + fresh codex 多席 + Pi 只读 + old session 接续）——确认或修正。
+- **Q6 其他补充**：主公后续信息继续并入。
