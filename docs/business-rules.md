@@ -22,6 +22,8 @@
 ## 维护约定
 
 - **反面场景列是必备半边**——写不出反面场景的规则说明还没想清楚边界，退回 aligned 门。
+- **探针闭环强制**（2026-09-22）：新增/修订 BR 条目时探针列不得留空——留空的规则只有文档约束力，**禁止被后续 wave 的 plan 引用为「已对齐」**；探针缺口标「⚠ 未探针化」并在该 plan 内补齐或显式 defer（defer 须主公确认）。
 - 「⚠ 未探针化」的条目 = 规则已 decree 但缺可执行探针，补探针前该规则只有文档约束力。
 - 本表初版（2026-09-22）由既有 plan/anti-patterns 蒸馏 + BR-1 新 decree 合成；蒸馏条目的反面场景列建议主公抽查一次（aligned 门），BR-1 已当面 decree。
 - 来源标记：BR-1 = 主公 decree 2026-09-22（[plan](../.omo/plans/ulw-home-merge-trigger-spec-20260922.md)）；BR-2..10 蒸馏自 `docs/anti-patterns.md` L1 条目与对应 ulw plan 验收。
+- 意图块（Feature/Rule/Scenario）的 Rule 层直接引用本表 BR 编号——本表是「意图 → 探针」闭环的枢纽（[requirement-intake §4.3](./requirement-intake.md)）。

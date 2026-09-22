@@ -12,6 +12,7 @@
 - **词汇步**：需求描述中的名词先映射 CONTEXT.md（领域术语契约）；不在表内的术语显式对齐（入 Pending 区或御定），**禁止以默认假设开工**
 - **对齐（Alignment）**：调度者与主公就「同一组术语 + 同一组验收场景」描述一致。**不是「主公没说不行」**——后者是默认假设漂移
 - **复述确认（Teach-back + Given-When-Then）**：调度者把需求用 Given-When-Then 验收场景复述给主公，主公确认后该 plan 才能进入 `aligned` 状态
+- **意图块（Intent Block）**：Feature / Rule / Scenario 三层 + **反面场景** + 保持项 + 探针映射的结构化意图表达（§4.3）；Rule 层映射 `business-rules.md` BR 编号，是与主公对齐的最小单元，也是派发 brief 的【验收标准】段引用源
 - **Aligned 门**：plan 状态机新增的强制门——`drafting → aligned → ready-for-approval → executing`。Aligned = 主公已确认精确描述（不仅是「没问题」）
 
 ## 二、intake 五维清单（起草 plan 前的必答五问）
@@ -89,7 +90,41 @@
 
 主公回应「一致」/「以上偏差 X」/「补充 Y」三态之一。**「一致」**= 该 plan 进入 `aligned` 状态。
 
-### 4.3 偏差处理
+### 4.3 意图块（Intent Block）：Feature / Rule / Scenario 三层 + 反面场景强制
+
+§4.2 的 Given-When-Then 场景按 BDD Gherkin 分层组织（Feature → Rule → Scenario），并强制绑定 `business-rules.md`：
+
+```text
+【意图块 / Intent Block】
+Feature：<功能名一句话>
+Rule：<业务规则一条；映射 business-rules.md BR-x 编号，无对应则声明「新增 BR」>
+  Scenario: <正向——什么时候发生>
+    GIVEN <前提>
+    WHEN <动作>
+    THEN <可观察结果>
+  Scenario: <反面——什么时候不发生>    ← 必备，缺失 = 未对齐
+    GIVEN <前提>
+    WHEN <动作>
+    THEN <可观察的不发生结果>
+保持项（What Stays the Same）：<明确不改变的行为 / 契约 / 触发时机>
+探针映射：<tests/qa/*.mjs 或组件测试文件路径；本 plan 新交付则写「本 plan 交付」>
+```
+
+- **反面场景是验收的必备半边**（learnings §32 实证：只写正向的验收必然留洞，且洞会被测试固化）。写不出反面 = 规则边界没想清楚，退回 aligned 门重议。
+- **Rule 层映射 `business-rules.md`**：每条 Rule 对应一个 BR 条目（或声明新增）；探针映射列不得留空——留空 = 该意图只有文档约束力，不得被后续 wave 引用为「已对齐」。
+- **保持项必填**：字面读者假说（The fault was in the spec）——agent 是字面读者，spec 留出的解释空间会被填充；「改 A 不许碰 B」必须显式写出 B。
+- 规则级条款（无场景可讲的全局约束）可用 EARS：`WHEN <触发> THE SYSTEM SHALL <响应>`。
+
+### 4.4 规模双模式（防 sledgehammer）
+
+| 模式 | 触发 | 意图块要求 |
+| --- | --- | --- |
+| **轻量** | 纯文档 / 单行修复 / 零行为变化 | decree 一行 + 反面一行（如「反面：不改变 X」），免 Rule 分层 |
+| **完整** | 改行为 / 新增交互 / 改触发时机 / 触碰 BR 条目 | 完整 Feature/Rule/Scenario 三层 + 探针映射 |
+
+判定权在调度者；主公可在 aligned 门降级/升级模式。
+
+### 4.5 偏差处理
 
 - **指出偏差**：调度者修订 plan，回到 §4.2 重发复述确认
 - **补充**：调度者把补充项纳入五维 + 词汇步，回到 §4.2 重发
@@ -196,6 +231,8 @@ plan 内任何「待 X 事实确认后触发 Y」的分叉声明，必须含三�
 | §二 intake 五维 | 调度者委派协议 | brief 模板必填段 | 建议新增至 dispatcher-roles-retrospective.md §4 委派协议 |
 | §三 词汇步 | plan 模板必填段 | 「词汇映射表」段必填 | 建议新建 plan 模板（`docs/plan-template.md`） |
 | §四 对齐协议 | aligned 门 | plan 状态行枚举 | 模板约束 |
+| §四.3 意图块反面场景 | aligned 门 | 反面缺失 = 未对齐；探针映射列非空 | 模板约束（2026-09-22 新增） |
+| §四.4 规模双模式 | 调度者判定 | 意图块降级/升级 | 模板约束（2026-09-22 新增） |
 | §五 状态机 | commit-msg hook 验证 | `commit-audit.mjs` Plan: footer 校验可扩 | 建议硬化（需 commit-audit.mjs 改） |
 | §六 事实依赖 | plan 模板必填段 | 「事实依赖表」段必填 | 模板约束 |
 | §七 调研路径 | plan 模板必填段 | 「L1 检索报告」段必填 | 模板约束 |
@@ -222,6 +259,7 @@ plan 内任何「待 X 事实确认后触发 Y」的分叉声明，必须含三�
 - [ ] §二 五维全部有答案（无空白）
 - [ ] §三 词汇映射表完整（三态处置明确）
 - [ ] §四 Given-When-Then 验收场景至少 3 条（happy + edge + regression）
+- [ ] §四.3 意图块含**反面场景** + Rule 已映射 BR 编号 + 探针映射列非空（完整模式）
 - [ ] §五 状态行枚举合法（drafting/aligned/ready-for-approval/executing/done 之一）
 - [ ] §六 每条「待 X」三必填齐全
 - [ ] §七 「为什么类」问题 L1 检索报告已附（≥1 引用 + 时间戳）

@@ -190,3 +190,12 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 ### L1-28：route-scoped 组件用自身 ref 记「上一个路径」
 
 只在 `/` 挂载的组件离开 `/` 即卸载，组件内 ref/`prevPathname` 在软导航下永远拿不到来源路由。正确机制：layout 层挂不卸载的 `NavPrevTracker`（`useLayoutEffect` 写 sessionStorage）+ 页级 consume-on-read（硬刷新天然无标记）。实证：`components/NavPrevTracker.tsx` + `HomeDialogMount` BR-1 触发条件。
+
+### L1-29：假设「派发时意图绑定 = 全程意图保持」（执行中漂移）
+
+实测（主公反复验证 + llm-wiki `agent-rule-decay`）：规则不是被违反而是被后续 token out-voted——**约 15 次 tool call 后 system prompt 规则可靠失效**，全程无报错（green-dashboard failures）；「模型能复述规则 ≠ 遵守规则」。已证伪修法：写大声 / 重复 5 遍 / 买更大窗口。已验证对策（全量协议见 [dispatcher-playbook §意图锚定与防漂移](./dispatcher-playbook.md)）：
+1. 约束搬到动作时刻（gate 步骤 / 探针），使其成为 context 最新近内容；
+2. 「禁止 X」改写为「要求执行的动作 Y」（transcript 留痕）；
+3. 风险步骤前最后一轮重注入意图块 Scenario；
+4. 漂移先分型再处置：注意力稀释（忘约束但方向大体对）→ 重锚定 / 新 session；上下文中毒（错误假设被反复加固、纠错后继续错）→ 弃会话重启，不在错误会话里辩论；
+5. 能探针化的约束绝不依赖 LLM 记忆——探针没有上下文，所以不会漂。
