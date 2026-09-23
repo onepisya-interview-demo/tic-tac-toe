@@ -33,26 +33,28 @@
 | # | 分支语义 | 源码位置 | 测试名（lib/view-transition.test.ts） |
 |---|---------|---------|---------------------------------------|
 | 1 | SSR no-op：typeof document === 'undefined' 立即同步 callback | lib/view-transition.ts:24-27 | `runs callback synchronously when document is undefined (SSR no-op)` |
-| 2 | hasVT=true + animationend 匹配（page-fade-in）正常到达 | lib/view-transition.ts:46-53 | `fires callback when matching animationend arrives (page-fade-in)` |
-| 3 | hasVT=true + 事件不达 → 600ms safety 兜底 | lib/view-transition.ts:29,44 | `falls back to 600ms safety when animationend never fires` |
+| 2 | hasVT=true + animationend 匹配（page-fade-in）正常到达 → onEnd 命中白名单并调 finish | lib/view-transition.ts:36-43（onEnd 体，含白名单 if :37-40 + finish 调用 :41；listener 安装见 :46） | `fires callback when matching animationend arrives (page-fade-in)` |
+| 3 | hasVT=true + 事件不达 → 600ms safety 兜底 | lib/view-transition.ts:44（window.setTimeout(finish, 600)）+ :29-35（finish 体含 done 守门 + cleanup） | `falls back to 600ms safety when animationend never fires` |
 | 4 | hasVT=false（animations 为空）→ 双 rAF 后触发 | lib/view-transition.ts:55-61 | `fires after double rAF when no VT animation is registered` |
-| 5 | 一次性守卫：多次事件 / safety 到期都只触发一次 | lib/view-transition.ts:30-35 | `guards against duplicate callback across multiple triggers` |
-| 6 | cleanup 后无残留监听 / 定时器 | lib/view-transition.ts:31-32,45 | `cleans up listeners and timer after firing` |
-| 7 | 动画名白名单：非匹配 animationName（cell-pop）不触发 | lib/view-transition.ts:36-42 | `ignores animationend with non-matching animationName` |
+| 5 | 一次性守卫：多次事件 / safety 到期都只触发一次 | lib/view-transition.ts:29-35（finish 体：done 守门 :30-31 + callback :41） | `guards against duplicate callback across multiple triggers` |
+| 6 | cleanup 后无残留监听 / 定时器（removeEventListener + clearTimeout） | lib/view-transition.ts:32-33（finish 体内：removeEventListener :32 + clearTimeout :33） | `cleans up listeners and timer after firing` |
+| 7 | 动画名白名单：非匹配 animationName（cell-pop）不触发 | lib/view-transition.ts:36-43（onEnd 体；白名单实际生效 :37-40 的两个等值比较） | `ignores animationend with non-matching animationName` |
 
 补充 case（4b）：hasVT=false + getAnimations 缺失（jsdom / 旧浏览器）→ 同 hasVT=false 双 rAF。
+
+**Footnote**：case 4b 与 case 4 语义同效——spyOnGetAnimations() 在 jsdom 缺 document.getAnimations 时（lib/view-transition.test.ts:51-60）走 `Object.defineProperty` 安装 + 之后用 `mockReturnValue([])` 模拟「getAnimations 缺失」，与 case 4 走「getAnimations() 返回 []」的 source 路径（lib/view-transition.ts:49-50 → `:55-61` 双 rAF）合并为同一分支。**语义同效，并入 case 4 用例，不另测。**
 
 ## 四、Alert 测试断言点（components/ui/Alert.test.tsx）
 
 | # | 断言 | 源码契约 |
 |---|------|---------|
-| 1 | 默认 `role="alert"` | Alert.tsx:30,44 |
-| 2 | `role="status"` 透传 | Alert.tsx:30,42 |
-| 3 | 默认 `data-testid="ui-alert"` + 自定义 testid 透传 | Alert.tsx:34,45 |
-| 4 | title 有/无的条件渲染 | Alert.tsx:65 |
-| 5 | 图标 svg `aria-hidden="true"` | Alert.tsx:57 |
-| 6 | children 渲染 | Alert.tsx:66 |
-| 7 | className 合并不丢自有类 | Alert.tsx:48-54 |
+| 1 | 默认 `role="alert"` | Alert.tsx:39（destructured default `role = 'alert'`）+ :46（JSX `role={role}`） |
+| 2 | `role="status"` 透传 | Alert.tsx:29（AlertProps `role?: 'alert' \| 'status'` 类型声明允许）+ :46（JSX `role={role}`） |
+| 3 | 默认 `data-testid="ui-alert"` + 自定义 testid 透传 | Alert.tsx:31（AlertProps `'data-testid'?: string` 类型声明）+ :43（`const testId = rest['data-testid'] ?? 'ui-alert'` 默认计算）+ :47（JSX `data-testid={testId}`） |
+| 4 | title 有/无的条件渲染 | Alert.tsx:65（`{title ? <p className="font-medium mb-1">{title}</p> : null}`） |
+| 5 | 图标 svg `aria-hidden="true"` | Alert.tsx:57（svg `aria-hidden="true"` attr） |
+| 6 | children 渲染 | Alert.tsx:66（`<div className="text-small leading-relaxed">{children}</div>`） |
+| 7 | className 合并不丢自有类 | Alert.tsx:48-54（className 数组 + `.join(' ').trim()`） |
 
 ## 五、策略
 

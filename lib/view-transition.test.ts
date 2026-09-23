@@ -47,6 +47,13 @@ function queueRaf(): { flush: () => void; pending: () => number } {
  * Install document.getAnimations (not present on jsdom Document) then spy on
  * it so we can control what animations the source sees. Returns the spy so
  * tests can assert call counts and restore the original at teardown.
+ *
+ * Cross-test hygiene: when the helper installs the property, it sets the
+ * module-level `installedGetAnimations` flag so afterEach can remove the
+ * property via Reflect.deleteProperty — `vi.restoreAllMocks` only undoes
+ * the vi.spyOn wrapper, not the original Object.defineProperty install.
+ * Without this, `document.getAnimations` would leak from the first test
+ * that hits the install branch into every subsequent test in this file.
  */
 function spyOnGetAnimations(): ReturnType<typeof vi.spyOn> {
   if (!('getAnimations' in document)) {
@@ -55,9 +62,15 @@ function spyOnGetAnimations(): ReturnType<typeof vi.spyOn> {
       writable: true,
       value: () => [],
     });
+    installedGetAnimations = true;
   }
   return vi.spyOn(document, 'getAnimations' as unknown as 'getAnimations');
 }
+
+// Set by spyOnGetAnimations() when it Object.defineProperty-installs a
+// missing property; reset in beforeEach; consumed in afterEach to remove
+// the install so it does not leak across tests in this file.
+let installedGetAnimations = false;
 
 // -- per-test scaffolding -----------------------------------------------------
 
@@ -74,12 +87,24 @@ beforeEach(() => {
   // Source uses window.setTimeout (lib/view-transition.ts:29). vi.useFakeTimers
   // already covers it; the spy is for asserting cleanup (clearTimeout call).
   timerSpy = vi.spyOn(globalThis, 'clearTimeout');
+  // Reset the install-leak flag so afterEach only deletes the property when
+  // the current test's helper call actually installed it.
+  installedGetAnimations = false;
 });
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  // Tear down the property spyOnGetAnimations() installed via
+  // Object.defineProperty when jsdom's document lacked getAnimations.
+  // vi.restoreAllMocks restores the vi.spyOn wrapper but leaves the
+  // Object.defineProperty'd property behind — that leak would corrupt
+  // every subsequent test in this file by short-circuiting the
+  // `if (!('getAnimations' in document))` branch in spyOnGetAnimations().
+  if (installedGetAnimations) {
+    Reflect.deleteProperty(document, 'getAnimations');
+  }
 });
 
 // -- tests --------------------------------------------------------------------

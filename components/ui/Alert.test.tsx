@@ -14,24 +14,30 @@ function renderAlert(
 
 describe('components/ui/Alert (danger error block contract)', () => {
   it('defaults role to "alert" when caller does not pass one', () => {
-    // Contract: Alert.tsx:30,44 — role defaults to 'alert' (synchronous
-    // error surface) so assistive tech announces the message immediately.
+    // Contract: Alert.tsx:39,46 — destructured default `role = 'alert'`
+    // (:39) is forwarded as the JSX `role` attribute (:46) so assistive tech
+    // announces the message immediately on a synchronous error surface.
     renderAlert();
     expect(screen.getByTestId('ui-alert')).toHaveAttribute('role', 'alert');
   });
 
   it('forwards role="status" for async / background error events', () => {
-    // Contract: Alert.tsx:30,42 — 'status' is the role for background
-    // (non-user-triggered) events; OutcomeErrorBanner uses this variant
+    // Contract: Alert.tsx:29,46 — AlertProps `role?: 'alert' | 'status'`
+    // (:29) accepts 'status', and the JSX `role={role}` attribute (:46)
+    // forwards it unchanged. OutcomeErrorBanner uses this variant
     // (components/OutcomeErrorBanner.tsx:39-58).
     renderAlert({ role: 'status' });
     expect(screen.getByTestId('ui-alert')).toHaveAttribute('role', 'status');
   });
 
   it('uses "ui-alert" as the default data-testid and forwards a custom one', () => {
-    // Contract: Alert.tsx:34,45 — the testid default is 'ui-alert'; callers
-    // such as RoomGateDialog (':room-gate-error') and SyncConfirmDialog
-    // (':sync-confirm-error') override it. Both code paths must work.
+    // Contract: Alert.tsx:31,43,47 — AlertProps `'data-testid'?: string`
+    // (:31) declares the override; `const testId = rest['data-testid'] ??
+    // 'ui-alert'` (:43) computes the default; JSX `data-testid={testId}`
+    // (:47) forwards it. Callers such as RoomGateDialog
+    // ('room-gate-error', components/RoomGateDialog.tsx:227) and
+    // SyncConfirmDialog ('sync-confirm-error', components/SyncConfirmDialog.tsx:274)
+    // override it; both code paths must work.
     const { rerender } = renderAlert();
     expect(screen.getByTestId('ui-alert')).toBeInTheDocument();
     rerender(
