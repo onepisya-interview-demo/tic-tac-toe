@@ -1,11 +1,11 @@
-# ulw-modal-collision-and-error-alerts-20260923
+# Plan: ulw-modal-collision-and-error-alerts-20260923 —— 三弹框穿模 + 错误行告警升级
 
-## Goal
+## 目标
 修复 tic-tac-toe 仓库的两个 UX 缺陷：(1) 三弹框在 React `<ViewTransition>` 路由过渡期间 `showModal()` 导致「穿模」；(2) 网络超时/错误行用 `text-small text-text-secondary` 灰文本不醒目。BR-1 业务语义保持不变。
 
-## Scope
+## 范围
 
-### In-Scope
+### 范围内
 - `app/globals.css`：新增 danger 配色 token；::backdrop 选器泛化到三弹框
 - `DESIGN.md` §1 Color Tokens：新增 danger 行
 - `components/ui/Alert.tsx`：新增（danger 变体，内联 SVG 图标，role=alert）
@@ -23,7 +23,7 @@
 - `tests/store/store.test.ts`：新增 outcomeError 翻转断言
 - `components/ResetRoomStatsButton.test.tsx`：新增 R4-aborted 分支（mock aborted → 断言独立 timeout 文案）
 
-### Out-of-Scope
+### 范围外
 - 不引入任何第三方库（AGENTS §L0-5）；Alert 用自有 Tailwind + 内联 SVG
 - 不改路由命名（`/online`/`/offline`/`/result` 保留）
 - 不改 BR-1 业务语义——只改触发时机
@@ -32,14 +32,14 @@
 - 不动 SSR 首帧渲染策略
 - 不引入新水合触发点
 
-## Hard constraints (negative list)
+## 硬约束（负面清单）
 - L0：service/transport 分离契约不变；SSR 首帧禁读 localStorage；Server Component 默认
 - L0：不引入新 UI/路由/动画/数据访问/表单库
 - 不引入 div onClick、emoji 图标、组件级 focus ring
 - 不 `--no-verify`；commit 走 commit-msg hook
 - 探针保持向后兼容——保留旧 testid 与 role
 
-## Implementation
+## 实施
 
 ### Step 1 — globals.css 配色与 ::backdrop 泛化
 **文件**：`app/globals.css`
@@ -73,7 +73,7 @@ dialog[data-testid="reset-room-dialog"]::backdrop {
 | `danger-surface` | `rgba(248,113,113,0.12)` | 错误块背景 |
 | `danger-border` | `rgba(248,113,113,0.35)` | 错误块边框 |
 ```
-**VERIFY**：`grep danger DESIGN.md | wc -l` ≥4
+**VERIFY**：`grep danger DESIGN.md | wc -l` ≥ 4 行
 
 ### Step 3 — 新建 components/ui/Alert.tsx
 **WHY**：统一错误块 UI 契约；三处错误行同源同型。
@@ -261,19 +261,19 @@ await step("step 02c BR-1 错峰：dialog 在 VT 窗口内不 [open]，之后才
   await shoot(page, "home-dialog-after-vt.png");
 });
 ```
-**VERIFY**：probe PASS
+**VERIFY**：探针 PASS
 
 ### Step 10 — store.test 补 outcomeError
 **WHY**：锁定 store 状态翻转契约。
 **HOW**：在 tests/store/store.test.ts 加 describe：makeMove online 分支 mock postOutcome 返回 ok:false → 断言 useGameStore.getState().outcomeError !== null；startGame 后断言 outcomeError === null。
-**VERIFY**：vitest PASS
+**VERIFY**：vitest 通过
 
 ### Step 11 — ResetRoomStatsButton.test 补 R4-aborted
 **WHY**：锁定 timeout 独立文案。
 **HOW**：mock fetch 返回 `new Response('', { status: 599 })`（或抛 AbortError）；断言 error 文案为「清空请求超时，请稍后重试」。
-**VERIFY**：vitest PASS
+**VERIFY**：vitest 通过
 
-## Final verification wave
+## 终验波
 1. `pnpm vitest run` — 全测通过（含新 step 02c、R4-aborted、outcomeError 断言）
 2. `pnpm typecheck` — 0 error
 3. `pnpm lint` — 0 violation
@@ -286,7 +286,7 @@ await step("step 02c BR-1 错峰：dialog 在 VT 窗口内不 [open]，之后才
    - `BASE_URL=http://localhost:3101 node tests/qa/visual-qa.mjs`
    - 探针 PASS 后 kill server pid（cleanup receipt）
 
-## Commit plan
+## 提交计划
 两个原子 commit（按案切分；案② 先收口再 案① 修复；subject ≤100 字符；含 lore trailer + Plan footer）：
 - `feat(ui): 新增 danger Alert 组件 + outcome error banner + 三弹框错误行升级 + ResetRoomStatsButton timeout 独立文案`
   - 覆盖 Step 1-5 + Step 10-11
@@ -295,13 +295,13 @@ await step("step 02c BR-1 错峰：dialog 在 VT 窗口内不 [open]，之后才
 
 每个 commit 独立 build+test 绿。
 
-## Risks
+## 风险
 - `afterViewTransition` 的 hasVT 探测可能在 React commit 与浏览器动画注册之间有时序差——600ms safety 兜底。
 - Alert 组件颜色 token 在 Tailwind v4 中需通过 @theme 声明，@theme 块已存在，新增 token 自动加入 Tailwind 类谱——无新构建配置。
 - postOutcome 失败的 reason 字符串目前是 'aborted' / 'network-error' / 'http-error' / 'not-found'，banner 文案需覆盖至少前三个；not-found 情况罕见（房间突然消失），文案「战报失败 (http-error)，请稍后重试」统一兜底。
 - 探针 step 02c 用 page.waitForTimeout(100) 断言早期未 [open]，该断言依赖 showModal 的延迟至少 100ms——afterViewTransition 双 rAF + 600ms 安全窗给到足够余量；若实测不足，调高阈值。
 
-## Reference
+## 参考
 - 调查报告：`/tmp/pi-invest-modal-20260923.md`
 - DESIGN.md §1 / §3 图底关系 / §5 motion contract
 - AGENTS.md §L0 硬约束 / §commit 契约 / §验证六层
