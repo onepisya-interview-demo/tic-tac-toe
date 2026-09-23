@@ -205,3 +205,9 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 宣布任何键 / 分支 / 字段「永不被触达」之前，必须 grep **全链路每一层**的联合类型定义（service 返回 → store 包装层 → UI 消费），而不是只看被引用文件的那一层——「上游类型没有」不等于「下游包装层没有」。
 
 实证（2026-09-23 卫生收口波 REJECT 返工）：`OutcomeErrorBanner` 的 `'not-found'` 文案键被当死键删除，依据是 `lib/game-net.ts` 的 `FetchResult` 词汇表只有 `aborted | network-error | http-error`。但 `lib/store.ts` 的 `StoreFetchResult` 包装层词汇表**额外含 `'not-found'`**，且 `apiRecordOutcome` 把 POST outcome 的 404 主动翻译成该 reason（房间被服务端删除后的局内记分正是这条链）。删除后该场景退化为裸 token fallback，属行为变更，违反「零行为改动」红线。分类「死代码」的合格证据是逐层 file:line 的全链路词汇表清单，缺一层即未证实。
+
+### L1-31：退役文件时未同步其引用方（CI job / 脚本引用悬空）
+
+删除探针 / 模块时只删文件、不清理引用者，悬空引用在下次被触发时才爆——且常爆在最疼的场合（发版 PR 的 CI）。删除前的合格动作是 `rg '<被删文件名>' .github tests docs` 把引用方清一遍，而不是假定「没人引用」。
+
+实证（2026-09-23 发版 PR #14）：`d07fd07` 语义清退删除 `tests/qa/stats-race-qa.mjs`（被测对象 `/api/stats` 链已随 `7765b3f` 御裁退役），但 `.github/workflows/ci.yml` 的 `stats-race` job 未同步删除，悬空此后一直未暴露（dependabot PR 基于旧 main workflow），直到 dev→main 发版 PR 首次触发即 MODULE_NOT_FOUND 红。对策：退役任何被引用文件前先清引用方（CI job / docs / 脚本）；「ci.yml 被引探针存在性 × tests/qa 清单」可做机械对账测试——能探针化的约束不靠记忆（L1-29 同款哲学）。注意：被退役能力若确需等价覆盖（如 `/api/rooms` 链竞态），那是**新探针票**，把旧 job 硬指到别的探针只会造出假覆盖。
