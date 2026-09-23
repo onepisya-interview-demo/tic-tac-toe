@@ -23,6 +23,7 @@ const REASON_COPY: Record<string, string> = {
   aborted: '战报上传超时（战绩未上服，请稍后重试）',
   'network-error': '战报上传失败（网络异常，战绩未上服）',
   'http-error': '战报上传失败（战绩未上服）',
+  'not-found': '战报上传失败（房间不存在）',
 };
 
 function copyFor(reason: string): string {

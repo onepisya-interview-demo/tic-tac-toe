@@ -114,3 +114,42 @@ Your next move: 已获用户授权 plan + execute 同会话进行，直接进入
 - AC-4 OutcomeErrorBanner 死键已删（选 A，rg 命中数从 2 降到 1）
 - AC-5 `git diff dev..HEAD` 仅含注释/空白/死键三类；`pnpm vitest run` / typecheck / lint 全绿
 - AC-6 原子提交 + lore trailer + Plan footer，commit-msg hook PASS，禁 --no-verify
+
+## 整改记录（REJECT 处置）
+
+> d48ff6e 中第 4 项「删除 `components/OutcomeErrorBanner.tsx` 的 `'not-found'` 键（理由：客户端 reason 词汇表只有 aborted/network-error/http-error）」被 reviewer 判 REJECT，调度者二次验证属实。2026-09-23 整改如下。
+
+### REJECT 原因
+
+d48ff6e 删键前提仅看了 `lib/game-net.ts` 的 `FetchResult.reason` 词汇表（aborted / network-error / http-error），**漏看了 `lib/store.ts` 的 `StoreFetchResult` 包装层词汇表**。证据链：
+
+- `lib/store.ts:189`：`StoreFetchResult<T>` 的 reason 联合类型显式包含 `'not-found'`：`{ ok: false; reason: 'aborted' | 'network-error' | 'http-error' | 'not-found'; status?: number }`。
+- `lib/store.ts:222-225`：`apiRecordOutcome` 的 JSDoc 明确说明「The 404 from the server maps to `reason: 'not-found'` so callers can branch on the row-vanished case」。
+- `lib/store.ts:235`：`apiRecordOutcome` 把 POST `/api/rooms/:room/outcome` 的 HTTP 404 主动翻译成 `{ ok: false, reason: 'not-found' }`。
+- 完整链路：局中房间被服务端删除 → `apiRecordOutcome` 拿到 404 → 翻译成 `reason: 'not-found'` → `makeMove` 失败分支 `set({ outcomeError: { reason: 'not-found', ... } })` → `<OutcomeErrorBanner />` 走 `REASON_COPY['not-found']` 渲染中文文案。
+
+### 「死键」前提错在哪里
+
+`REASON_COPY` 是**横幅文案映射表**（理由 → 中文文案），其键集必须覆盖 store 真正会写入 `outcomeError.reason` 的全部词汇。store 在 `lib/store.ts:189` 显式承诺了 4 个 reason；删掉 `'not-found'` 后该场景退化为 fallback `战报上传失败 (not-found)`（裸 token），是**用户可见的中文文案丢失**，属行为变更，违反本任务「零行为改动」硬红线。
+
+错把 `lib/game-net.ts` 的 `FetchResult` 词汇表当作 store 输出契约——两者层叠：`game-net.FetchResult` 是 transport 层原始 reason，`store.StoreFetchResult` 是 service 层包装 reason，后者会在 service 内部把 404 翻成 `'not-found'`，**两者词汇表不同**。
+
+### 处置选项重评
+
+- 选项 A（d48ff6e 选择，REJECT）：删除键。→ 与事实不符，违反零行为改动。
+- 选项 B（本次恢复即采纳）：保留键 + 在 `REASON_COPY` 上方注释里点明「键集必须与 `lib/store.ts:189` 的 `StoreFetchResult.reason` 联合对齐」防再误删。
+- 选项 B 的实质 = 本次还原单行：键为活链路故保留。
+
+### 改动清单（仅 2 文件）
+
+- `components/OutcomeErrorBanner.tsx`：`REASON_COPY` 末尾（`'http-error'` 行之后）恢复一行 `'not-found': '战报上传失败（房间不存在）',`。
+- `.omo/plans/ulw-p3-hygiene-20260923.md`：本文节。
+
+其余三项（`app/globals.css` 对比度注释、`lib/store.ts` 注释、`components/OnlineGateMount.tsx` 空白行）维持 d48ff6e 原状（reviewer 判 PASS）。
+
+### 验收（机械可验）
+
+- AC-1：`rg -n "not-found" components/OutcomeErrorBanner.tsx` 恰好命中 1 行（该键）。
+- AC-2：`git diff d48ff6e..HEAD --stat` 仅含 OutcomeErrorBanner.tsx（+1）与本 plan 文件。
+- AC-3：`pnpm vitest run components/ui/Alert.test.tsx tests/store/store.test.ts` 全绿。
+- AC-4：commit-msg hook PASS，禁 `--no-verify`。
