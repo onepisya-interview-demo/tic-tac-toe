@@ -47,3 +47,5 @@
 - 机制类探针（验证走哪条代码路径）配**结构化诊断输出**（`[step][diag]` 行，含事件名 / 伪元素 / 事件计数字段），让 future outlier 可证伪；实测样本与异常样本都入档 plan。
 - 阈值必须有推导依据（动画时长 + commit 余量 + safety 上限），写入 plan；禁拍脑袋数。
 - 实证：`home-return-qa.mjs` step 02c（clickToOpen 实测 327~354ms、animationend margin ~137ms、600ms safety 未触发；1/5 run 的 -1338ms 异常靠诊断字段 `evtName/evtPseudo/evtCount` 闭合）。
+- 02c EARLY 阈值（100ms）暂不放宽；CI 首次 flake 时读 DIAG 行 `clickToOpenMs`，若 path C 实测 >80ms 则 EARLY = 实测 P99 + 20ms（判据来源：`.omo/decisions-20260923.md` 项 3）。
+

@@ -84,6 +84,7 @@
 
 > **等数据，现阶段不动。判据明确：CI 上 02c 首次 flake 时读 DIAG 行的 clickToOpenMs，若 path C 实测 >80ms 则把 EARLY 调到实测 P99 + 20ms。**
 > 判据外化（防只活在决策文档里）：修复席④落 `tests/qa/AGENTS.md` 时序敏感断言节。
+> 判据已外化至 tests/qa/AGENTS.md（本票，分支 docs/decree-record）。
 
 ---
 
