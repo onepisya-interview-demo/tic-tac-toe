@@ -39,3 +39,11 @@
 - 胜局流程不假设固定 X/O 先手；先手是随机的。
 - headless 音频不做真实听感断言；要 instrument Web Audio 节点。
 - 修改提交消息策略时，必须同步 auditor、commitlint config 和文档，不能只改一处。
+
+## 时序敏感断言（2026-09-23 新增）
+
+- 时序断言锚定到**动作时刻**（click 前后取时钟差中位），不锚定 `waitForLoadState` / `waitForTimeout` 等相对量——相对量的真实耗时随环境浮动，断言时刻与被测时刻两侧都是未知量时，断言没有保护力。
+- 「错峰 / 延迟」类行为要**双沿钉**：既有「T 内不发生」上界，也有「不早于 T2 才发生」下界（防止回归把延迟改没了还能 PASS）。
+- 机制类探针（验证走哪条代码路径）配**结构化诊断输出**（`[step][diag]` 行，含事件名 / 伪元素 / 事件计数字段），让 future outlier 可证伪；实测样本与异常样本都入档 plan。
+- 阈值必须有推导依据（动画时长 + commit 余量 + safety 上限），写入 plan；禁拍脑袋数。
+- 实证：`home-return-qa.mjs` step 02c（clickToOpen 实测 327~354ms、animationend margin ~137ms、600ms safety 未触发；1/5 run 的 -1338ms 异常靠诊断字段 `evtName/evtPseudo/evtCount` 闭合）。

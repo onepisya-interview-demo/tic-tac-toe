@@ -199,3 +199,9 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 3. 风险步骤前最后一轮重注入意图块 Scenario；
 4. 漂移先分型再处置：注意力稀释（忘约束但方向大体对）→ 重锚定 / 新 session；上下文中毒（错误假设被反复加固、纠错后继续错）→ 弃会话重启，不在错误会话里辩论；
 5. 能探针化的约束绝不依赖 LLM 记忆——探针没有上下文，所以不会漂。
+
+### L1-30：断言「死代码 / 死键」前未跨包装层核验类型词汇表
+
+宣布任何键 / 分支 / 字段「永不被触达」之前，必须 grep **全链路每一层**的联合类型定义（service 返回 → store 包装层 → UI 消费），而不是只看被引用文件的那一层——「上游类型没有」不等于「下游包装层没有」。
+
+实证（2026-09-23 卫生收口波 REJECT 返工）：`OutcomeErrorBanner` 的 `'not-found'` 文案键被当死键删除，依据是 `lib/game-net.ts` 的 `FetchResult` 词汇表只有 `aborted | network-error | http-error`。但 `lib/store.ts` 的 `StoreFetchResult` 包装层词汇表**额外含 `'not-found'`**，且 `apiRecordOutcome` 把 POST outcome 的 404 主动翻译成该 reason（房间被服务端删除后的局内记分正是这条链）。删除后该场景退化为裸 token fallback，属行为变更，违反「零行为改动」红线。分类「死代码」的合格证据是逐层 file:line 的全链路词汇表清单，缺一层即未证实。
