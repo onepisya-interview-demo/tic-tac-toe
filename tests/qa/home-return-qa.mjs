@@ -253,7 +253,7 @@ await step("step 02b BR-1 反面: direct entry with pending>0 does NOT open dial
 // 回调里, 避免 SyncConfirmDialog 在 150ms + 250ms VT 窗口内被烘进 root
 // 快照。本探针断言: 软导航后 100ms 内 dialog 不应 [open]; 350ms 后
 // [open] — 钉住'错峰', 防止后人把 setOpen 提前触发。
-await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [open]", async () => {
+await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [open]（重锚到点击时刻）", async () => {
   const { browser, ctx, page } = await launchQA();
   try {
     const name = `hrqa02c-${RUN_SUFFIX}`;
@@ -288,24 +288,135 @@ await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [
       },
       { timeout: 5000 },
     );
-    // 软导航回首页 — softNavHome 等 networkidle 后再走 (lib 帮手)
-    await softNavHome(page);
-    // 在 100ms 之内 dialog 仍应未 [open] — 错峰开启延迟 showModal
-    await page.waitForTimeout(100);
-    const earlyOpen = await page
-      .locator('[data-testid="sync-confirm-dialog"][open]')
-      .count();
+    // 重锚：错峰开启判定时刻锚定到真实点击时刻，禁依赖 softNavHome 后的
+    // 相对量 waitForTimeout(100)。诊断注入揭示 afterViewTransition 真实开框
+    // 路径（animationend / safety / rAF）。
+    //
+    // 阈值依据（实测前推演 + 必要时回测调整）：
+    //   - page-fade-in 150ms / view-swap-in 180ms（app/globals.css @keyframes）
+    //   - React 18 commit ~16~32ms
+    //   - safety 600ms（lib/view-transition.ts:25）
+    //   - 双 rAF ~32ms（无 VT 路径）
+    //   EARLY_THRESHOLD_MS=100：strict < 150ms animation 时长；catch path C
+    //     早开回归（双 rAF < 80ms 触发 → 与 BR-1 错峰语义相违）
+    //   LATE_LOWER_MS=80：path C 双 rAF 上限 + 10ms 余量；保留 catch "setOpen
+    //     提前到 rAF 后立刻" 回归的能力
+    //   LATE_BOUND_MS=1500：> safety 600ms + commit + 浏览器抖动 + 探针 poll 余量
+
+    // 注入 animationend 监听 — 与 product lib/view-transition.ts:onEnd 同型位置
+    // （document.addEventListener('animationend', ..., true) capture phase）。
+    // SPA 软导航不重 init document，监听在当前 document 持续生效。
+    await page.evaluate(() => {
+      if (!window.__qaVTAnimEvents) window.__qaVTAnimEvents = [];
+      if (!window.__qaVTAnimListenerAdded) {
+        document.addEventListener(
+          "animationend",
+          (e) => {
+            if (
+              e.animationName === "page-fade-in" ||
+              e.animationName === "view-swap-in"
+            ) {
+              window.__qaVTAnimEvents.push({
+                name: e.animationName,
+                t: performance.now(),
+                pseudo: e.pseudoElement || "(none)",
+                target: e.target && e.target.tagName,
+              });
+            }
+          },
+          true,
+        );
+        window.__qaVTAnimListenerAdded = true;
+      }
+      // 清空 driveTopRowWin 期间残余（cell-pop / draw-shake 等非目标名不进数组）
+      window.__qaVTAnimEvents.length = 0;
+    });
+
+    // 软导航回首页（inline 替代 softNavHome，捕获 click 时刻锚点）
+    const tBefore = await page.evaluate(() => performance.now());
+    await Promise.all([
+      page.waitForURL(/\/$/, { timeout: 8000 }),
+      page.locator('a[href="/"]').first().click(),
+    ]);
+    const tAfter = await page.evaluate(() => performance.now());
+    // 中位近似 click 时刻（误差 < 1 frame 16ms，远小于阈值裕量）
+    const tClick = (tBefore + tAfter) / 2;
+    await page.waitForLoadState("networkidle");
+
+    // 早期未开断言 — 基于真实 elapsed since click
+    const EARLY_THRESHOLD_MS = 100;
+    const earlyAt = await page.evaluate(
+      async (args) => {
+        while (performance.now() - args.tClick < args.threshold) {
+          await new Promise((r) => setTimeout(r, 2));
+        }
+        const dialog = document.querySelector(
+          '[data-testid="sync-confirm-dialog"]',
+        );
+        const isOpen = !!(dialog && dialog.hasAttribute("open"));
+        return { elapsed: performance.now() - args.tClick, isOpen };
+      },
+      { tClick, threshold: EARLY_THRESHOLD_MS },
+    );
     assert.equal(
-      earlyOpen,
-      0,
-      `错峰开启: 100ms 内 dialog 不应 [open]; got ${earlyOpen}`,
+      earlyAt.isOpen,
+      false,
+      `错峰开启: click 后 ${EARLY_THRESHOLD_MS}ms 内 dialog 不应 [open] (elapsed=${earlyAt.elapsed.toFixed(1)}ms)`,
     );
     await shoot(page, "home-dialog-vt-window.png");
-    // 350ms 后 dialog 应 [open] — afterViewTransition 600ms safety 上限内
-    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
-      timeout: 1000,
-    });
+
+    // 开启上限 + 真实开启时刻（双沿）— 取代原 waitForSelector 单断言
+    const LATE_BOUND_MS = 1500;
+    const LATE_LOWER_MS = 80;
+    const lateAt = await page.evaluate(
+      async (args) => {
+        const start = performance.now();
+        while (performance.now() - start < args.bound) {
+          const dialog = document.querySelector(
+            '[data-testid="sync-confirm-dialog"]',
+          );
+          if (dialog && dialog.hasAttribute("open")) {
+            return performance.now() - args.tClick;
+          }
+          await new Promise((r) => setTimeout(r, 2));
+        }
+        return -1;
+      },
+      { tClick, bound: LATE_BOUND_MS },
+    );
+    assert.ok(
+      lateAt > 0,
+      `错峰开启: dialog 应在 click 后 ${LATE_BOUND_MS}ms 内 [open]; got clickToOpen=${lateAt.toFixed(1)}ms`,
+    );
+    assert.ok(
+      lateAt > LATE_LOWER_MS,
+      `错峰开启: dialog 开启时刻应 > ${LATE_LOWER_MS}ms (防 path C 双 rAF 早开回归); got ${lateAt.toFixed(1)}ms`,
+    );
     await shoot(page, "home-dialog-after-vt.png");
+
+    // 诊断输出 — 揭示 afterViewTransition 真实开框路径
+    // （animationend vs safety 600ms vs 双 rAF），传为下一张票输入。
+    const animEvents = await page.evaluate(
+      () => window.__qaVTAnimEvents ?? [],
+    );
+    // animEvents[0].t 是 page-side performance.now() 原值（页面加载以来 ms）；
+    // tClick 是同一时间轴的中位近似；lateAt 已是「相对 click」的 elapsed。
+    // 单位统一：把 animationend 时刻换算到 elapsed-since-click 再相减。
+    const animEndRawT = animEvents.length > 0 ? animEvents[0].t : null;
+    const animEndElapsed =
+      animEndRawT !== null ? animEndRawT - tClick : null;
+    const animationendMargin =
+      animEndElapsed !== null ? lateAt - animEndElapsed : null;
+    const path =
+      animEvents.length > 0
+        ? "animationend"
+        : lateAt < 200
+          ? "rAF"
+          : "safety";
+    console.log(
+      `[02c][diag] animationend reached: ${animEvents.length > 0}, path: ${path}, clickToOpenMs: ${lateAt.toFixed(1)}, animationendMargin: ${animationendMargin !== null ? animationendMargin.toFixed(1) + "ms" : "n/a"}`,
+    );
+
     // 关闭 dialog, 保持页面 idle 给后续 step 用 (ctx/page 随即关闭)
     const closeBtn = await page.$('[data-testid="sync-confirm-reject"]');
     if (closeBtn) await closeBtn.click().catch(() => {});
