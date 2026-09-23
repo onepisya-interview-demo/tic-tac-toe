@@ -46,6 +46,26 @@
 
 清单之外的场景一律走默认中文。
 
+### 中文 commit-audit 机械规则 R7（2026-09-23 入档）
+
+`tests/qa/commit-audit.mjs` R7 把以上约定变成机械门禁，行为：
+
+- **subject**：剥掉 Conventional 前缀（`feat(scope): ` 等）后，描述部分必须含至少 1 个 CJK 字符。阈值取最小门槛（`≥1 CJK`）以防误杀标识符密集中文 subject。
+- **trailer 自由文本值**：`Constraint:` / `Rejected:` / `Directive:` / `Tested:` / `Not-tested:` / `Co-authored-by:` / `Signed-off-by:` / `Reviewer:` / `Reviewed-by:` / `Refs:` / `Closes:` / `Fixes:` / `Breaking:` / `See-also:` 等所有自由文本 trailer 的值必须含至少 1 个 CJK 字符。
+- **trailer 豁免清单**：`Confidence: low|medium|high`、`Scope-risk: narrow|moderate|broad`、`Plan: .omo/plans/<slug>.md` 不进 R7 校验——它们是枚举或路径 footer，不是散文。
+
+正反例（与 `tests/qa/commit-audit.test.ts` R7 用例同构）：
+
+| 类型 | 例子 | R7 |
+| --- | --- | --- |
+| 正 ① 中文 subject | `fix(x): 中文测试` | PASS |
+| 正 ② 历史兼容 | `git log --format=%s -30` 中 29 条中文 subject | PASS |
+| 正 ③ 标识符密集 | `refactor(store): 抽取 resetStore helper 统一 11 处 setState 重置块` | PASS |
+| 反 ① 纯英文 subject | `fix(x): hello world` | FAIL R7 |
+| 反 ② 中文 subject + 英文 free-text trailer | `Constraint: keep the leaf intact.` | FAIL R7 |
+
+R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
+
 ## 原子提交
 
 一个提交一个主题。每个提交都必须独立构建、测试为绿；不提交 WIP 或 omnibus。next-env.d.ts 和 Next 自动生成区块的变化单独作为 chore 提交，方便未来 bisect。

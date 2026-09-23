@@ -19,6 +19,7 @@
 - **brief 末尾必带「本任务不做」段**（不动哪些文件/不发起哪些动作/不产出哪些产物）——W-AB 首席漂移实证：补负面清单后重派一次通过。
 - **长报告落盘 + 终端摘要双通道**（防 herdr scroll buffer 截断）。
 - **commit-audit 隐性规则进 brief**（subject 避免大写开头、header ≤100 字符）。
+- **派发 brief 正文一律中文**（dispatcher-author prose default 中文）。技能触发行（`@lark-...` 等以 `@skill:` 开头的触发指令）与外部 prompt 模板原文豁免——只对调度者自写的「做什么 / 验收 / 不做」段钉中文。brief 漂移实证：history plan 中文占比 1%–60% 不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts-20260923.md` 英文骨架 + 中文正文）。R7 是 commit 端的中文硬门禁；brief 端的中文要求与 R7 配套，闭环。
 - **优化类工单「0 win（书面证明）」与「N win」同等合法**。
 
 ## 意图锚定与防漂移（2026-09-22 新增）

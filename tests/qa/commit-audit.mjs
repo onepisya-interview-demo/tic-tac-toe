@@ -22,6 +22,15 @@ const args = parseArgs(process.argv.slice(2));
 const TYPE_RE = /^(feat|fix|refactor|test|docs|chore|build|ci|perf)(\([^)]+\))?!?: /;
 const PROMPT_RE = /^prompt\([^)]+\)!?: /;
 
+// R7 (中文语言规则，2026-09-23 入档) — subject 描述部分（剥掉 TYPE_RE / PROMPT_RE
+// 前缀后）必须含至少一个 CJK 字符。阈值取最小门槛「≥1 CJK」以防误杀标识符密集
+// 的中文 subject，例如「refactor(store): 抽取 resetStore helper 统一 11 处 setState
+// 重置块」必须 PASS。CJK 范围取基本平面加扩展 A，99% 现代中文落地。
+const CJK_RE = /[\u3400-\u9fff]/;
+
+// Trailer 豁免清单：枚举 + 路径 footer 不进 R7 自由文本校验。
+const TRAILER_ENUM_OR_PATH_KEYS = new Set(["Confidence", "Scope-risk", "Plan"]);
+
 const ENGLISH_WHY_TOKENS = [
   "because", "so that", "in order to", "to fix", "to enable", "to support",
   "to allow", "to make", "missing", "broken", "broke", "failing", "fail\\b",
@@ -142,6 +151,17 @@ function checkMessage(label, raw, opts = {}) {
 
   const isPrompt = PROMPT_RE.test(subject);
   if (!isPrompt && !opts.botAuthored) {
+    // R7 subject: after stripping TYPE_RE / PROMPT_RE prefix, the description
+    // must contain at least one CJK character. Prompt commits are exempt (R7
+    // only applies to Conventional Commits by spec).
+    const subjectNoPrefix = subject
+      .replace(PROMPT_RE, "")
+      .replace(TYPE_RE, "")
+      .trim();
+    if (!CJK_RE.test(subjectNoPrefix)) {
+      findings.push({ rule: "R7", msg: `subject description lacks CJK characters: "${subjectNoPrefix}"` });
+    }
+
     const hasExplicitHeading = /\bWHAT:\s/.test(body) && /\bWHY:\s/.test(body) && /\bHOW:\s/.test(body);
     if (body.length < 60) {
       findings.push({ rule: "R3", msg: `body too short (${body.length} chars) - must explain what + why + how` });
@@ -158,6 +178,20 @@ function checkMessage(label, raw, opts = {}) {
     }
     if (!/^Plan:\s+\S+/m.test(footer)) {
       findings.push({ rule: "R5", msg: "missing footer: Plan: .omo/plans/<slug>.md" });
+    }
+
+    // R7 trailer: free-text trailer values must contain at least one CJK
+    // character. Enum trailers (Confidence / Scope-risk) and the Plan: path
+    // footer are exempt - they carry machine-consumed tokens, not prose.
+    for (const tLine of footer.split("\n")) {
+      const m = /^([A-Z][\w-]*):\s*(.*)$/.exec(tLine.trim());
+      if (!m) continue;
+      const key = m[1];
+      const value = m[2];
+      if (TRAILER_ENUM_OR_PATH_KEYS.has(key)) continue;
+      if (!CJK_RE.test(value)) {
+        findings.push({ rule: "R7", msg: `trailer "${key}:" value lacks CJK characters: "${value}"` });
+      }
     }
   }
 
