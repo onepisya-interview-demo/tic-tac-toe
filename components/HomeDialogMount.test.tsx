@@ -50,6 +50,7 @@ beforeEach(() => {
     winner: null,
     winLine: null,
     roomName: null,
+    outcomeError: null,
   });
   useGameStore.getState().__resetInternalForTests();
 });

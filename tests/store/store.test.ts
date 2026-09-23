@@ -52,6 +52,7 @@ function resetStore(): void {
     winner: null,
     winLine: null,
     roomName: null,
+    outcomeError: null,
   });
   useGameStore.getState().__resetInternalForTests();
 }
@@ -906,6 +907,18 @@ describe('lib/store — W-T blind spots', () => {
     useGameStore.getState().setOutcomeError({ reason: 'aborted', at: Date.now() });
     expect(useGameStore.getState().outcomeError).not.toBeNull();
     useGameStore.getState().startGame('offline');
+    expect(useGameStore.getState().outcomeError).toBeNull();
+  });
+
+  it('resetStore clears outcomeError so subsequent tests do not see a stale banner', () => {
+    // Regression nail: outcomeError was added in 667b9ea. Three hand-copied
+    // resetStore paths in this file + components/HomeDialogMount.test.tsx +
+    // components/OnlineGateMount.test.tsx all forgot to clear it. Zustand's
+    // setState is merge-semantics, so a value set by setOutcomeError would
+    // leak into the next test until this reset dropped the field.
+    useGameStore.getState().setOutcomeError({ reason: 'aborted', at: Date.now() });
+    expect(useGameStore.getState().outcomeError).not.toBeNull();
+    resetStore();
     expect(useGameStore.getState().outcomeError).toBeNull();
   });
 
