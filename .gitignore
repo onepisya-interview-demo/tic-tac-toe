@@ -133,3 +133,4 @@ reports/
 # =====================================================
 /.omo/sessions.local.md
 /.zcode
+.zcodeignore
