@@ -76,7 +76,8 @@ export interface GameState {
   /**
    * 案② c: 最近一次 online 记局失败的提示（非 null 时由
    * OutcomeErrorBanner 渲染 Alert，含 reason + at 时间戳；
-   * user 主动关闭或下一次 makeMove / restart 自动清空）。
+   * 清空点 = startGame（新局）/ restart（重启）/ setOutcomeError(null)（user 主动关闭）。
+   * makeMove 成功路径不写 outcomeError；won/drawn 后 phase 锁死, makeMove 不再被调用。
    * 旧实现里 r.ok === false 时静默 return, 用户不知战报未上服,
    * /result 会渲染旧行——本字段是该静默路径的可见化。
    */
@@ -129,8 +130,7 @@ export interface GameActions {
   awaitOutcomeWrite: () => Promise<void>;
   /**
    * 案② c: dismiss / refresh outcomeError. Pass null to clear.
-   * OutcomeErrorBanner 的关闭按钮 / 下一次 makeMove / restart
-   * 都会调它, 收敛状态翻转单点。
+   * 调用方清单见函数体内注释 — 收敛状态翻转单点。
    */
   setOutcomeError: (e: { reason: string; at: number } | null) => void;
 }
@@ -292,7 +292,7 @@ export const useGameStore = create<GameStore>((set) => ({
         const stored = getRoomName();
         if (stored) {
           // Direct set — mirrors the localStorage value into state so
-          // the very next makeMove sees it.
+          // subsequent player moves in this game see it.
           useGameStore.setState({ roomName: stored });
         }
       }

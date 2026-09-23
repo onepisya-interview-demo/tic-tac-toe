@@ -28,7 +28,7 @@
   --radius-lg: 8px;
 
   /* danger tokens (案② 网络超时提醒 — 暗色背景对比度 ≥4.5:1)
-     text #F87171 on bg-elevated #141414 ≈ 8.55:1, 远超 4.5:1 AA 阈值。
+     text #F87171 on bg-elevated #141414 ≈ 6.66:1, 远超 4.5:1 AA 阈值。
      surface/border 用低饱和 rgba, 与 figure-ground 契约不冲突。 */
   --color-danger: #F87171;
   --color-danger-strong: #FCA5A5;

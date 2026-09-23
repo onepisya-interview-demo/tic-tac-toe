@@ -92,7 +92,6 @@ export function OnlineGateMount() {
     // 路由过渡同窗, 错峰开启防 '穿模'。callback 内的 setOpen 是
     // effect 同步路径, 同五处已有 set-state-in-effect 边界处理。
     afterViewTransition(
-       
       () => setOpen(true),
     );
   }, [setStoreName]);
