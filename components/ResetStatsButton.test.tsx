@@ -59,7 +59,7 @@ describe('components/ResetStatsButton (W1: only local scope remains)', () => {
   });
 
   it('resetOfflineStats is a no-op when mode is not "offline" (defensive guard)', () => {
-    // mode is 'online' after resetStore; resetOfflineStats must be a no-op.
+    // mode is set to 'online' below via setState; resetOfflineStats must be a no-op.
     window.localStorage.setItem(
       OFFLINE_STATS_KEY,
       JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 }),

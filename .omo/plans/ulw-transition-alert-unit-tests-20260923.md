@@ -36,13 +36,13 @@
 | 2 | hasVT=true + animationend 匹配（page-fade-in）正常到达 → onEnd 命中白名单并调 finish | lib/view-transition.ts:36-43（onEnd 体，含白名单 if :37-40 + finish 调用 :41；listener 安装见 :46） | `fires callback when matching animationend arrives (page-fade-in)` |
 | 3 | hasVT=true + 事件不达 → 600ms safety 兜底 | lib/view-transition.ts:44（window.setTimeout(finish, 600)）+ :29-35（finish 体含 done 守门 + cleanup） | `falls back to 600ms safety when animationend never fires` |
 | 4 | hasVT=false（animations 为空）→ 双 rAF 后触发 | lib/view-transition.ts:55-61 | `fires after double rAF when no VT animation is registered` |
-| 5 | 一次性守卫：多次事件 / safety 到期都只触发一次 | lib/view-transition.ts:29-35（finish 体：done 守门 :30-31 + callback :41） | `guards against duplicate callback across multiple triggers` |
+| 5 | 一次性守卫：多次事件 / safety 到期都只触发一次 | lib/view-transition.ts:29-35（finish 体：done 守门 :30-31 + callback :34） | `guards against duplicate callback across multiple triggers` |
 | 6 | cleanup 后无残留监听 / 定时器（removeEventListener + clearTimeout） | lib/view-transition.ts:32-33（finish 体内：removeEventListener :32 + clearTimeout :33） | `cleans up listeners and timer after firing` |
 | 7 | 动画名白名单：非匹配 animationName（cell-pop）不触发 | lib/view-transition.ts:36-43（onEnd 体；白名单实际生效 :37-40 的两个等值比较） | `ignores animationend with non-matching animationName` |
 
 补充 case（4b）：hasVT=false + getAnimations 缺失（jsdom / 旧浏览器）→ 同 hasVT=false 双 rAF。
 
-**Footnote**：case 4b 与 case 4 语义同效——spyOnGetAnimations() 在 jsdom 缺 document.getAnimations 时（lib/view-transition.test.ts:51-60）走 `Object.defineProperty` 安装 + 之后用 `mockReturnValue([])` 模拟「getAnimations 缺失」，与 case 4 走「getAnimations() 返回 []」的 source 路径（lib/view-transition.ts:49-50 → `:55-61` 双 rAF）合并为同一分支。**语义同效，并入 case 4 用例，不另测。**
+**Footnote**：case 4b 与 case 4 语义同效——spyOnGetAnimations() 在 jsdom 缺 document.getAnimations 时（lib/view-transition.test.ts:58-68）走 `Object.defineProperty` 安装 + 之后用 `mockReturnValue([])` 模拟「getAnimations 缺失」，与 case 4 走「getAnimations() 返回 []」的 source 路径（lib/view-transition.ts:49-50 → `:55-61` 双 rAF）合并为同一分支。**语义同效，并入 case 4 用例，不另测。**
 
 ## 四、Alert 测试断言点（components/ui/Alert.test.tsx）
 

@@ -37,9 +37,9 @@ commitlint / 提交策略文档 / 调度者 brief 模板，三处口径一致。
      / Co-authored-by / Signed-off-by / Reviewer / Reviewed-by / Refs /
      Closes / Fixes / Breaking / See-also`）一律自由文本，须 CJK。
    - R7 与 R1-R6 同一 findings 通道输出，单行 `R7: <msg>`。
-   - bot-authored（dependabot）豁免 R3-R5，不豁免 R7（Dependabot 的
-     Co-authored-by 是英文，但 bot 提交通常不带自由文本 trailer，留给未来
-     单独处理，不在本波扩）。
+   - bot-authored（dependabot）与 prompt() 提交同闸豁免 R7（与 R3-R5 一致；
+     bot subject 为上游生成的英文，强制 CJK 会挂掉全部 dependabot PR，故
+     subject 与自由文本 trailer 两处校验都不进 bot/prompt 通道）。
 
 3. **A2** `tests/qa/commit-audit.test.ts` 加 4 类用例：
    - ① 全英文 subject 必须 FAIL：构建 fixture repo，写入
