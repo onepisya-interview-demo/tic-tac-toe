@@ -414,7 +414,7 @@ await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [
           ? "rAF"
           : "safety";
     console.log(
-      `[02c][diag] animationend reached: ${animEvents.length > 0}, path: ${path}, clickToOpenMs: ${lateAt.toFixed(1)}, animationendMargin: ${animationendMargin !== null ? animationendMargin.toFixed(1) + "ms" : "n/a"}`,
+      `[02c][diag] animationend reached: ${animEvents.length > 0}, path: ${path}, clickToOpenMs: ${lateAt.toFixed(1)}, animationendMargin: ${animationendMargin !== null ? animationendMargin.toFixed(1) + "ms" : "n/a"}, evtName: ${animEvents[0]?.name ?? "n/a"}, evtPseudo: ${animEvents[0]?.pseudo ?? "n/a"}, evtCount: ${animEvents.length}`,
     );
 
     // 关闭 dialog, 保持页面 idle 给后续 step 用 (ctx/page 随即关闭)

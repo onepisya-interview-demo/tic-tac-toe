@@ -402,3 +402,77 @@ MSG
 - 不跑 home-return-qa 之外的探针
 - 不 --no-verify
 - 探针执行走 build + start 路径（不跑 dev）
+
+## 审查整改记录（2026-09-23 rev-02c 闭环）
+
+本节入档 rev-02c（commit d4b4814）执行席回报与 commit trailer 之间的 stability
+claim 不一致，以及诊断行字段不够丰富无法独立证伪异常 run。两次小补丁连续闭合，
+本节专注入档已被实测但原 trailer 未反映的异常 run（5 跑中 1 跑异常），
+并明确整改路径 A 的工程依据只覆盖一致的 4 跑。
+
+### 5 跑实测分布（来自执行席 5 次独立 run 报告）
+
+| 维度 | 4/5 一致跑 | 1/5 异常跑 |
+|---|---|---|
+| clickToOpenMs | 327~353 ms | 327~353 ms（无显著差异） |
+| animationendMargin | +137~140 ms | **-1338.4 ms** |
+| 机制判定（按 d4b4814 现有 diag 路径） | path A animationend | path A animationend（仅看原 4 字段） |
+| 通过门槛（>LATE_LOWER_MS=80ms、<=LATE_BOUND_MS=1500ms） | PASS | PASS（lateAt 落在 327~353ms，threshold 之内） |
+
+### 异常 run 原始数值与候选根因
+
+- 原值：`animationendMargin = -1338.4ms`。
+- 算术定义：`animationendMargin = lateAt - (animEvents[0].t - tClick)`。
+- 4/5 跑下该值为 +136~+140ms（合理：dialog 在 animationend 后约
+  130ms 内开启，含 rAF + commit 余量，与被测机制 `lib/view-transition.ts:afterViewTransition`
+  path A 设计一致）。
+- 1/5 跑下该值为 -1338.4ms，意味着 `(animEvents[0].t - tClick)` 比 `lateAt`
+  大约 1.34 秒。两候选根因：
+  1. **listener 捕到非 VT animationend 事件**——捕获了一个发生在 click 之前
+     的伪元素动画结束事件（例如 SPA 路由切换早期阶段由 `::backdrop` /
+     `::view-transition` 自身过渡派发的伪动画），混入 `__qaVTAnimEvents`
+     数组但其实不是 `page-fade-in` / `view-swap-in` 真正命中的那次。
+     d4b4814 listener 已用 `e.animationName === "page-fade-in" ||
+     "view-swap-in"` 过滤，理论上不会漏过，但要确认伪元素动画名是否在
+     某些浏览器版本下被赋为 `none` 或不同字符串，需 evtName 实地证据。
+  2. **陈旧事件残留**——SPA 软导航过程触发了页面级重渲染，listener 重新挂载前
+     残留了上一次导航的 animationend 事件；现有 listener 已在 evaluate 时
+     `window.__qaVTAnimEvents.length = 0` 清空，但若该清空在某些时序下发生在
+     真正事件之后，下次 listener push 会混入旧的。
+- 共同特征：4/5 跑里 listener 工作正常（+136~140ms）；1/5 跑里 listener 把它
+  不该记录的东西写到了 [0]。
+
+### 整改路径判定（基于 4 跑一致而非全 5 跑）
+
+- d4b4814 现有机制判定阈值 `animationendMargin > 0 && path === "animationend"`
+  隐含信任 listener 准确。本节显式声明：
+  - **机制判定（path A）Confidence** 从「3 次实测稳定」修正为「4/5 一致；
+    1/5 异常 run 由 listener 误捕解释，不冲击 path A 结论」。
+  - 异常 run 不影响断言（lateAt 阈值与机制判定解耦），但暴露 listener 的边
+    角伪证据风险，需下一轮诊断增强方能彻底证伪。
+- 整改行动：本补丁（含提交 `tests/qa/home-return-qa.mjs` 的下一次提交）
+  仅在 diag 行增 `evtName` / `evtPseudo` / `evtCount` 三字段，不动 listener、
+  不动阈值、不动断言——目的是给未来再出现的异常 run 留可证伪的截面，并不能
+  闭合本节列出的根因。本节列出根因为后续 ticket 提供入口，但不构成本次提交
+  的范围扩张。
+
+### 与 commit trailer 的 alignment
+
+- d4b4814 trailer 写「3 次独立 run 实测 clickToOpenMs 327~353ms /
+  animationendMargin 137~140ms」与本节入档的「4/5 跑 animationendMargin
+  +136~+140ms」语义一致（前者只展示 3 跑稳定段，后者展示 5 跑全分布并显式
+  入档异常）。后续 commit 的 Tested trailer 须明确写明本节入档，避免再次
+  出现「执行席回报 5 跑 vs trailer 写 3 跑」的稳定性 contradiction。
+
+### 待回测复验（在新 commit 落地后）
+
+- 新 commit 落地后下次回测本探针时，须解析 diag 行三新字段以回答：
+  1. `evtName` 在 4 一致跑与 1 异常跑之间是否一致（应为 `page-fade-in` 或
+     `view-swap-in`，否则 listener 漏过滤即坐实候选根因 1）。
+  2. `evtPseudo` 是否影响（VT 伪元素的 `::view-transition` 等是否差异）。
+  3. `evtCount` 是否 >1（多次同名 animationend 是否推高 [0] 之前的项，
+     并因 listener 时序窗口挤入 [0]）。
+- 若新 run 三新字段在 5/5 一致、且异常 run 不再复现：入档结论升级为
+  「原异常 run 为偶发 listener 抖动，非机制缺陷」。
+- 若新 run 仍复现且 evtName 显示非目标动画名：本节入档的候选根因 1 坐实，
+  需开启产品代码 ticket 修 `lib/view-transition.ts` listener 过滤条件。
