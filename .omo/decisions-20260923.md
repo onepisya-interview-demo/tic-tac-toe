@@ -29,7 +29,7 @@
 ### 主公裁决（2026-09-23）
 
 > **A + B 组合。存量只翻 plan——modal-collision 已办，`ulw-reset-store-outcome-error.md`（81 行）本次一并翻译；不 reword commit。**
-> 执行票：修复席①（分支 `feat/commit-lang-rule`）。
+> 执行票：修复席①（分支 `feat/commit-lang-rule`）——已落地 `3068b22`（R7 语言规则 + 三处同步 + brief 模板中文节 + 81 行 plan 全文中文化；实弹验证：全英文 subject 被 R7 拒、中文 subject 过）。
 
 ---
 
@@ -56,7 +56,7 @@
 ### 主公裁决（2026-09-23）
 
 > **立票。**
-> 执行票：修复席②（分支 `refactor/reset-store-helper`）。
+> 执行票：修复席②（分支 `refactor/reset-store-helper`）——已落地 `47ad7d7`（`tests/helpers/reset-store.ts` 单点 helper，含 roomName/outcomeError 全字段 + 内部缓存清理；vitest 基线 494→498）。
 
 ---
 
@@ -84,7 +84,7 @@
 
 > **等数据，现阶段不动。判据明确：CI 上 02c 首次 flake 时读 DIAG 行的 clickToOpenMs，若 path C 实测 >80ms 则把 EARLY 调到实测 P99 + 20ms。**
 > 判据外化（防只活在决策文档里）：修复席④落 `tests/qa/AGENTS.md` 时序敏感断言节。
-> 判据已外化至 tests/qa/AGENTS.md（本票，分支 docs/decree-record）。
+> 判据已外化至 tests/qa/AGENTS.md（本票，分支 docs/decree-record）——已落地 `93f890e`，探针本体零改动。
 
 ---
 
@@ -108,7 +108,7 @@
 ### 主公裁决（2026-09-23）
 
 > **派工清掉（推翻调度者「不派工」建议）。文档与实现零漂移，花一张票的调度成本处理 5 条 P3。**
-> 执行票：修复席③（分支 `chore/p3-doc-hygiene`）。
+> 执行票：修复席③（分支 `chore/p3-doc-hygiene`）——已落地 `b2bda4c`（五项闭环）；交叉审 6 条 low findings 的收尾处置见 `848aa9b`（.omo/plans/ulw-review-rework-20260923.md，修四记二）。
 
 ---
 
