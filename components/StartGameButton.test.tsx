@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { StartGameButton } from './StartGameButton';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 // Replace next/link with a plain anchor that still forwards the click
 // event: this test owns the mode plumbing (onClick → startGame(mode)),
 // not Next's router integration. preventDefault keeps jsdom from
@@ -50,20 +51,7 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
   routerPush.mockClear();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 describe('components/StartGameButton (W2 landing CTAs)', () => {

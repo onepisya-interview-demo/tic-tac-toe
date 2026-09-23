@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { HomeStatsEntry } from './HomeStatsEntry';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 // HomeStatsEntry (W2 ulw-room-migration-home-landing D-1) renders
 // "查看房间 <room> 的战绩 →" only when useGameStore.roomName is set.
 //
@@ -18,20 +19,7 @@ import { useGameStore } from '@/lib/store';
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 describe('components/HomeStatsEntry', () => {

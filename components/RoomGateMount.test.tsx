@@ -5,6 +5,7 @@ import { RoomGateMount } from './RoomGateMount';
 import { HomeStatsEntry } from './HomeStatsEntry';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 // RoomGateMount W2-rework: mount-time identity bootstrap (Q6/A7/A2/§2.2
 // regression fixes). The pre-W2 PlayerNameForm owned this side-effect
 // via its reverse-hydration useEffect; W2 deleted the form without
@@ -49,20 +50,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   fetchSpy.mockClear();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
   routerPush.mockClear();
 });
 
@@ -184,20 +172,7 @@ describe('components/RoomGateMount — W-T blind spots', () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     fetchSpy.mockClear();
-    useGameStore.setState({
-      phase: 'idle',
-      mode: 'online',
-      board: [
-        null, null, null,
-        null, null, null,
-        null, null, null,
-      ],
-      currentPlayer: null,
-      winner: null,
-      winLine: null,
-      roomName: null,
-    });
-    useGameStore.getState().__resetInternalForTests();
+    resetStore();
     routerPush.mockClear();
     render(<RoomGateMount />);
   });

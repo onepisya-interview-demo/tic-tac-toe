@@ -5,22 +5,10 @@ import { act } from 'react';
 import { PlayController } from './PlayController';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 afterEach(() => {
   cleanup();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 /**

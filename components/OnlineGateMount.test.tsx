@@ -5,6 +5,7 @@ import { StrictMode } from 'react';
 import { OnlineGateMount } from './OnlineGateMount';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 // OnlineGateMount (ulw-result-win-celebration W-A2, D-4) — the
 // /online direct-entry gate. Coverage:
 //
@@ -42,30 +43,12 @@ fetchSpy.mockImplementation(async (url) => {
   return new Response('{}', { status: 404 });
 });
 
-function resetStore(): void {
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-    outcomeError: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
-  routerPush.mockClear();
-}
-
 beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   fetchSpy.mockClear();
   resetStore();
+  routerPush.mockClear();
 });
 
 afterEach(() => {

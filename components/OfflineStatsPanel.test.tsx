@@ -7,6 +7,7 @@ import { OfflineStatsPanel } from './OfflineStatsPanel';
 import { useGameStore } from '@/lib/store';
 import { OFFLINE_STATS_KEY } from '@/lib/offline-stats';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 // OfflineStatsPanel embeds ResetStatsButton (local scope), which pulls
 // useRouter at module scope — provide a stub router for jsdom.
 const refreshMock = vi.hoisted(() => vi.fn());
@@ -33,13 +34,7 @@ function panelValues(): (string | null)[] {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
-  useGameStore.setState({
-    phase: 'idle',
-    currentPlayer: null,
-    winner: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
   refreshMock.mockClear();
 });
 

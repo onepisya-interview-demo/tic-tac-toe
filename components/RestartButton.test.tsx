@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { RestartButton } from './RestartButton';
 import { useGameStore } from '@/lib/store';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 beforeEach(() => {
   // Pretend the player is mid-game so restart() actually mutates state.
   useGameStore.setState({
@@ -21,18 +22,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  useGameStore.getState().__resetInternalForTests();
-  useGameStore.setState({
-    phase: 'idle',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ] as unknown as ReturnType<typeof useGameStore.getState>['board'],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-  });
+  resetStore();
 });
 
 describe('components/RestartButton', () => {

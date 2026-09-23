@@ -1,11 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { GameShell } from './GameShell';
-import { useGameStore } from '@/lib/store';
-
+import { resetStore } from '@/tests/helpers/reset-store';
 afterEach(() => {
   cleanup();
-  useGameStore.setState({ phase: 'idle', currentPlayer: null, winner: null });
+  resetStore();
 });
 
 describe('components/GameShell', () => {

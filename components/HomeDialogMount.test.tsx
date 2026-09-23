@@ -22,6 +22,7 @@ import {
 import { useGameStore } from '@/lib/store';
 import { loadDeclinedPending, SYNC_DECLINED_KEY } from './SyncConfirmDialog';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 const fetchSpy = vi.spyOn(globalThis, 'fetch');
 fetchSpy.mockImplementation(async () =>
   new Response('{}', { status: 404 }),
@@ -38,21 +39,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   fetchSpy.mockClear();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-    outcomeError: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 afterEach(() => {
@@ -250,20 +237,7 @@ describe('components/HomeDialogMount handleConfirm integration (test-only covera
     window.localStorage.clear();
     window.sessionStorage.clear();
     fetchSpy.mockClear();
-    useGameStore.setState({
-      phase: 'idle',
-      mode: 'online',
-      board: [
-        null, null, null,
-        null, null, null,
-        null, null, null,
-      ],
-      currentPlayer: null,
-      winner: null,
-      winLine: null,
-      roomName: null,
-    });
-    useGameStore.getState().__resetInternalForTests();
+    resetStore();
   });
 
   afterEach(() => {

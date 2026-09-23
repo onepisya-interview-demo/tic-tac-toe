@@ -7,6 +7,7 @@ import { JUST_WON_SENTINEL_KEY } from './ResultCelebration';
 import { useGameStore } from '@/lib/store';
 import type { Board } from '@/lib/game';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 const routerPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: routerPush }),
@@ -17,20 +18,7 @@ afterEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   routerPush.mockClear();
-  useGameStore.setState({
-    phase: 'idle',
-    mode: 'online',
-    board: [
-      null, null, null,
-      null, null, null,
-      null, null, null,
-    ],
-    currentPlayer: null,
-    winner: null,
-    winLine: null,
-    roomName: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 describe('components/ResultNavigator (W2 ulw-room-migration-home-landing: ?room=)', () => {

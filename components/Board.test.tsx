@@ -5,6 +5,7 @@ import { Board } from './Board';
 import { useGameStore } from '@/lib/store';
 import { createEmptyBoard, emptyStats } from '@/lib/game';
 
+import { resetStore } from '@/tests/helpers/reset-store';
 vi.mock('@/lib/sound', () => ({
   playSound: vi.fn(),
 }));
@@ -33,13 +34,7 @@ function mockFetchOk() {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  useGameStore.setState({
-    phase: 'idle',
-    board: createEmptyBoard(),
-    winLine: null,
-    currentPlayer: null,
-  });
-  useGameStore.getState().__resetInternalForTests();
+  resetStore();
 });
 
 describe('Board keyboard handling during play', () => {
@@ -211,16 +206,7 @@ describe('components/Board (W-T blind spots: arrow keys + neighbors)', () => {
 
   it('phase !== "playing": keyboard handler does NOT register', async () => {
     mockFetchOk();
-    useGameStore.setState({
-      phase: 'idle',
-      board: [
-        null, null, null,
-        null, null, null,
-        null, null, null,
-      ],
-      winLine: null,
-      currentPlayer: null,
-    });
+    resetStore();
     render(<Board />);
     // No keyboard handler is bound — arrows must not move focus.
     await userEvent.keyboard('{ArrowRight}');
