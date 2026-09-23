@@ -16,6 +16,10 @@ const config = {
   },
   // Mutations only on pure game logic + DB layer (not React components).
   mutate: ['lib/game.ts', 'lib/db.ts', 'lib/store.ts', 'db/schema.ts'],
+  // Skip .delta/ sandbox copying: it holds a previous codex session's
+  // ephemeral worktree (incl. stale fsmonitor sockets that can't be
+  // copied as regular files). Stryker would crash on copyFile() otherwise.
+  ignorePatterns: ['.delta/**', '.stryker-tmp/**', '.vitest-tmp/**'],
   vitest: {
     configFile: 'vitest.config.ts',
   },

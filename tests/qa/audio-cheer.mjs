@@ -15,14 +15,14 @@ const { browser, ctx, page } = await launchQA({ autoplay: true });
 await page.request.delete(`${BASE}/api/stats`);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 
-// 1. Unmute on /, then navigate to /play (page reload wipes the probe but
+// 1. Unmute on /, then navigate to /online (page reload wipes the probe but
 //    localStorage carries the unmuted preference across).
 await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0');
 
-await page.click('[data-testid="start-game"]');
-await page.waitForURL('**/play');
+await page.click('[data-testid="start-online"]');
+await page.waitForURL('**/online');
 await page.waitForSelector('[data-testid="board"]');
 await page.waitForTimeout(200);
 

@@ -1,42 +1,53 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/store';
 import { Button } from '@/components/ui/Button';
 
 /**
- * Reset-stats CTA used on the home page header. Awaiting resetAll() before
- * router.refresh() avoids the B-3b race (commit fd4a66f) where force-dynamic
- * RSC re-reads the still-present row before the DELETE has landed.
+ * Which stats store this button clears (W1):
  *
- * commit 5 wires the loading prop introduced in commit 4 so the button
- * shows a spinner + disables interaction during the network write.
- * The Tagged Result from commit 3 means resetAll always resolves
- * (either ok or with a 'reason'), so we don't have to wrap the await
- * in try/catch — pending always settles.
+ * - 'local' (default): the offline contract — `resetOfflineStats()` is a
+ *   synchronous, purely local store action (clears the localStorage row
+ *   + internal cache). No network, no router.refresh (nothing server-
+ *   side changed; the panel re-renders via onCleared). data-testid is
+ *   "reset-offline-stats", its own QA contract.
+ *
+ * W1 retired the `scope='server'` branch along with the /api/stats
+ * chain: the ranked public ledger (id=1, name=NULL) no longer exists
+ * in the schema, so there is nothing server-side for an online-reset
+ * to clear. (W2 时曾预计 W3 围绕 `OnlineStatsCard` + `PlayerNameForm`
+ * 重建首页战绩契约；实际 W2 客户端波将两组件整体退役，战绩展示主场
+ * 移至 /result RSC + /offline 本地面板，per-name reset 未再引入。)
+ *
+ * `onCleared` fires after the local clear settles so data owners
+ * (e.g. OfflineStatsPanel) can re-read their source.
  */
-export function ResetStatsButton() {
-  const router = useRouter();
-  const resetAll = useGameStore((s) => s.resetAll);
-  const [pending, setPending] = useState(false);
+type Props = {
+  scope?: 'local';
+  onCleared?: () => void;
+  /** Optional className forwarded to the underlying Button. */
+  className?: string;
+};
+
+export function ResetStatsButton({ scope = 'local', onCleared, className }: Props) {
+  const resetOfflineStats = useGameStore((s) => s.resetOfflineStats);
+  const isLocal = scope === 'local';
+
+  const handleClick = () => {
+    if (!isLocal) return;
+    resetOfflineStats();
+    onCleared?.();
+  };
+
   return (
     <Button
       variant="ghost"
-      onClick={async () => {
-        setPending(true);
-        try {
-          await resetAll();
-          router.refresh();
-        } finally {
-          setPending(false);
-        }
-      }}
-      loading={pending}
-      data-testid="reset-stats"
-      aria-label="重置战绩"
+      onClick={handleClick}
+      className={className}
+      data-testid="reset-offline-stats"
+      aria-label="清空单机战绩"
     >
-      {pending ? '重置中…' : '重置战绩'}
+      清空战绩
     </Button>
   );
 }

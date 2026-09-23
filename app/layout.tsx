@@ -2,11 +2,22 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { NavPrevTracker } from "@/components/NavPrevTracker";
 import "./globals.css";
 
+// Both fonts opt out of next/font's `preload` (D-1). Both sporadic
+// "preloaded using link preload but not used" warning sources —
+// Chromium's 304-Not-Modified preload false positive (Bug 517439604,
+// fixed ~Chrome 141) and stale Vercel Early Hints entries across
+// deploys — root in the preload entry's existence itself, so the entry
+// is removed here rather than worked around. Latin glyphs still render
+// via font-display: swap + the auto-generated size-adjusted Geist
+// Fallback (no CLS regression); geistMono led the way in 95c57e1.
+// Plan: .omo/plans/ulw-font-preload-residual-20260922.md §2.4/§三.
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  preload: false,
 });
 
 const geistMono = Geist_Mono({
@@ -144,6 +155,7 @@ export default function RootLayout({
         <meta name="twitter:data2" content="Open source · MIT" />
       </head>
       <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
+        <NavPrevTracker />
         {children}
         <Analytics />
         <ServiceWorkerRegister />

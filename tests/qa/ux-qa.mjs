@@ -53,7 +53,7 @@ const SCENARIOS = [
     name: 'play-blank',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
     },
   },
@@ -61,7 +61,7 @@ const SCENARIOS = [
     name: 'play-mid-game',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       // X plays 0, O plays 3
       await page.click('[data-testid="cell-0"]');
@@ -75,17 +75,50 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       // Drive a clean top-row win: first player takes 0, 1, 2.
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
+      // MINOR-F1 (reports/review/V3.md): the strict win-glow snapshot is
+      // invalid the instant PlayController's router.replace('/result')
+      // unmounts the board. Install a DOM MutationObserver BEFORE the
+      // winning click fires to record the peak `.win-glow` count seen
+      // across the whole setup window. After the existing 400ms post-win
+      // wait (which gives navigation time to complete for the screenshot),
+      // we evaluate the recorded peak and assert >= 3. Gated on
+      // UX_STRICT=1 so non-strict runs pay no cost. The observer covers
+      // the brief win frame deterministically — no race against the
+      // Next.js RSC navigation. See ux-contract.mjs for the matching
+      // strict-block removal.
+      if (process.env.UX_STRICT === '1') {
+        await page.evaluate(() => {
+          window.__winGlowPeak = 0;
+          const updatePeak = () => {
+            const count = document.querySelectorAll(
+              '[data-testid^="cell-"] .win-glow',
+            ).length;
+            if (count > window.__winGlowPeak) window.__winGlowPeak = count;
+          };
+          const observer = new MutationObserver(updatePeak);
+          observer.observe(document.body, { childList: true, subtree: true });
+          updatePeak();
+        });
+      }
       await driveTopRowWin(page, { clickGapMs: 100 });
       await page.waitForTimeout(400);
+      if (process.env.UX_STRICT === '1') {
+        const peak = await page.evaluate(() => window.__winGlowPeak);
+        if (peak < 3) {
+          throw new Error(
+            `winning cells must expose the win-glow animation (peak observed: ${peak})`,
+          );
+        }
+      }
     },
   },
   {
     name: 'result-after-win',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       await driveTopRowWin(page, { clickGapMs: 100 });
       await page.waitForURL(`${BASE}/result`, { timeout: 3000 });
@@ -96,7 +129,7 @@ const SCENARIOS = [
     name: 'mobile-play',
     viewport: { width: 375, height: 667 }, // iPhone SE
     setup: async (page) => {
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
     },
   },
@@ -114,7 +147,7 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.goto(`${BASE}/play`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       await page.click('[data-testid="cell-0"]');
       await page.waitForTimeout(200);

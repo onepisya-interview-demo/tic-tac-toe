@@ -46,8 +46,8 @@ await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => window.localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0', `expected '0' after unmute, got ${mutedFlag}`);
 
-await page.click('[data-testid="start-game"]');
-await page.waitForURL('**/play');
+await page.click('[data-testid="start-online"]');
+await page.waitForURL('**/online');
 await page.waitForSelector('[data-testid="board"]');
 
 const firstStatus = await page.locator('[data-testid="status-text"]').textContent();
@@ -59,8 +59,28 @@ await page.waitForSelector('[data-testid="result-headline"]');
 
 // 4. After navigating all three routes with persisted unmuted, assert the
 //    post-mount DOM reflects unmuted AND no hydration warning fired.
-const postMountLabel = await page.locator('[data-testid="sound-toggle"]').getAttribute('aria-label');
-assert.equal(postMountLabel, '关闭音效', `post-mount label should be unmuted, got ${postMountLabel}`);
+//
+// NOTE: since f45ddbf (React 19 <ViewTransition> enter animation), the new
+// page's subtree effects are deferred until the transition animation settles,
+// so SoundToggle's hydrated aria-label arrives after navigation completes.
+// The contract here is "the label eventually arrives", NOT "it arrives
+// synchronously" — hence polling instead of a strict equality check.
+try {
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="sound-toggle"]')?.getAttribute('aria-label') ===
+      '关闭音效',
+    null,
+    { timeout: 2000 },
+  );
+} catch {
+  const postMountLabel = await page
+    .locator('[data-testid="sound-toggle"]')
+    .getAttribute('aria-label');
+  assert.fail(
+    `post-mount label never reached unmuted within 2000ms, got ${postMountLabel}`,
+  );
+}
 
 if (hydrationWarnings.length > 0) {
   console.error('HYDRATION WARNINGS DETECTED:');

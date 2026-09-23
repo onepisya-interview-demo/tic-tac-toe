@@ -55,8 +55,8 @@ try {
 
   let winningPlayer = null;
   await step('start a game and drive whoever-is-first to a top-row win', async () => {
-    await page.click('[data-testid="start-game"]');
-    await page.waitForURL('**/play');
+    await page.click('[data-testid="start-online"]');
+    await page.waitForURL('**/online');
     await page.waitForSelector('[data-testid="board"]');
     await page.waitForTimeout(300);
 
@@ -76,8 +76,17 @@ try {
   await step('canvas-confetti attaches a fixed-position full-viewport canvas after win', async () => {
     await page.waitForURL('**/result', { timeout: 4000 });
     await page.waitForSelector('[data-testid="result-headline"]');
-    // Wait briefly so canvas has had at least one animation frame.
-    await page.waitForTimeout(120);
+    // canvas-confetti attaches the canvas via a useEffect on <Confetti>,
+    // which mounts as a sibling of the headline. After the
+    // ulw-mobile-one-line-ux pass the headline is the page h1, so its
+    // first paint happens ~150-300ms after navigation; the previous
+    // 120ms waitForTimeout was racing that paint. Poll the DOM until
+    // the canvas arrives instead — the canvas itself is the contract.
+    await page.waitForFunction(
+      () => document.querySelectorAll('canvas').length >= 1,
+      null,
+      { timeout: 4000 },
+    );
     const canvases = await page.evaluate(() => {
       return Array.from(document.querySelectorAll('canvas')).map((c) => ({
         width: c.width,

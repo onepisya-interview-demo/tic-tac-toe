@@ -179,3 +179,117 @@ describe('lib/sound', () => {
     expect(ctx.createdOscs[7].frequency.value).toBe(5);
   });
 });
+
+describe('lib/sound edge branches (test-only coverage)', () => {
+  it('ensureContext returns null on the SSR path (typeof window undefined)', async () => {
+    // SSR paths stub away window so ensureContext's first guard fires.
+    const winDesc = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      get: () => undefined,
+    });
+    try {
+      const { playSound, setMuted } = await load();
+      setMuted(false);
+      // No AudioContext stub — but window is undefined, so ensureContext returns
+      // null before checking AudioContext. playSound's !audio guard fires.
+      playSound('move');
+      // No oscillator or gain should have been created (no AudioContext stub exists
+      // to capture them anyway). The smoke assertion is: no throw, no side effect
+      // on a window-less runtime.
+    } finally {
+      if (winDesc) {
+        Object.defineProperty(globalThis, 'window', winDesc);
+      } else {
+        delete (globalThis as { window?: unknown }).window;
+      }
+    }
+  });
+
+  it('ensureContext returns null when no AudioContext is available', async () => {
+    // Save and delete the constructors so ensureContext's `!Ctor` branch fires.
+    const ac = (window as unknown as { AudioContext?: unknown }).AudioContext;
+    const wac = (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext;
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    delete (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext;
+    try {
+      const { playSound, setMuted } = await load();
+      setMuted(false);
+      playSound('move');
+      // No side effect because !Ctor falls through to ensureContext returning null.
+    } finally {
+      if (ac) (window as unknown as { AudioContext?: unknown }).AudioContext = ac;
+      if (wac) (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext = wac;
+    }
+  });
+
+  it('getMuted tolerates localStorage.getItem throwing (e.g. privacy mode)', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    try {
+      const { getMuted } = await load();
+      // The catch swallows the error and returns the in-memory default (true).
+      expect(getMuted()).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('setMuted tolerates localStorage.setItem throwing (e.g. quota exceeded)', async () => {
+    // Mock BOTH setItem and getItem so the localStorage round-trip is fully
+    // blocked. setMuted still flips the in-memory `muted`; the next getMuted()
+    // falls into the catch and preserves the in-memory value (i.e. the
+    // setMuted call's effect survives).
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const getSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    try {
+      const { setMuted, getMuted } = await load();
+      setMuted(false);
+      // In-memory mirror still flips even though localStorage threw.
+      expect(getMuted()).toBe(false);
+    } finally {
+      setSpy.mockRestore();
+      getSpy.mockRestore();
+    }
+  });
+
+  it('playSound skips ctx.resume when the AudioContext is already running', async () => {
+    // Re-import with a fresh module — ctx module-level singleton is null,
+    // StubContext defaults state='running' so ctx.state !== 'suspended'
+    // branch fires (resume is NOT called).
+    const ctxRunning = new StubContext();
+    ctxRunning.state = 'running';
+    (window as unknown as { AudioContext: typeof AudioContext }).AudioContext =
+      function () {
+        return ctxRunning as unknown as AudioContext;
+      } as unknown as typeof AudioContext;
+    const { playSound, setMuted } = await load();
+    setMuted(false);
+    playSound('move');
+    expect(ctxRunning.resume).not.toHaveBeenCalled();
+    expect(ctxRunning.createdOscs).toHaveLength(1);
+  });
+
+  it('playSound reuses an already-constructed AudioContext (does not re-new Ctor)', async () => {
+    const { playSound, setMuted } = await load();
+    setMuted(false);
+    let constructions = 0;
+    const ctx = new StubContext();
+    (window as unknown as { AudioContext: typeof AudioContext }).AudioContext =
+      function () {
+        constructions += 1;
+        return ctx as unknown as AudioContext;
+      } as unknown as typeof AudioContext;
+    playSound('move');
+    playSound('draw');
+    // First call constructs; second call reuses the module-level `ctx` and
+    // does NOT re-invoke the constructor.
+    expect(constructions).toBe(1);
+    expect(ctx.createdOscs).toHaveLength(2);
+  });
+});

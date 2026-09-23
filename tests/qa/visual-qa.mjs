@@ -1,13 +1,27 @@
-// Visual + functional QA via Playwright.
+// Visual + functional QA via Playwright — W3-probes (room migration home landing).
+// Q7: 新首页基线截图（hero + 玩法引导 + 双 CTA + 战绩静态入口） + /result?room= SSR。
+// Evidence dir 改为 room-migration 子目录以隔离 W2 旧基线。
 // Runs against the production server on http://localhost:3000.
-// Captures one screenshot per route + a play-through ending in a win.
+//
+// Two passes per invocation:
+//   * Desktop pass (1280×900) — home, play, result, home-after, play-again,
+//     solo (board view + stats view after toggle), API stats.
+//   * Mobile pass (375×667) — home, play, solo (board + stats), result.
+// Every mobile stage asserts scrollWidth === viewport.width (no horizontal
+// overflow); the desktop pass keeps the apple-touch-icon + mono-preload
+// contract pinned by the existing snapshot() helper.
+//
+// The /solo stage now drives the view-toggle (board↔stats) introduced by
+// the W-UI wave 1 (ulw-ux-mobile-sync T3): OfflineStatsPanel renders only
+// when the toggle is in the stats position, so visual-qa must click
+// [data-testid="view-toggle"] before reading the stats surface.
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { ensureDir, shootTo, writeQaLog } from './lib/evidence.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
 
 const BASE = BASE_URL;
-const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/scaffold-qa';
+const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '.omx/evidence/room-migration-visual-qa';
 
 // Geist Mono's woff2 hash as observed in production HTML pre-preload-false.
 // When the layout fix removes the preload link, this query must return null.
@@ -68,16 +82,33 @@ async function snapshot(page) {
   }, GEIST_MONO_FONT_HASH);
 }
 
-async function main() {
-  await ensureDir(EVIDENCE_DIR);
-  const { browser, ctx, page } = await launchQA();
-  const shoot = shootTo(EVIDENCE_DIR);
+async function mobileOverflow(page) {
+  // The mobile-pass contract: the page must fit inside the viewport with no
+  // horizontal overflow. We assert scrollWidth strictly equals the layout
+  // viewport (clientWidth); a strict equality is required because the
+  // page-shell + globals.css already set body { overflow-x: hidden } so any
+  // internal overflow would already be clipped — but the underlying
+  // scrollWidth would still exceed clientWidth, which is the contract we
+  // pin (matches the existing ux-qa.mjs `assertUXContract` for mobile
+  // scenarios).
+  return page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+}
 
-  const log = [];
-
+async function desktopPass(page, shoot, log) {
   // ---- 1. Home / ----
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  // Seed a room name so the W3 online entry gate (StartGameButton
+  // requireName=true default for online) passes via RoomGateMount hydration.
+  await page.evaluate(() => {
+    window.localStorage.setItem("ttt.room.name.v1", "visual-qa-room");
+  });
+  await page.reload({ waitUntil: "load" });
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
+  await page.waitForSelector('[data-testid="start-online"]');
   await page.waitForTimeout(300); // settle font preload
   const homeShot = await shoot(page, '01-home.png');
   const homeSnap = await snapshot(page);
@@ -85,8 +116,8 @@ async function main() {
 
   // ---- 2. Click 开始游戏 → /play ----
   await Promise.all([
-    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
-    page.click('[data-testid="start-game"]'),
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(200);
@@ -97,32 +128,48 @@ async function main() {
   // ---- 3. Play a winning game: whoever goes first wins the top row ----
   // (First player is randomized; driveTopRowWin adapts to either.)
   await driveTopRowWin(page);
-  await page.waitForURL(`${BASE}/result`, { timeout: 5000 });
-  await page.waitForSelector('[data-testid="result-headline"]');
+  await page.waitForURL(/\/result\?/, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="result-page"]');
   await page.waitForTimeout(300);
   const resultShot = await shoot(page, '03-result.png');
   const resultSnap = await snapshot(page);
   log.push({ stage: 'result', shot: resultShot, snapshot: resultSnap });
 
-  // ---- 4. Reload home to verify stats persisted via DB ----
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-testid="start-game"]');
+  // ---- 4. Reload home — home-stats-entry 仍渲染 + 零 /api/* (Q7 强断言) ----
+  const apiHomeReload = [];
+  const onReq = (req) => {
+    if (req.url().includes("/api/")) {
+      apiHomeReload.push({ method: req.method(), url: req.url() });
+    }
+  };
+  page.on("request", onReq);
+  await page.goto(`${BASE}/`, { waitUntil: "load" });
+  await page.waitForTimeout(2000);
+  await page.waitForSelector('[data-testid="home-stats-entry"]', { timeout: 6000 });
   await page.waitForTimeout(300);
   const reloadShot = await shoot(page, '04-home-after-game.png');
   const reloadSnap = await snapshot(page);
-  log.push({ stage: 'home-after-game', shot: reloadShot, snapshot: reloadSnap });
+  log.push({
+    stage: 'home-after-game',
+    shot: reloadShot,
+    snapshot: reloadSnap,
+    apiRequests: apiHomeReload.slice(),
+  });
+  if (apiHomeReload.length > 0) {
+    throw new Error(`home reload issued /api/* — expected 0; got ${apiHomeReload.length}: ${JSON.stringify(apiHomeReload)}`);
+  }
 
-  // ---- 5. Verify API stats endpoint ----
+  // ---- 5. Server stats row (server-authoritative truth) ----
   const apiResp = await page.evaluate(async () => {
-    const r = await fetch('/api/stats');
+    const r = await fetch('/api/rooms/visual-qa-room/stats', { cache: 'no-store' });
     return { status: r.status, body: await r.json() };
   });
   log.push({ stage: 'api-stats', response: apiResp });
 
   // ---- 6. Play again flow ----
   await Promise.all([
-    page.waitForURL(`${BASE}/play`, { timeout: 5000 }),
-    page.click('[data-testid="start-game"]'),
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
+    page.click('[data-testid="start-online"]'),
   ]);
   await page.waitForSelector('[data-testid="board"]');
   await page.waitForTimeout(200);
@@ -130,15 +177,109 @@ async function main() {
   const replaySnap = await snapshot(page);
   log.push({ stage: 'play-again', shot: replayShot, snapshot: replaySnap });
 
+  // ---- 7. /solo route — board view (default) + stats view (after toggle) ----
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  const offlineBoardShot = await shoot(page, '06a-offline-board.png');
+  const offlineBoardSnap = await snapshot(page);
+  log.push({ stage: 'offline-board', shot: offlineBoardShot, snapshot: offlineBoardSnap });
+
+  // Click view-toggle to swap to stats view (T3 in-page swap).
+  await page.click('[data-testid="view-toggle"]');
+  await page.waitForSelector('[data-testid="offline-stats"]');
+  await page.waitForTimeout(220);
+  const offlineStatsShot = await shoot(page, '06b-offline-stats.png');
+  const offlineStatsSnap = await snapshot(page);
+  log.push({ stage: 'offline-stats', shot: offlineStatsShot, snapshot: offlineStatsSnap });
+}
+
+async function mobilePass(page, shoot, log) {
+  // All four canonical routes at 375×667 (iPhone SE first-gen reference).
+  // Per-stage contract: scrollWidth === clientWidth (no horizontal overflow).
+  // Each stage opens the same browser tab sequentially (single context) to
+  // share localStorage state where useful (e.g. home reset before /offline).
+  const stages = [];
+
+  // Home: reset stats first so we capture a clean empty-state home.
+  // W1 retired /api/stats DELETE; W3 hermetic DB is fresh per run.
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="start-online"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm1-home.png');
+  const homeOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-home', overflow: homeOverflow });
+
+  // /play
+  await Promise.all([
+    page.waitForURL(`${BASE}/online`, { timeout: 5000 }),
+    page.click('[data-testid="start-online"]'),
+  ]);
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm2-play.png');
+  const playOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-play', overflow: playOverflow });
+
+  // /solo — capture both views (board default + stats after toggle).
+  await page.goto(`${BASE}/offline`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="board"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm3a-offline-board.png');
+  const offlineBoardOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-offline-board', overflow: offlineBoardOverflow });
+
+  // Click view-toggle → stats view.
+  await page.click('[data-testid="view-toggle"]');
+  await page.waitForSelector('[data-testid="offline-stats"]');
+  await page.waitForTimeout(220);
+  await shoot(page, 'm3b-offline-stats.png');
+  const offlineStatsOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-offline-stats', overflow: offlineStatsOverflow });
+
+  // /result — drive an online win on /online then navigate. The previous
+  // step left us on /offline (stats view) which has no start-online button,
+  // so go via home (carry the store-bound roomName) rather than
+  // direct goto (would lose the Zustand hydration).
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.click('[data-testid="start-online"]');
+  await page.waitForURL(`${BASE}/online`, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="board"]');
+  await driveTopRowWin(page);
+  await page.waitForURL(/\/result\?/, { timeout: 5000 });
+  await page.waitForSelector('[data-testid="result-page"]');
+  await page.waitForTimeout(300);
+  await shoot(page, 'm4-result.png');
+  const resultOverflow = await mobileOverflow(page);
+  stages.push({ stage: 'm-result', overflow: resultOverflow });
+
+  return stages;
+}
+
+async function main() {
+  await ensureDir(EVIDENCE_DIR);
+  const { browser, ctx, page } = await launchQA();
+  const shoot = shootTo(EVIDENCE_DIR);
+
+  const log = [];
+
+  // === Desktop pass (existing 1280×900 viewport from launchQA) ===
+  await desktopPass(page, shoot, log);
+
+  // === Mobile pass: switch viewport to 375×667 (iPhone SE) ===
+  await page.setViewportSize({ width: 375, height: 667 });
+  const mobileStages = await mobilePass(page, shoot, log);
+  log.push({ stage: 'mobile-overflow', stages: mobileStages });
+
   await ctx.close();
   await browser.close();
 
   await writeQaLog(EVIDENCE_DIR, log);
   console.log('QA complete. Screenshots and qa-log.json written to', EVIDENCE_DIR);
 
-  // Programmatic contract: every snapshot must have a non-null appleTouchIconHref
-  // and monoPreloadAbsent === true. Guards against silent regressions in commit 1
-  // (apple-icon) and commit 2 (mono preload).
+  // Programmatic contract #1: every desktop snapshot must have a non-null
+  // appleTouchIconHref and monoPreloadAbsent === true. Guards against
+  // silent regressions in commit 1 (apple-icon) and commit 2 (mono preload).
   const failures = log
     .filter((entry) => entry.snapshot)
     .filter((entry) => !entry.snapshot.appleTouchIconHref || entry.snapshot.monoPreloadAbsent !== true);
@@ -149,7 +290,21 @@ async function main() {
     }
     process.exit(1);
   }
-  console.log(`QA contract verified: ${log.filter((e) => e.snapshot).length} stages all pass.`);
+
+  // Programmatic contract #2: every mobile stage must have
+  // scrollWidth === clientWidth === viewportWidth (no horizontal overflow).
+  const overflowFailures = (log.find((e) => e.stage === 'mobile-overflow')?.stages ?? [])
+    .filter((s) => s.overflow.scrollWidth !== s.overflow.clientWidth
+                  || s.overflow.scrollWidth !== s.overflow.viewportWidth);
+  if (overflowFailures.length > 0) {
+    console.error(`Mobile overflow contract failed for ${overflowFailures.length} stage(s):`);
+    for (const f of overflowFailures) {
+      console.error(`  - ${f.stage}: client=${f.overflow.clientWidth} scroll=${f.overflow.scrollWidth} viewport=${f.overflow.viewportWidth}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(`QA contract verified: ${log.filter((e) => e.snapshot).length} desktop stages pass; ${mobileStages.length} mobile stages no-overflow.`);
 }
 
 main().catch((e) => {

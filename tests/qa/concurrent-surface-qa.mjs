@@ -1,4 +1,5 @@
 // concurrent-surface-qa.mjs — Two chromium contexts each drive a top-row
+// BR: BR-6
 // win against the same server, assert the server's authoritative stats
 // row reflects BOTH wins (totalGames===2, xWins+oWins===2). The 50/50
 // randomizeFirstPlayer means each side may win as X or O; the assertion
@@ -61,8 +62,8 @@ async function deleteStats(page) {
 async function driveContext(ctx, label) {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.click('[data-testid="start-game"]');
-  await page.waitForURL("**/play");
+  await page.click('[data-testid="start-online"]');
+  await page.waitForURL("**/online");
   await page.waitForSelector('[data-testid="board"]');
   await driveTopRowWin(page);
   await page.waitForURL("**/result", { timeout: 6000 });
@@ -116,7 +117,7 @@ try {
       await p2.goto(`${BASE}/`, { waitUntil: "networkidle" });
       // Second win: click play-again on /result, drive another top-row win
       await page.click('[data-testid="play-again"]');
-      await page.waitForURL("**/play");
+      await page.waitForURL("**/online");
       await page.waitForSelector('[data-testid="board"]');
       await driveTopRowWin(page);
       await page.waitForURL("**/result", { timeout: 6000 });

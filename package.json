@@ -30,6 +30,9 @@
     "pnpm": ">=10"
   },
   "scripts": {
+    "prebuild": "node scripts/sw-bust.mjs",
+    "predev": "node scripts/sw-bust.mjs",
+    "prestart": "node scripts/sw-bust.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -43,7 +46,8 @@
     "test:property": "vitest run property",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "sw:check": "node scripts/sw-bust.mjs --check"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

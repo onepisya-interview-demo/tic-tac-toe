@@ -1,6 +1,12 @@
 // commitlint config for the local Conventional + lore-trailer + Plan: footer policy.
 // The commit-msg hook delegates to tests/qa/commit-audit.mjs (source of truth);
 // this file lets `pnpm exec commitlint` work standalone.
+//
+// R7 (中文语言规则) intentionally lives ONLY in commit-audit.mjs. Mirroring it
+// here would create two sources of truth that drift independently - the audit
+// script is the only gate that runs at commit time; this file is purely a
+// `pnpm exec commitlint` smoke harness. Conventional prefix / subject length /
+// body length / enum trailers / Plan footer remain this file's responsibility.
 module.exports = {
   extends: ["@commitlint/config-conventional"],
   parserPreset: {

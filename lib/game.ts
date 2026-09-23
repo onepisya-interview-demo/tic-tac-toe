@@ -90,6 +90,44 @@ export function emptyStats(): GameStats {
   };
 }
 
+/**
+ * Canonical key set for the GameStats contract, sorted alphabetically.
+ * Single source of truth for the JSON-shape whitelist used by both the
+ * browser-side `localStorage` load (lib/offline-stats.ts) and the HTTP
+ * transport-side merge body validator (app/api/rooms/{room}/stats/merge).
+ * Adding or removing a GameStats field requires updating this constant
+ * AND the GameStats interface in the same commit — the validator
+ * rejects any parsed value whose key set does not match exactly.
+ */
+export const GAME_STATS_KEYS =
+  'currentStreak,draws,oWins,totalGames,xWins';
+
+/**
+ * Type guard for values parsed from JSON (localStorage round-trip or
+ * HTTP request body). Accepts an object iff it has exactly the five
+ * GameStats keys with finite-number values and nothing else — the
+ * strict key-set check closes the contract gap left by the per-field
+ * type checks alone (otherwise `__proto__`, `constructor`, or any
+ * polluted prototype chain member would slip through as a "number").
+ *
+ * Pure function: no DOM, no I/O, fully testable. Consumed by
+ * `lib/offline-stats.ts:loadOfflineStats` (browser persistence path)
+ * and `app/api/rooms/{room}/stats/merge/route.ts:isMergeBody` (HTTP
+ * transport boundary).
+ */
+export function isGameStats(value: unknown): value is GameStats {
+  if (typeof value !== 'object' || value === null) return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s.totalGames === 'number' && Number.isFinite(s.totalGames) &&
+    typeof s.xWins === 'number' && Number.isFinite(s.xWins) &&
+    typeof s.oWins === 'number' && Number.isFinite(s.oWins) &&
+    typeof s.draws === 'number' && Number.isFinite(s.draws) &&
+    typeof s.currentStreak === 'number' && Number.isFinite(s.currentStreak) &&
+    Object.keys(s).sort().join(',') === GAME_STATS_KEYS
+  );
+}
+
 /** Human label for the signed streak counter: "+N for X, -N for O, 0 = dash". */
 export function streakLabel(currentStreak: number): string {
   if (currentStreak === 0) return '—';

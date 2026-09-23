@@ -9,23 +9,43 @@
 // Why /_next/static/** is NOT in CACHEABLE_RE: Vercel's edge immutable-
 // caches every /_next/static/** response with max-age=31536000, which is
 // already a 0 ms cache hit from the browser's HTTP cache. Routing those
-// requests through the SW adds zero benefit and breaks next/font's
-// `preload` optimization: Chromium tracks the <link rel=preload> entry
-// on the network response and only marks it "consumed" when the
-// matching @font-face request hits the same response. When the SW
-// hijacks the @font-face request with its own Response object, the
-// preload is stranded → "preloaded using link preload but not used"
-// warning. Returning /_next/static/** to the network lets Vercel's
-// immutable cache satisfy both requests from the same entry, so the
-// preload is consumed and no warning fires.
+// requests through the SW adds zero benefit, so /_next/static/** flows
+// untouched through the SW to the edge cache / browser HTTP cache.
+//
+// Font preload history (D-1): the SW used to be blamed for stranding the
+// next/font preload entry (SW hijacking the @font-face request →
+// "preloaded using link preload but not used"). Fix fa76a39 returned
+// /_next/static/** to the network, and the residual sporadic warnings
+// (Chromium's 304-Not-Modified preload false positive, Bug 517439604 +
+// stale Vercel Early Hints across deploys) were rooted out entirely by
+// removing the font preload itself at the layout layer — Geist and
+// Geist_Mono now use `preload: false` in app/layout.tsx. Fonts load
+// through the normal CSS @font-face path with font-display: swap and
+// the auto-generated size-adjusted fallback; no preload entry exists
+// for the SW to interact with anymore.
+// Plan: .omo/plans/ulw-font-preload-residual-20260922.md §2.4/§三.
+//
+// Cache versioning (W-RV P2 #2 — ulw-quality-hardening-opt D-2): a
+// fresh CACHE_NAME on every deploy forces the browser to take the
+// install path, which is the only signal that drives the activate
+// listener's stale-cache sweep. APP_VERSION is a placeholder that
+// `scripts/sw-bust.mjs` substitutes with `package.json`'s version at
+// `prebuild` time; the placeholder value "v1" stays in the source for
+// fresh-clone dev (where prebuild does not run). The activate handler
+// below deletes any cache whose name does not match the current
+// CACHE_NAME so a long-lived browser does not retain orphaned icons /
+// manifests from prior versions. Without the rename, a deployed icon
+// change (e.g., favicon-32x32.png) stays shadowed by the cached copy
+// until the user clears site data.
 //
 // Lifecycle:
 //   install   → skipWaiting so a fresh SW can activate immediately.
 //   activate  → claim open clients so the new SW takes control of all
-//               tabs without requiring a refresh.
+//               tabs without requiring a refresh; sweep caches whose
+//               name no longer matches CACHE_NAME (stale-deploy sweep).
 //   fetch     → GET cacheable URLs (see CACHEABLE_RE) are served from
-//               the 'tic-tac-toe-v1' cache when present, and the
-//               network response is written back to that cache.
+//               the CACHE_NAME cache when present, and the network
+//               response is written back to that cache.
 //               Non-GET requests (PUT/POST/DELETE) bypass the SW
 //               entirely to preserve the B-1 method-gate invariant
 //               (commit 971bb41). Non-cacheable GETs (RSC, /api/stats,
@@ -51,7 +71,8 @@
 // the cache size and invalidation strategy of Workbox will pay off
 // once the asset count or route policy outgrows this hand-rolled
 // pattern.
-const CACHE_NAME = "tic-tac-toe-v1";
+const APP_VERSION = "v0.1.0";
+const CACHE_NAME = `tic-tac-toe-${APP_VERSION}`;
 const CACHEABLE_RE = /(\/manifest\.webmanifest|\/icon\.svg|\/icon-|\/apple-icon|\/apple-touch-icon|\/favicon\.ico|\/favicon-)/;
 
 self.addEventListener("install", () => {
@@ -59,7 +80,20 @@ self.addEventListener("install", () => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  // Stale-deploy sweep: when APP_VERSION bumps, the new SW's CACHE_NAME
+  // no longer matches any prior cache, so the deletion list below
+  // captures every legacy bucket. Keep the matching cache (in case a
+  // concurrent tab has already populated it). Claim open clients so
+  // the new SW takes effect on the next navigation without a refresh.
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)),
+      );
+      await self.clients.claim();
+    })(),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
@@ -76,8 +110,9 @@ self.addEventListener("fetch", (event) => {
   // else) bypass the SW entirely. Caching the RSC payload would
   // reintroduce B-3 (RSC stale data — commit fd4a66f doc); caching
   // /api/stats would block live stats writes from ever reaching the DB;
-  // caching /_next/static/** would strand the next/font preload entry
-  // (see file header). Letting the browser handle the request via its
+  // /_next/static/** is already edge-immutable-cached (see file header —
+  // and since D-1 there is no next/font preload entry at all). Letting
+  // the browser handle the request via its
   // default network path also removes the SW-scope promise that was
   // generating "Uncaught (in promise) TypeError: Failed to fetch" noise
   // when the network failed mid-flight.

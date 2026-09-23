@@ -26,16 +26,123 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+
+  /* danger tokens (案② 网络超时提醒 — 暗色背景对比度 ≥4.5:1)
+     text #F87171 on bg-elevated #141414 ≈ 6.66:1, 远超 4.5:1 AA 阈值。
+     surface/border 用低饱和 rgba, 与 figure-ground 契约不冲突。 */
+  --color-danger: #F87171;
+  --color-danger-strong: #FCA5A5;
+  --color-danger-surface: rgba(248, 113, 113, 0.12);
+  --color-danger-border: rgba(248, 113, 113, 0.35);
 }
 
 :root {
   color-scheme: dark;
 }
 
+/* SyncConfirmDialog ::backdrop (ulw-ux-refresh-pass W1).
+   Tailwind v4 does not generate `backdrop:bg-base/70` for the ::backdrop
+   pseudo (color-mix + arbitrary variant limitation), so we set it
+   explicitly using the same theme token to keep the figure-ground
+   contract from DESIGN.md §图底关系. blur is still applied via
+   `backdrop:backdrop-blur-sm` (verified to generate). */
+/* 三个 dialog 共用 figure-ground 底色（案① c）— sync-confirm-dialog /
+   room-gate-dialog / reset-room-dialog。selectors 留注释指向原分析：
+   /tmp/pi-invest-modal-20260923.md §一/§三 H3。blur 仍走各自 className
+   上的 `backdrop:backdrop-blur-sm`（Tailwind v4 仍生效）。 */
+dialog[data-testid="sync-confirm-dialog"]::backdrop,
+dialog[data-testid="room-gate-dialog"]::backdrop,
+dialog[data-testid="reset-room-dialog"]::backdrop {
+  background-color: color-mix(in oklab, var(--color-bg-base) 70%, transparent);
+}
+
+
 /* Page container shared by all three routes (DESIGN.md §3).
    Single source so layout changes never need three-file edits. */
 .page-shell {
-  @apply mx-auto max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
+  @apply mx-auto w-full max-w-[640px] px-6 py-12 flex flex-col gap-8 flex-1;
+}
+
+/* W3 mobile-only tightening (plan: ulw-solo-pure-local-closeout.md §2 W3,
+   R3 evidence §3.1). Desktop commitment (DESIGN.md §3) is preserved —
+   the @media block re-writes only py/gap below 40rem so 1280×900 / 1440
+   keep their existing rhythm. Why mobile-only and not a single tightening:
+   the desktop breath carries the "premium linear/vercel" feel (§5 why-not
+   in DESIGN.md); collapsing it on the wide canvas would look dense, not
+   compact (留白感知, R2 §5 horror vacui inverse — fear of empty space is
+   asymmetric; dense sub-platforms want compact empty pages, wide platforms
+   want generous empty pages). 80px recovered (32+32 py + 8 gap × 2 → 24).
+*/
+@media (width < 40rem) {
+  .page-shell {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    gap: 1.5rem;
+  }
+}
+
+/* StatusBar (Bug C width jitter fix, ulw-solo-sync-rebuild W-A) — stacks all
+   four phase messages into the same inline-grid cell so phase transitions
+   (轮到 X → X 获胜 → 平局 → 准备开始) never resize the wrapping <button>.
+   See components/ui/StatusBar.tsx for the JSX side. The pattern is
+   "grid-stack" (Hubert Sablonnière, ALSGST): all children share
+   grid-area: 1/1, the container's intrinsic width is the max of all
+   children, and visibility:hidden removes non-active cells from the
+   accessibility tree without affecting layout sizing. Why not
+   (a) min-w-[Nch] on the wrapping <button>: clamps visible text to a
+   fixed slot and forces a visible gap on short messages, or (b) a
+   pseudo-element placeholder: same constraint, extra DOM for no
+   reason. The grid-stack is layout-only, no extra nodes. */
+.status-pill {
+  display: inline-grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  align-items: center;
+  min-width: 7ch; /* belt-and-suspenders: at text-small the longest
+                     message is ~4.2ch; reserve 7ch so single-character
+                     zh fallbacks still fit. */
+}
+
+.status-cell {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-cell-hidden {
+  visibility: hidden;
+  /* visibility: hidden (NOT display: none) keeps the cell in layout so
+     its intrinsic width still contributes to the grid cell's width,
+     and removes the cell from the accessibility tree so the aria-live
+     announcer only sees the active message. The aria-hidden prop on
+     the JSX is belt-and-suspenders for assistive tech that doesn't
+     map visibility directly. */
+}
+
+/* GameShell header (Bug C width jitter fix, ulw-solo-sync-rebuild W-A).
+   Three fixed columns — h1 | status slot | SoundToggle — replace the
+   previous flex justify-between so phase transitions don't visually
+   drift the h1 or the SoundToggle. `1fr auto 1fr` lets the center
+   column size to its content (the StatusBar's grid-stack max width)
+   while the flanking 1fr columns absorb whatever space remains.
+   Justify-self-* puts each column's content at the row's three
+   anchors (start / center / end). On 375px the SoundToggle column
+   shrinks first, but the items remain in their anchors — no clipping. */
+.game-header {
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.game-header-status {
+  min-width: 0;
+}
+
+/* view-toggle button — explicit min-width so the column never collapses
+   below the StatusBar's grid-stack max. The StatusBar's pill already
+   enforces its own min-width via .status-pill (7ch), but we add a
+   padding floor so the tap target is comfortable on touch. */
+.view-toggle {
+  padding: 0.25rem 0.5rem;
+  min-width: max-content;
 }
 
 /* Focus indication is owned once, globally: *:focus-visible below implements
@@ -46,7 +153,16 @@ html, body {
   color: var(--color-text-primary);
   font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   min-height: 100%;
-  overflow-x: hidden;
+  /* W3: overflow-x: clip (NOT hidden) — clip prevents horizontal content
+     overflow without establishing a scroll container on the y axis.
+     `overflow-x: hidden` would force body to become the scroll container
+     for sticky descendants (per CSS spec, hidden on one axis implies
+     auto on the other, creating a scroll context), which broke the
+     GameShell header sticky behavior. clip keeps the same clipping
+     visual while letting sticky use the html viewport as its containing
+     block. caniuse: Chrome 90+ / FF 81+ / Safari 16+ (broad coverage
+     since 2022). */
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -127,6 +243,16 @@ html, body {
     to { opacity: 1; }
   }
 
+  /* View swap keyframes — opacity-only crossfade + small upward slide
+     on the incoming content. The `translate` property is the modern
+     composited equivalent of `transform: translateY()`; we use it to
+     stay GPU-only and not fight with the existing .page-fade-in
+     keyframes that this file already uses for route transitions. */
+  @keyframes view-swap-in {
+    from { opacity: 0; translate: 0 6px; }
+    to   { opacity: 1; translate: 0 0; }
+  }
+
   @keyframes button-spin {
     to { transform: rotate(360deg); }
   }
@@ -168,3 +294,92 @@ html, body {
   }
 
   }
+
+/* ------------------------------------------------------------------------
+   View Transitions base (task C5a, plan: ulw-solo-mode-split-view-transitions;
+   C5b will wire React's <ViewTransition>). Reference: the Next.js guide at
+   node_modules/next/dist/docs/01-app/02-guides/view-transitions.md —
+   "Customizing the morph animation" (pseudo-element class syntax),
+   "Keeping the page interactive" (pointer-events) and "Respecting reduced
+   motion" (zeroed durations/delays). Contract: DESIGN.md §5 Motion — page
+   transition is opacity-only, 150ms ease-out; no slide-in, no scale, no
+   animation library; reduced motion collapses everything to 0.
+   Naming contract: `.page` is the view-transition-class that the upcoming
+   C5b wiring assigns via React's <ViewTransition> class prop, so the
+   pseudo-element rules below fire only for that participant and leave all
+   other content untouched. */
+
+@supports (view-transition-name: root) {
+  /* VT-capable browsers animate the route swap through the snapshot
+     pseudos below, so retire the DOM-level fade to keep <main> from
+     double-animating. Browsers without VT support never enter this block
+     and keep the original .page-fade-in fallback declared above. */
+  .page-fade-in {
+    animation: none;
+  }
+
+  /* Bidirectional crossfade: the old snapshot plays the same opacity
+     keyframes in reverse (fades out) while the new one fades in.
+     opacity-only per DESIGN.md §5 — no translate, no scale. Reuses the
+     existing page-fade-in keyframes (pure opacity 0→1) declared inside
+     the no-preference media query above. */
+  ::view-transition-old(.page) {
+    animation: 150ms ease-out both page-fade-in reverse;
+  }
+
+  ::view-transition-new(.page) {
+    animation: 150ms ease-out both page-fade-in;
+  }
+
+  /* In-page view swap (task T3, plan: ulw-ux-mobile-sync) — React 19
+     <ViewTransition update="view-swap"> fired by /offline's view toggle.
+     Bidirectional crossfade (opacity) plus a 6px translateY for the
+     incoming content. 180ms ease-out per DESIGN.md §5 motion contract
+     — same easing curve as the page transition, GPU-only (transform +
+     opacity), never animates layout properties. The browser takes the
+     snapshot at the moment of the in-page state change so the OLD
+     content fades + holds position while the NEW content fades in
+     from translateY(6px). Reverse (`reverse` keyword) re-uses the same
+     keyframes in mirror for symmetry. The global reduced-motion rule
+     below zeroes animation-duration so the swap collapses to instant. */
+  ::view-transition-old(.view-swap) {
+    animation: 180ms ease-out both view-swap-in reverse;
+  }
+  ::view-transition-new(.view-swap) {
+    animation: 180ms ease-out both view-swap-in;
+  }
+
+  /* The VT snapshot overlay captures pointer events while a transition
+     runs; let them pass through to the live page (guide: "Keeping the
+     page interactive"). */
+  ::view-transition {
+    pointer-events: none;
+  }
+
+  /* A-T5 / rvt decision 1: this block DELIBERATELY does not declare
+     `@view-transition { navigation: auto }`. App Router's client-side
+     routing already intercepts every internal navigation, so the
+     cross-document at-rule would only fire for hard navigations
+     (URL bar entry, external links, target="_blank" returns) — and
+     adding it would introduce inconsistent "sometimes fade, sometimes
+     flash" behaviour between two visits of the same pair of pages,
+     violating the AGENTS contract that observable behaviour is
+     stable. The CSS at-rule stays available as a future extension
+     point if a hard-navigation fade is ever wanted; until then it
+     is left out by design, not by omission. */
+}
+
+/* The global reduced-motion rule above (`*, *::before, *::after`) does NOT
+   reach the ::view-transition-* pseudo-element tree, so follow the guide's
+   explicit recipe: durations and delays collapse to zero and the crossfade
+   degrades to the browser's instant swap. Belt-and-suspenders: under reduce
+   the page-fade-in keyframes are also undefined (they live inside the
+   no-preference block), so no animation can start regardless. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
