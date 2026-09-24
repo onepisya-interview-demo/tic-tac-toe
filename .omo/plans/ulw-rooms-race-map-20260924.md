@@ -39,7 +39,7 @@
 
 **结论**：① lost-update **坐实**——真产品码单进程双并发 100% 丢（确定性：两 load 都在任何 upsert 前），lib/db.ts「单进程内三步串行不会交错」注释被证伪；② 裸 BEGIN/COMMIT 经 `execute()` **不可用**（事务不跨 execute 存续，`cannot commit - no transaction is active`）；③ 官方 `transaction('write')` API 有真锁语义（E5 BUSY 证明）；④ **修复形态可行** = 进程内互斥（promise 链）+ transaction API（E6 零丢失零报错）；⑤ 多实例残差：失败回滚泄漏文件锁需客户端回收才解除（E7），分布式语义按 Out of scope 只记录。并发姿态推荐 **A 修正版**（互斥 + transaction API），乐观锁（schema 加列）与 README 边界（D4 已否决）排除。
 
-### T-B1 rooms-race-qa 探针（step 2-7 + 对账用例 · fresh codex · Session 2）
+### T-B1 rooms-race-qa 探针（step 2-7 + 对账用例 · fresh codex · Session 2）✅ 已落地
 
 **Question**：不依赖并发姿态决策的 6 steps + 机械对账能否全部落地并绿？
 
@@ -49,7 +49,9 @@
 - AC：vitest 全绿 + 探针 `:3101` hermetic 绿；CI job 上线且 main-gate ruleset 同步加名；concurrent-surface-qa 无残留引用。
 - blocking：T-D。与 T-E 并行（正交 + 方式同 → 可并行）。
 
-### T-B2 step 1 并发断言（阻塞于 T-A/T-C 决策 · Session 3）
+**落地**：e148b9a / e046e96 / f327646 / e1ea4b1（探针 + 对账用例 + ci.yml rooms-race job + AGENTS.md 探针地图表同步）。ruleset 加名留待主公 push 后同步（plan 内有命令）。
+
+### T-B2 step 1 并发断言（阻塞于 T-A/T-C 决策 · Session 3）✅ 已落地
 
 **Question**：双设备同房间并发 outcomes 的断言形态是什么？
 
@@ -57,6 +59,8 @@
 - （备查）坐实但暂不修 → 诊断模式（不进 CI gate 或显式 xfail——D8 顺序纪律）；
 - （备查）未坐实 → 直接契约模式。
 - blocking：T-D。
+
+**落地**：2304554（双 context 交错记局，四字段精确断言 + sum 不变式）。执行注记：该票曾被工作流脚本条件误跳（picked 字符串不含分支名 → includes 判否），由调度者直接派 fresh codex 补跑；席位 `$omo:ulw-plan` 自身审批门停机后以 approve 关键字解阻。
 
 ### T-C lost-update 产品修复（条件票 · **已立票确认** · fresh codex · Session 4）
 
@@ -67,14 +71,18 @@
 - 验收含复跑 T-A 实验套件：修复后 E1 同型采样应零丢失（可加「修复后基线」用例进常规 vitest）。
 - 立票后 blocking T-B2（契约模式断言依赖本票合入）。
 
-### T-D 对抗性交叉审（fresh codex **强制** · Session 5）
+**落地**：71ad38d（`withWriteLock` promise 链 `then(fn,fn)` 失败隔离 + drizzle `db.transaction()` 包裹三条写路径 recordOutcomeForRoom / mergeRecordByRoom / resetRecordByRoom + 失实注释改写）+ cddf174（d-F2 返工：两个测试 seam 正交化）+ 回归测试 tests/db/lost-update-mutex.test.ts。调度者补核：remote HTTP 部署的 `db.transaction()` 可用性——@libsql/client/web 分发至 HttpClient，其 `transaction(mode)` 真实存在（http.js:189，Hrana over HTTP），远程部署无炸点。
+
+### T-D 对抗性交叉审（fresh codex **强制** · Session 5）✅ 已执行（REJECT → 返工闭环）
 
 **Question**：T-B1/B2（及 T-C 若立）的实现是否守住 AC 与红线？
 
 - 镜头划分在 T-B1 落地后定（雾 F4）——按正交性矩阵，异镜头必须隔离会话；
 - 必审红线：step 1 诊断模式不得被静默转正（探针不得硬造绿）；机械对账用例本身会不会误报 DISABLED 存根。
 
-### T-E 方法学落 docs（调度者 · Session 6 · 与 T-B1 并行可）
+**执行实录**：verdict=REJECT（10 findings：2 medium + 8 low，四镜头 L1 并发正确性 / L2 探针真实性 / L3 对账用例健全性 / L4 票面契约一致性）。换人复核 6 条：confirmed 4（d-F1 对账通配兜空、d-F2 seam 隐式耦合、d-F3 BR-6 dangle、d-F5 step 6 静默跳过）、refuted 1（d-F4）。2 条 medium 返工闭环（7e04985 / cddf174）；low 的收口：d-F3/d-F5 由调度者收尾修复（54045f7，且 d-F5 修复第一跑即暴露假绿实锤——POST 走 APIRequestContext 绕过页面栈，断言从未生效），d-F6 被返工顺带修掉，d-F4 驳回，d-F7/F8 之 BR-10 半边已在 BR 行标注 triage，其余记档。
+
+### T-E 方法学落 docs（调度者 · Session 6 · 与 T-B1 并行可）✅ 已落地（ed25cb0）
 
 **Question**：Session 单一事则 + 正交性矩阵如何落成仓库资产？
 
@@ -82,13 +90,15 @@
 - brief 模板常量加三问；
 - T-F：package.json `qa:audit` script（knip 定期体检，手动跑不进 CI）+ docs/commands.md 一行。
 
-### T-G 终验收口（调度者 · Session 7）
+### T-G 终验收口（调度者 · Session 7）✅ 本节即产物
 
 **Question**：全链是否收口？
 
 - 六层验收 + CI 全绿（含新 job 与 ruleset 同步）；
 - 本地图 Decisions so far 收口、雾区清零或转新票；两份 research 的裁决状态回填核对；
 - wayfinder 试点复盘（F6）：omo ulw 流程与地图的长期接线方式，结论回填 dispatcher-playbook。
+
+**收口实录**（2026-09-24）：探针 7/7 PASS（:3101 hermetic，调度者亲跑含 step 1）；vitest 505 passed + 8 skipped / typecheck / lint 干净；R6 双向校验零 violation；波内红线（禁区零 diff）与票面（越界 0）全过。**地图收口：全部 7 票落地，雾区 F1-F6 全毕业，Out of scope 维持**。遗留外发动作（非本仓可闭环）：① push dev（13 commits ahead，主公执行）；② GitHub main-gate ruleset required checks 加 `rooms-race` job 名（push 后同步，命令见 T-B1 plan）。
 
 ## Decisions so far
 
@@ -102,14 +112,14 @@
 - D8（前序既有）：探针顺序纪律——诊断在修复前，修复在转正 CI 前（research-rooms-race §五 预声明）。
 - D9（T-A 实测毕业，2026-09-24）：lost-update **坐实**（E1 真产品码 60/60 丢）；并发姿态 = **进程内互斥 + transaction('write') API**（E6 实证）；裸 BEGIN/COMMIT 经 execute() 证伪排除；多实例残差（E7 锁泄漏需客户端回收）只记录事实，分布式承诺 Out of scope。T-C 据此立票、T-B2 定契约模式。
 
-## Not yet specified（雾区——能精确陈述问题才立票，禁止预切片）
+## Not yet specified（雾区——能精确陈述问题才立票，禁止预切片）——✅ 全部毕业，雾区清零
 
-- ~~**F1** 事务在 file: 本地 vs libsql/Turso 驱动下的真实行为~~ ✅ **T-A 毕业（D9）**：file: 侧全谱实测（裸 BEGIN 证伪 / transaction API 真锁 / E6 形态可行 / E7 泄锁事实）；remote HTTP（Turso）侧本地不可达，随 F5 记录为适用范围标注；
-- ~~**F2** lost-update 坐实与否~~ ✅ **T-A 毕业**：坐实（E1/E3 60/60 丢）；T-C 已立票；
-- ~~**F3** step 1 断言形态~~ ✅ **T-A/T-C 毕业**：契约模式（修复合入后探针写死精确断言）；
-- **F4** 交叉审镜头划分 → T-B1 落地后按 diff 实际形态定；
-- **F5** 多实例部署形态（Vercel serverless 等）下 libsql 写并发的真实行为——file: 双连接侧已有事实（E3/E5/E7：全丢 / BUSY / 锁泄漏需客户端回收）；remote HTTP 侧未测（本地不可达）→ T-C 的注释修正须把适用范围标注写准（单进程互斥保证 + 多实例 last-write-wins 残差）；
-- **F6** 本地图与 omo ulw 流程的长期接线方式 → T-G 试点复盘毕业。
+- ~~**F1** 事务在 file: 本地 vs libsql/Turso 驱动下的真实行为~~ ✅ **T-A 毕业（D9）**：file: 侧全谱实测（裸 BEGIN 证伪 / transaction API 真锁 / E6 形态可行 / E7 泄锁事实）；remote HTTP 侧调度者补核：@libsql/client/web 分发至 HttpClient，`transaction(mode)` 真实存在（http.js:189，Hrana over HTTP），事务 API 双驱动可用；真实 Turso 端到端未联网实测（无凭据），已在 lib/db.ts 注释按适用范围标注；
+- ~~**F2** lost-update 坐实与否~~ ✅ **T-A 毕业**：坐实（E1/E3 60/60 丢）；T-C 已落地；
+- ~~**F3** step 1 断言形态~~ ✅ **T-A/T-C 毕业**：契约模式（2304554 落地）；
+- ~~**F4** 交叉审镜头划分~~ ✅ **T-D 毕业**：实录四镜头 = L1 并发正确性 / L2 探针真实性 / L3 对账用例健全性 / L4 票面契约一致性；四镜头各产 findings，无串镜头锚定；
+- ~~**F5** 多实例部署形态下 libsql 写并发的真实行为~~ ✅ **T-A 毕业**：file: 双连接侧事实（E3/E5/E7：全丢 / BUSY / 锁泄漏需客户端回收）；remote 侧仅核实 API 形态未联网实测——lib/db.ts 注释已按「单进程互斥保证 + 多实例 last-write-wins 残差」标注适用范围（地图 Out of scope 维持）；
+- ~~**F6** 本地图与 omo ulw 流程的长期接线方式~~ ✅ **T-G 毕业**：结论回填 dispatcher-playbook「wayfinder 试点复盘」节（2026-09-24）。
 
 ## Out of scope
 
