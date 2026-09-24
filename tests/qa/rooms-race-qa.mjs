@@ -1,18 +1,16 @@
 #!/usr/bin/env node
 // rooms-race-qa.mjs — T-B1 (ulw-rooms-race-qa-ticket) probe.
-// BR: BR-7, BR-10
+// BR: BR-6, BR-7, BR-10
 //
-// Production build probe (BASE_URL, hermetic tmp DB). Covers plan T-B1 step 2-7
+// Production build probe (BASE_URL, hermetic tmp DB). Covers plan ulw-rooms-race-step1 step 1-2-7
 // (research §五: rooms-race probe 票面建议):
+//   step 1 (S2) 双设备同房间名并发 outcomes 精确累加契约
 //   step 2 (S3) merge × outcomes 交错 → 终值 = 两源严格相加
 //   step 3 (S4) reset × in-flight outcome race → 终态全零 + 身份保留
 //   step 4 (S6) 双发 POST /api/rooms 幂等 → 单行 + existed 语义
 //   step 5 (S5) 房间删除后 outcome → 404 stats-not-found + OutcomeErrorBanner
 //   step 6 (S7) SW non-GET pass-through + 激活竞争（B-1/E1 直系后继）
 //   step 7 (D4/旧14) 慢 DB outcomes ordering + 终态 DOM===API
-//
-// step 1 (T-B2 双设备并发 outcomes) 不在本票范围。
-// 探针禁 claim BR-6（step 1 范围外；防 commit-audit R6 误判）。
 //
 // Usage (production build required — 禁 dev server):
 //   DATABASE_URL=file:/tmp/ulw-rr1-<unique>.db PORT=3101 pnpm start &
@@ -152,6 +150,87 @@ async function getStats(ctx, room) {
 // 纯函数 accumulateMergeStats（lib/game.ts:233）做 per-field 求和。语义：服务端
 // 已有 totalGames=1 + 客户端 merge stats totalGames=1 → server.totalGames +
 // client.totalGames = 2；xWins 同理。本 step 钉这一端到端事实，回归探测锁。
+// ============================================================================
+// step 1 (S2) — 双设备同房间名并发 outcomes 精确累加契约
+// ============================================================================
+//
+// 路径：单 chromium + browser.newContext() 拉 ctx2 → Promise.all 两设备并发
+// POST /api/rooms（同 room；existed pair [false, true]）→ 每设备 runSide 内部
+// 串行 await 自身 outcomes（['X','X'] / ['O','draw']）→ 两设备 Promise.all 并
+// 发 → 服务端权威 GET stats → 断言 totalGames=4, xWins=2, oWins=1, draws=1
+// + 不变式 xWins+oWins+draws === totalGames。
+//
+// T-B2：71ad38d 把 recordOutcome 写路径用 withWriteLock + db.transaction() 包
+// 裹，本 step 把这一修复形态钉到端到端契约断言；任何后续回归（丢更新、串
+// 行被绕过、cache 命中而不增量）都会让 four-field equality RED。
+await step("step 1 (S2) 双设备同房间名并发 outcomes 精确累加契约", async () => {
+  const { browser, ctx: ctx1 } = await launchQA();
+  let ctx2;
+  try {
+    ctx2 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const room = uniqueRoom("step1");
+
+    // (a) 两设备并发建房间 — Promise.all 双侧 POST /api/rooms；server 同一
+    //     room 第一次 existed=false、第二次 existed=true（onConflictDoNothing）。
+    const [enterA, enterB] = await Promise.all([
+      postRoom(ctx1, room),
+      postRoom(ctx2, room),
+    ]);
+    assert.equal(enterA.status, 200, `POST /api/rooms (ctx1) 200；got ${enterA.status}`);
+    assert.equal(enterB.status, 200, `POST /api/rooms (ctx2) 200；got ${enterB.status}`);
+    const existedPair = [Boolean(enterA.body.existed), Boolean(enterB.body.existed)].sort();
+    assert.deepEqual(
+      existedPair,
+      [false, true],
+      `existed pair sorted === [false, true]；got ${JSON.stringify(existedPair)}`,
+    );
+
+    // (b) 定义两侧 outcomes + 串行 runSide（每侧内部串行 await；两侧外层 Promise.all）。
+    const sideAOutcomes = ["X", "X"];
+    const sideBOutcomes = ["O", "draw"];
+    const runSide = async (ctx, outcomes) => {
+      for (const outcome of outcomes) {
+        const r = await postOutcome(ctx, room, outcome);
+        assert.equal(r.status, 200, `POST outcome ${outcome} 200；got ${r.status}`);
+      }
+    };
+    await Promise.all([runSide(ctx1, sideAOutcomes), runSide(ctx2, sideBOutcomes)]);
+
+    // (c) 服务端权威 GET — four-field 精确断言 + 不变式。
+    const stats = await getStats(ctx1, room);
+    assert.equal(stats.status, 200, `GET stats 200；got ${stats.status}`);
+    const expectedTotal = sideAOutcomes.length + sideBOutcomes.length;
+    assert.equal(
+      stats.body.stats.totalGames,
+      expectedTotal,
+      `totalGames===4（2+2）；got ${stats.body.stats.totalGames}`,
+    );
+    assert.equal(
+      stats.body.stats.xWins,
+      2,
+      `xWins===2（sideA 双 X）；got ${stats.body.stats.xWins}`,
+    );
+    assert.equal(
+      stats.body.stats.oWins,
+      1,
+      `oWins===1（sideB O）；got ${stats.body.stats.oWins}`,
+    );
+    assert.equal(
+      stats.body.stats.draws,
+      1,
+      `draws===1（sideB draw）；got ${stats.body.stats.draws}`,
+    );
+    assert.equal(
+      stats.body.stats.xWins + stats.body.stats.oWins + stats.body.stats.draws,
+      stats.body.stats.totalGames,
+      `不变式 xWins+oWins+draws === totalGames；got ${stats.body.stats.xWins + stats.body.stats.oWins + stats.body.stats.draws} vs ${stats.body.stats.totalGames}`,
+    );
+  } finally {
+    try { await ctx2?.close(); } catch { /* best effort */ }
+    await browser.close();
+  }
+});
+
 await step("step 2 (S3) merge × outcomes 交错累加契约", async () => {
   const { browser, ctx } = await launchQA();
   try {
