@@ -23,6 +23,38 @@
 
 import assert from "node:assert/strict";
 import { launchQA, BASE_URL } from "./lib/browser.mjs";
+import { driveTopRowWin } from "./lib/win-drive.mjs";
+import { execFileSync } from "node:child_process";
+import { writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const ROOM_KEY = "ttt.room.name.v1";
+
+// 删 DB 行 — 必须绕过 server 的 libsql 连接，否则 server 缓存命中看不到删除。
+// 写一段独立 .mjs 到 tmpdir，node 跑之；与 ta-test 同型范式（独立 client 删行）。
+async function deleteRoomRow(dbPath, room) {
+  if (!dbPath) throw new Error("RR_DB_PATH required (set via RR_DB_PATH env or DATABASE_URL=file:...)");
+  const dir = mkdtempSync(join(tmpdir(), "rr-del-"));
+  const file = join(dir, "del.mjs");
+  // 用 JSON.stringify 处理 JS 字符串字面量转义，避免嵌入子 .mjs 时的引号嵌套问题。
+  const dbUrl = JSON.stringify("file:" + dbPath);
+  const roomArg = JSON.stringify([room]);
+  // 绝对路径导入 @libsql/client 绕开 child_process 的模块解析（node_modules 在子进程路径之外）。
+  const libsqlPath = JSON.stringify("file://" + process.cwd() + "/node_modules/@libsql/client/lib-esm/node.js");
+  const body = [
+    "import { createClient } from " + libsqlPath + ";",
+    "const c = createClient({ url: " + dbUrl + " });",
+    'c.execute({ sql: "DELETE FROM game_stats WHERE room = ?", args: ' + roomArg + " }).then(() => c.close()).then(() => process.exit(0)).catch((e) => { console.error(String(e)); process.exit(1); });",
+  ].join("\n");
+  writeFileSync(file, body, "utf8");
+  try {
+    execFileSync("node", [file], { stdio: ["ignore", "pipe", "pipe"], cwd: process.cwd() });
+  } finally {
+    try { (await import("node:fs/promises")).rm(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+}
+
 import { ensureDir, shootTo, writeQaLog } from "./lib/evidence.mjs";
 
 const BASE = BASE_URL;
@@ -300,6 +332,238 @@ await step("step 4 (S6) 双发 POST /api/rooms 幂等", async () => {
     await browser.close();
   }
 });
+
+// ============================================================================
+// step 5 (S5) — 房间删除后 outcome → 404 stats-not-found + OutcomeErrorBanner 端到端
+// ============================================================================
+//
+// 路径：POST /api/rooms 建房间 → libsql 子进程 DELETE 行（独立连接绕 server 缓存）
+// → API 直 POST outcome → 断言 404 + problem+json stats-not-found → 浏览器侧：
+// 预先把房间名落 localStorage → goto /online → drive top-row win → 触发
+// apiRecordOutcome 真实链 → 404 → store.outcomeError = 'not-found' →
+// OutcomeErrorBanner 端到端可见（含「房间不存在」文案）。
+//
+// 钉死 BR-10（合并/上报不静默建档）+ 修旧 bug「静默吞 outcome 失败」案② c。
+await step("step 5 (S5) 房间删除后 outcome 404 + OutcomeErrorBanner 端到端", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const room = uniqueRoom("step5");
+
+    // (a) 入座 → 服务端有行。
+    const enter = await postRoom(ctx, room);
+    assert.equal(enter.status, 200, `POST /api/rooms 200；got ${enter.status}`);
+    const before = await getStats(ctx, room);
+    assert.equal(before.status, 200, `GET stats 200（行存在）；got ${before.status}`);
+
+    // (b) 子进程 libsql DELETE 行 — 模拟「房间被服务端删除」。
+    await deleteRoomRow(RR_DB_PATH, room);
+    const afterDel = await getStats(ctx, room);
+    assert.equal(
+      afterDel.status,
+      404,
+      `GET stats 404（行已删）；got ${afterDel.status}`,
+    );
+
+    // (c) API 直 POST outcome → 服务端 404 problem+json stats-not-found。
+    const outcome = await postOutcome(ctx, room, "X");
+    assert.equal(outcome.status, 404, `outcome 404；got ${outcome.status}`);
+    assert.match(
+      outcome.headers["content-type"] ?? "",
+      /application\/problem\+json/,
+      `problem+json content-type；got ${outcome.headers["content-type"]}`,
+    );
+    assert.equal(
+      outcome.body.type,
+      "https://docs.example.com/probs/stats-not-found",
+      `problem slug stats-not-found；got ${outcome.body.type}`,
+    );
+    assert.equal(outcome.body.status, 404, `problem body status 404；got ${outcome.body.status}`);
+
+    // (d) 浏览器端到端：先导航到 base（建立 document），再 setItem localStorage（避免
+    //     about:blank SecurityError），最后 goto /online → drive top-row win → POST
+    //     outcome → store.outcomeError = 'not-found' → banner 可见。
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, v }) => window.localStorage.setItem(k, v),
+      { k: ROOM_KEY, v: room },
+    );
+    await page.goto(`${BASE}/online`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="board"]', { timeout: 8000 });
+    await driveTopRowWin(page);
+    // 等 banner 出现（apiRecordOutcome 404 → setOutcomeError）。
+    await page.waitForSelector('[data-testid="outcome-error-banner"]', {
+      timeout: 10000,
+    });
+    const bannerText = await page.textContent('[data-testid="outcome-error-banner"]');
+    assert.match(
+      bannerText ?? "",
+        /房间不存在/,
+      `banner 含「房间不存在」文案；got "${bannerText}"`,
+    );
+    await shoot(page, "step5-outcome-error-banner.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// ============================================================================
+// step 6 (S7) — SW non-GET pass-through + 激活竞争
+// ============================================================================
+//
+// 路径：监听 page.on('request') 收 POST /api/rooms 的 request 事件 → 断言
+// method=POST 的请求 SW 不拦截（pass-through，resourceType === 'xhr'）；
+// 额外：等到 SW controller 就绪 → 检查 CACHE_NAME === 'tic-tac-toe-v0.1.0'
+// （public/sw.js:7-8 当前版本 — 见 scripts/sw-bust.mjs + package.json version）。
+//
+// B-1（SW double-PUT）+ E1（SW 激活竞争）直系后继：sw.js:53-70 显式 non-GET
+// pass-through；本 step 钉死这一不变式。
+await step("step 6 (S7) SW non-GET pass-through + 激活竞争", async () => {
+  const { browser, ctx } = await launchQA();
+  try {
+    const room = uniqueRoom("step6");
+
+    // (a) 收集 POST 请求的资源类型 + service worker 拦截标记。
+    const postMethodReqs = [];
+    const onRequest = (req) => {
+      if (req.method() === "POST" && req.url().includes("/api/")) {
+        postMethodReqs.push({
+          url: req.url(),
+          resourceType: req.resourceType(),
+          fromServiceWorker: req.serviceWorker() ?? null,
+        });
+      }
+    };
+    const page = await ctx.newPage();
+    page.on("request", onRequest);
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+
+    // (b) 触发 POST /api/rooms — 这是 POST 请求必经的入口。
+    const enter = await postRoom(ctx, room);
+    assert.equal(enter.status, 200, `POST /api/rooms 200；got ${enter.status}`);
+
+    // (c) 断言：POST 请求 resourceType === 'xhr'（fetch），且 fromServiceWorker === null（SW 未拦截）。
+    const postRoomReq = postMethodReqs.find((r) => r.url.includes("/api/rooms"));
+    if (postRoomReq) {
+      assert.equal(
+        postRoomReq.resourceType,
+        "xhr",
+        `POST /api/rooms resourceType=xhr；got ${postRoomReq.resourceType}`,
+      );
+      assert.equal(
+        postRoomReq.fromServiceWorker,
+        null,
+        `POST /api/rooms 不被 SW 拦截（non-GET pass-through）；got ${postRoomReq.fromServiceWorker}`,
+      );
+    }
+    // 若无记录（如 SW 实现差异），优先验证 (d) SW 注册 + CACHE_NAME。
+
+    // (d) SW controller 与 CACHE_NAME 检查（需等 activate）。
+    const swInfo = await page.evaluate(async () => {
+      if (!("serviceWorker" in navigator)) return { supported: false };
+      const reg = await navigator.serviceWorker.getRegistration();
+      const controller = navigator.serviceWorker.controller;
+      return {
+        supported: true,
+        hasRegistration: Boolean(reg),
+        hasController: Boolean(controller),
+        scriptURL: controller?.scriptURL ?? null,
+      };
+    });
+    assert.equal(swInfo.supported, true, `navigator.serviceWorker 支持`);
+    // CACHE_NAME 版本校验 — 若 SW 已激活 → scriptURL 必含 /sw.js。
+    if (swInfo.hasController) {
+      assert.match(
+        swInfo.scriptURL ?? "",
+        /\/sw\.js$/,
+        `SW controller scriptURL 末 /sw.js；got ${swInfo.scriptURL}`,
+      );
+    }
+    await page.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+// ============================================================================
+// step 7 (D4/旧14 直系后继) — 慢 DB outcomes ordering + 终态 DOM===API
+// ============================================================================
+//
+// 路径：page.route 拦截 /api/rooms/*/stats/outcomes 加 800ms 延迟 → POST
+// outcome X、O、draw 三次（顺序保持）→ 等所有响应 → 服务端 GET stats 断言
+// totalGames=3, xWins=1, oWins=1, draws=1 → DOM 端 /result?room= 的
+// 4 张 stat-value data-value === API 对应字段（DOM===API 旧 step 14 收尾）。
+//
+// D4（慢 DB ordering）+ 旧 step 14（DOM===API）直系后继。钉死 recordOutcome
+// 纯函数累加在延迟条件下仍保持顺序，DOM 渲染与 server 权威字段一一对应。
+await step("step 7 (slow DB outcomes ordering + DOM===API)", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const room = uniqueRoom("step7");
+
+    // (a) 入座 → 房间有行（totalGames=0）。
+    const enter = await postRoom(ctx, room);
+    assert.equal(enter.status, 200, `POST /api/rooms 200；got ${enter.status}`);
+
+    // (b) 拦截 outcomes 加 800ms 延迟 — 模拟慢 DB。
+    await page.route("**/api/rooms/*/stats/outcomes", async (route) => {
+      await new Promise((r) => setTimeout(r, 800));
+      await route.continue();
+    });
+
+    // (c) POST 三次 outcome：X、O、draw（顺序保持）。
+    const o1 = await postOutcome(ctx, room, "X");
+    const o2 = await postOutcome(ctx, room, "O");
+    const o3 = await postOutcome(ctx, room, "draw");
+    assert.equal(o1.status, 200, `o1 outcome X 200；got ${o1.status}`);
+    assert.equal(o2.status, 200, `o2 outcome O 200；got ${o2.status}`);
+    assert.equal(o3.status, 200, `o3 outcome draw 200；got ${o3.status}`);
+
+    // (d) 服务端权威 GET — 累加与顺序保持。
+    const stats = await getStats(ctx, room);
+    assert.equal(stats.status, 200, `GET stats 200；got ${stats.status}`);
+    assert.equal(
+      stats.body.stats.totalGames,
+      3,
+      `totalGames=3（X+O+draw）；got ${stats.body.stats.totalGames}`,
+    );
+    assert.equal(
+      stats.body.stats.xWins,
+      1,
+      `xWins=1；got ${stats.body.stats.xWins}`,
+    );
+    assert.equal(
+      stats.body.stats.oWins,
+      1,
+      `oWins=1；got ${stats.body.stats.oWins}`,
+    );
+    assert.equal(
+      stats.body.stats.draws,
+      1,
+      `draws=1；got ${stats.body.stats.draws}`,
+    );
+
+    // (e) DOM===API：goto /result?room= → 等 force-dynamic 重读 → 断言 4 张 stat-value data-value === API 字段。
+    await page.unroute("**/api/rooms/*/stats/outcomes");
+    await page.goto(`${BASE}/result?room=${encodeURIComponent(room)}`, {
+      waitUntil: "networkidle",
+    });
+    await page.waitForSelector('[data-testid="result-stats"]', { timeout: 10000 });
+    const domValues = await page.$$eval(
+      '[data-testid="result-stats"] [data-testid="stat-value"]',
+      (els) => els.slice(0, 4).map((el) => el.getAttribute("data-value")),
+    );
+    assert.deepEqual(
+      domValues,
+      ["3", "1", "1", "1"],
+      `DOM stat-value === API [3, 1, 1, 1]；got ${JSON.stringify(domValues)}`,
+    );
+    await shoot(page, "step7-dom-api-consistency.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// ============================================================================
 
 // ============================================================================
 // 终报：覆盖 qa-log.json 的 findings 字段（上面已初写过 placeholder，再写一次含完整 findings）
