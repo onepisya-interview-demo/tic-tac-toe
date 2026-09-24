@@ -3,7 +3,7 @@
 // BR: BR-6, BR-7, BR-10
 //
 // Production build probe (BASE_URL, hermetic tmp DB). Covers plan ulw-rooms-race-step1 step 1-2-7
-// (research §五: rooms-race probe 票面建议):
+// (research §五: rooms-race probe 票面建议) + 计划 ulw-legacy-four-cleanup-20260924 §T-L1 step 8：
 //   step 1 (S2) 双设备同房间名并发 outcomes 精确累加契约
 //   step 2 (S3) merge × outcomes 交错 → 终值 = 两源严格相加
 //   step 3 (S4) reset × in-flight outcome race → 终态全零 + 身份保留
@@ -11,6 +11,7 @@
 //   step 5 (S5) 房间删除后 outcome → 404 stats-not-found + OutcomeErrorBanner
 //   step 6 (S7) SW non-GET pass-through + 激活竞争（B-1/E1 直系后继）
 //   step 7 (D4/旧14) 慢 DB outcomes ordering + 终态 DOM===API
+//   step 8 (T-L1/N5) merge 对未登记房间 → 409 enter-room-required + 不静默建档
 //
 // Usage (production build required — 禁 dev server):
 //   DATABASE_URL=file:/tmp/ulw-rr1-<unique>.db PORT=3101 pnpm start &
@@ -129,7 +130,8 @@ async function postMerge(ctx, room, clientStats) {
     `${BASE}/api/rooms/${encodeURIComponent(room)}/stats/merge`,
     { data: { stats: clientStats } },
   );
-  return { status: r.status(), body: await r.json().catch(() => null) };
+  // 返回 headers 是 step 8 钉 problem+json 的前置依赖（与 postOutcome 同型）。
+  return { status: r.status(), body: await r.json().catch(() => null), headers: r.headers() };
 }
 
 async function getStats(ctx, room) {
@@ -651,6 +653,87 @@ await step("step 7 (slow DB outcomes ordering + DOM===API)", async () => {
       `DOM stat-value === API [3, 1, 1, 1]；got ${JSON.stringify(domValues)}`,
     );
     await shoot(page, "step7-dom-api-consistency.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// ============================================================================
+// step 8 (N5/BR-10 merge 半边) — merge 对未登记房间 409 + 不静默建档双确认
+// ============================================================================
+//
+// 路径：uniqueRoom("step8") 走 fresh room（保证从未登记）→ 先 GET stats 确认 404
+// （前置基线）→ POST /api/rooms/{room}/stats/merge 带非零 stats 负载 → 断言服务端
+// 409 problem+json enter-room-required → 再 GET stats 仍 404（防静默建档，BR-10
+// 第二半边）。
+//
+// 钉死 BR-10「merge 对未登记房间 409」半边：caller 必须先 POST /api/rooms 才能
+// merge；路由 handler 在 loadRecordByRoom=null 时 short-circuit（route.ts:58-64），
+// mergeRecordByRoom 不被触发，房间行不会被服务端暗中创建。
+//
+// 断言形态先取证 service 单测 tests/api/rooms-stats.test.ts 的 409 用例与单源
+// lib/api-problem.ts TITLES 表，确保 slug/title 与之一致；本 step 钉到端到端。
+// ============================================================================
+await step("step 8 (N5/BR-10 merge 半边) 未登记房间 merge→409 + 不静默建档", async () => {
+  const { browser, ctx } = await launchQA();
+  try {
+    const room = uniqueRoom("step8");
+
+    // (a) 前置基线：fresh room GET stats 应 404（确认从未登记，无 race 污染）。
+    const precheck = await getStats(ctx, room);
+    assert.equal(
+      precheck.status,
+      404,
+      `前置 GET 404（fresh room 未登记）；got ${precheck.status}`,
+    );
+
+    // (b) POST merge 带非零 stats 负载 → 服务端 409 problem+json enter-room-required。
+    const merge = await postMerge(ctx, room, {
+      totalGames: 5,
+      xWins: 3,
+      oWins: 1,
+      draws: 1,
+      currentStreak: 1,
+    });
+    assert.equal(
+      merge.status,
+      409,
+      `merge 对未登记房间 409；got ${merge.status}`,
+    );
+    assert.match(
+      merge.headers["content-type"] ?? "",
+      /application\/problem\+json/,
+      `problem+json content-type；got ${merge.headers["content-type"]}`,
+    );
+    assert.equal(
+      merge.body.type,
+      "https://docs.example.com/probs/enter-room-required",
+      `problem slug enter-room-required；got ${merge.body.type}`,
+    );
+    assert.equal(
+      merge.body.title,
+      "Enter room required",
+      `problem title 与 lib/api-problem.ts TITLES 表一致；got ${merge.body.title}`,
+    );
+    assert.equal(
+      merge.body.status,
+      409,
+      `problem body status 409；got ${merge.body.status}`,
+    );
+    assert.match(
+      merge.body.detail ?? "",
+      new RegExp(room),
+      `problem body detail 含房间名；got "${merge.body.detail}"`,
+    );
+
+    // (c) BR-10 不静默建档双确认：merge 409 后再 GET stats 仍 404（行未被服务端
+    //     暗中创建；与 step 5 outcomes→404 共构「孤儿请求零副作用」半边闭环）。
+    const afterMerge = await getStats(ctx, room);
+    assert.equal(
+      afterMerge.status,
+      404,
+      `merge 409 后 GET stats 仍 404（不静默建档，BR-10 第二半边）；got ${afterMerge.status}`,
+    );
   } finally {
     await browser.close();
   }
