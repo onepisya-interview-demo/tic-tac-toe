@@ -16,6 +16,7 @@
 | 脚本 | 证明内容 |
 | --- | --- |
 | visual-qa.mjs | 路由流程、胜局、刷新持久化、API 响应和截图 |
+| rooms-race-qa.mjs | `/api/rooms` 链竞态端到端（merge×outcomes 累加、reset×in-flight、POST 幂等、404+banner、SW non-GET、慢 DB ordering+DOM===API） |
 | hydration-check.mjs | 持久化“取消静音”后没有 hydration 错误 |
 | audio-probe.mjs | 至少 12 个 Web Audio oscillator 和匹配的 gain 使用 |
 | audio-cheer.mjs | win-to-cheer 360ms 时序和精确欢呼频率程序 |

@@ -129,3 +129,57 @@ jobs:
           path: ${RUNNER_TEMP}/visual-qa
           retention-days: 7
           if-no-files-found: warn
+
+  rooms-race:
+    name: Rooms-race QA (Playwright probe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/rooms-race-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3101)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/rooms-race-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3101 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          echo "RR_DB_PATH=${DB_FILE}" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3101/ > /dev/null; then
+              echo "Server ready after ${i}s on :3101"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run rooms-race-qa probe
+        run: pnpm exec node tests/qa/rooms-race-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rooms-race-qa-evidence
+          path: ${RUNNER_TEMP}/rooms-race-qa
+          retention-days: 7
+          if-no-files-found: warn
