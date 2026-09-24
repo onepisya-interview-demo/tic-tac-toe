@@ -1,3 +1,13 @@
+/**
+ * tests/db/db.test.ts — db.ts 测试套件（含 __setCreateClientForTests 与
+ * __setDbOpDelayForTests 两个 test seam 的行为用例）。
+ *
+ * d-F2 fix (2026-09-24): 两 seam 自本次修复起正交 — factory 调换不影响
+ * delay 状态，delay 调换不影响 factory 状态。两个测试都按 `factory →
+ * delay → finally(双 reset)` 安全顺序调用（line ~1317/1319/1327-1328 与
+ * ~1336/1338/1345-1346），新约定下两 seam 互不干扰，调用顺序不再承担
+ * 「防止耦合旁路」的隐性义务。
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';

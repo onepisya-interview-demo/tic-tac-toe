@@ -113,17 +113,22 @@ let createClientFn: CreateClientFn = defaultCreateClient;
  * Test-only knobs for injecting latency or replacing the client factory.
  * Production code must never call these.
  *
- * Two surfaces so callers can pick the lightest seam:
- *   - `__setCreateClientForTests(fn)` replaces `createClient` wholesale.
- *   - `__setDbOpDelayForTests(ms)`  adds a fixed pre-DB sleep so races that
+ * Two orthogonal seams so callers can pick the lightest one:
+ *   - `__setCreateClientForTests(fn)` — replaces `createClient` wholesale;
+ *     **does NOT touch `dbOpDelayMs`**. To clear delay alongside factory,
+ *     call `__setDbOpDelayForTests(null)` explicitly.
+ *   - `__setDbOpDelayForTests(ms)` — adds a fixed pre-DB sleep so races that
  *     only manifest under a slow upstream (e.g. Turso HTTP) become
- *     reproducible locally with a local sqlite. Set to 0 / null to clear.
+ *     reproducible locally with a local sqlite. **Does NOT touch
+ *     `createClientFn`**. Set to 0 / null to clear.
  *
- * Both reset by passing null.
+ * Each seam resets only its own state. d-F2 fix (2026-09-24): prior to this,
+ * `__setCreateClientForTests` silently set `dbOpDelayMs = 0`, which let any
+ * earlier `__setDbOpDelayForTests` call be bypassed by a later factory
+ * re-set — exactly the path concurrency race tests inject delay on.
  */
 export function __setCreateClientForTests(fn: CreateClientFn | null): void {
   createClientFn = fn ?? defaultCreateClient;
-  dbOpDelayMs = 0;
 }
 
 export function __setDbOpDelayForTests(ms: number | null): void {
