@@ -1,4 +1,5 @@
 // tests/db/lost-update-mutex.test.ts — 票 T-C 回归用例（地图 ulw-rooms-race-map T-C / D9）。
+// BR: BR-6
 //
 // 锁定真产品码的并发写不丢失：
 //   - recordOutcomeForRoom 双并发 X 记局（10 轮）→ 终值精确 = (2,2,0,0,+2)

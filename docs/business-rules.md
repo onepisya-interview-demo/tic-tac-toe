@@ -13,11 +13,11 @@
 | BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
 | BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
 | BR-5 | POST /merge 仅用户主动确认 | 弹框点「合并并清空」才发 merge | 确认前零调用；409 防静默建档；用户拒绝 = 零网络写 | `tests/qa/home-return-qa.mjs` step04/05 + `tests/qa/merge-sync-qa.mjs` |
-| BR-6 | 同名并发 last-write-wins | 两设备同名并发合并，后写胜出 | —（无例外） | `tests/qa/concurrent-surface-qa.mjs` |
+| BR-6 | 同房间并发写精确累加（不丢不重） | 两设备同名并发记局/合并，单进程内账本精确 = 实际局数（进程内互斥 + 事务包裹，71ad38d） | 多实例部署仍 last-write-wins（README 边界注承担；E7 实测失败回滚泄漏文件锁需客户端回收） | `tests/qa/rooms-race-qa.mjs` step 1 + `tests/db/lost-update-mutex.test.ts`（10 轮精确断言） |
 | BR-7 | 重置清零保留身份 | POST /reset 清零战绩，房间名保留 | 重置不丢身份；前端入口需确认 | `tests/qa/room-reset-qa.mjs` |
 | BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `tests/qa/online-direct-qa.mjs` |
 | BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |
-| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/merge-sync-qa.mjs` |
+| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/rooms-race-qa.mjs` step 5（outcomes→404） + `tests/qa/merge-sync-qa.mjs`（DISABLED 存根；merge→409 半边待 triage） |
 
 
 ## 探针列格式约定（机器可校验）

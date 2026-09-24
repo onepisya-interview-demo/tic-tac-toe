@@ -501,7 +501,7 @@ await step("step 6 (S7) SW non-GET pass-through + 激活竞争", async () => {
   try {
     const room = uniqueRoom("step6");
 
-    // (a) 收集 POST 请求的资源类型 + service worker 拦截标记。
+    // (a) 收集 POST 请求的资源类型 + service worker 拦截标记（期望值 fetch：页面 fetch 发起）。
     const postMethodReqs = [];
     const onRequest = (req) => {
       if (req.method() === "POST" && req.url().includes("/api/")) {
@@ -516,25 +516,39 @@ await step("step 6 (S7) SW non-GET pass-through + 激活竞争", async () => {
     page.on("request", onRequest);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
 
-    // (b) 触发 POST /api/rooms — 这是 POST 请求必经的入口。
-    const enter = await postRoom(ctx, room);
+    // (b) 触发 POST /api/rooms —— 必须从页面内 fetch 发起（d-F5 修复的第二半：
+    // 原实现走 ctx.request.post()，即 Playwright APIRequestContext，完全绕过
+    // 页面网络栈与 SW，page.on('request') 永远收不到，断言必然空转）。页面内
+    // fetch 才流经 SW 路由，non-GET pass-through 语义才被真实检验。
+    const enter = await page.evaluate(async (room) => {
+      const r = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ room }),
+      });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    }, room);
     assert.equal(enter.status, 200, `POST /api/rooms 200；got ${enter.status}`);
 
     // (c) 断言：POST 请求 resourceType === 'xhr'（fetch），且 fromServiceWorker === null（SW 未拦截）。
     const postRoomReq = postMethodReqs.find((r) => r.url.includes("/api/rooms"));
-    if (postRoomReq) {
-      assert.equal(
-        postRoomReq.resourceType,
-        "xhr",
-        `POST /api/rooms resourceType=xhr；got ${postRoomReq.resourceType}`,
-      );
-      assert.equal(
-        postRoomReq.fromServiceWorker,
-        null,
-        `POST /api/rooms 不被 SW 拦截（non-GET pass-through）；got ${postRoomReq.fromServiceWorker}`,
-      );
-    }
-    // 若无记录（如 SW 实现差异），优先验证 (d) SW 注册 + CACHE_NAME。
+    // d-F5 修复（T-D 交叉审）：记录缺失即 FAIL，不许静默跳过——
+    // page.on('request') 注册先于 goto，POST /api/rooms 必然被记录；
+    // SW 注册与 CACHE_NAME 由 (d) 独立验证，两者缺一不可。
+    assert.ok(
+      postRoomReq,
+      "POST /api/rooms 请求未被 request 监听捕获（page.on 注册先于 goto，不应漏记）",
+    );
+    assert.equal(
+      postRoomReq.resourceType,
+      "fetch",
+      `POST /api/rooms resourceType=fetch（页面 fetch 发起，非导航/文档请求）；got ${postRoomReq.resourceType}`,
+    );
+    assert.equal(
+      postRoomReq.fromServiceWorker,
+      null,
+      `POST /api/rooms 不被 SW 拦截（non-GET pass-through）；got ${postRoomReq.fromServiceWorker}`,
+    );
 
     // (d) SW controller 与 CACHE_NAME 检查（需等 activate）。
     const swInfo = await page.evaluate(async () => {
