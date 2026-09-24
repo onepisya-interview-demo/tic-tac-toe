@@ -81,4 +81,20 @@
 - **并行正解 = git worktree 隔离**：任务按「文件面零交集」切正交后，调度者预建 N 个 worktree（各开分支 + 串行 `pnpm install`），herdr `tab create --cwd` 直指各 worktree，多席 fresh session 并行互不污染；完成后主仓 cherry-pick 序列合入（文件面零交集时冲突率为 0）+ 统一终验。同一 worktree 多席并行写必然互踩，不要试。
 - **双盲审**：修复席与审查席分离（各自 fresh session），每席深审一案；审查 brief 预埋「假绿来源清单」（rAF×fake timers、事件派发属性、mock 形状、SSR stub 污染、cleanup 残留），让 reviewer 逐项正面核查而不是复述执行席自报。
 - **REJECT 闭环**：reviewer REJECT → 调度者**亲自验证证据** → 同 worktree 起新席整改（brief 直接带已验证的证据链，禁止 re-查证浪费）→ 整改 commit 由调度者复核 diff 后 cherry-pick 合入。REJECT 根因若在调度者 brief 的前提错误（实证：'not-found' 死键误判），如实认领，不甩执行席。
-- **语言一致性**：plan 正文与 commit subject 默认中文（Goal / Scope / WHY 等骨架词可英文）。实证：brief 不钉语言时，各执行席漂移程度从 1% 到 60% 中文占比不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts` 英文骨架+中文正文）；历史 plan 惯例约 65% 中文。是否升级为 commit-audit 机械规则（R7）待主公裁决。
+- **语言一致性**：plan 正文与 commit subject 默认中文（Goal / Scope / WHY 等骨架词可英文）。实证：brief 不钉语言时，各执行席漂移程度从 1% 到 60% 中文占比不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts` 英文骨架+中文正文）；历史 plan 惯例约 65% 中文。commit 端已升级为 commit-audit 机械规则 **R7**（2026-09-23 主公裁决 A+B 组合落地，commit 3068b22）；brief 端的中文要求与 R7 配套闭环。
+
+## Session 单一事则与正交性矩阵（2026-09-24 新增）
+
+> 依据：主公三条主张 + wayfinder 体系对齐。完整推导、本波实证复盘表与裁决记录见 [`.omo/research-session-orthogonality-20260924.md`](../.omo/research-session-orthogonality-20260924.md)；wayfinder 试点地图见 [`.omo/plans/ulw-rooms-race-map-20260924.md`](../.omo/plans/ulw-rooms-race-map-20260924.md)。
+
+- **Session 单一事则**：一个 session 只做一件事；「事」的计量单位是**上下文容量**——所需全部上下文（代码面 + 决策史 + 被检对象）装得进一个干净会话且不互相稀释。做不好 → 继续拆小到单会话闭环。判定测试：**上下文域是否在会话内连续生长**——连续生长的多域探索（如 rooms-race 调研）算一件事，不因「摸了多个领域」而违反单一事则。
+- **探索先行，执行后置**：能精确陈述问题才立票（禁预切片）；地图（票面 + 雾区 + 决策）先行，派发只认地图票面；「想直接开干的冲动 = 该继续探索的信号」。
+- **正交性 2×2 判定矩阵**（拆不拆 session 按共享上下文判断，不按任务内容判断）：
+
+| | 工作/检查方式相同 | 工作/检查方式不同 |
+|---|---|---|
+| **共享上下文** | 同 session 串行做（省上下文重建税） | **强制拆 fresh session——仅限对抗性评审**（D5：强制力来源是评审独立性——模型自身有偏见与漂移；非对抗场景不强制拆，但关键裁决仍应交外部新鲜眼睛） |
+| **上下文正交** | 可并行（为墙钟速度；worktree 隔离） | 隔离并行的最大价值区（异镜头各占干净会话，被检对象重叠也不合并） |
+
+- **派发前三问（brief 模板必答，写进派发记录）**：① 这张票与哪一席共享上下文？（共享 + 同方式 → 同 session 串行；共享 + 异方式对抗 → 强制 fresh）；② 检查/工作方式是否异镜头？（异镜头 → 隔离会话，上下文开销是必要的）；③ 预估上下文容量是否单会话闭环？（装不下 → 拆票，不塞）。
+- **验证性工作默认隔离**：检查强度 > token 成本；「自我确认不是确认」——hunter 不得兼任 confirmer（独立复核换人换会话）。

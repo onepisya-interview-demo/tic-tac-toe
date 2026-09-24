@@ -47,7 +47,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "sw:check": "node scripts/sw-bust.mjs --check"
+    "sw:check": "node scripts/sw-bust.mjs --check",
+    "qa:audit": "pnpm dlx knip"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

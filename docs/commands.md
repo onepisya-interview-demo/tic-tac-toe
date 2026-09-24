@@ -44,6 +44,10 @@ BASE_URL=http://localhost:3101 node tests/qa/one-identity-qa.mjs
 
 on-demand 三层（coverage / mutation / property-based）按改动 scope 触发；触发规则、thresholds、Tested trailer 模板、engines.node 三环境对齐契约，全部以 [docs/verification-gauntlet.md](./verification-gauntlet.md) 为 single source of truth。
 
+## 定期体检（手动，不进 CI 门禁）
+
+- `pnpm qa:audit`：knip 未用文件/导出/依赖审计（仓规配置见 `knip.json`：探针与脚本视为入口）。定期跑，输出为清理票线索而非门禁；探针↔CI 引用的机械对账由测试用例承担（见 [docs/anti-patterns.md §L1-31](./anti-patterns.md)）。
+
 ## 提交策略速查
 
 ```sh

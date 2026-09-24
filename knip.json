@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "db/**/*.ts",
+    "tests/**/*.{test,spec}.{ts,tsx}",
+    "tests/qa/**/*.{mjs,ts}",
+    "tests/qa/lib/**/*.{mjs,ts}",
+    "scripts/**/*.{mjs,ts}"
+  ],
+  "ignore": ["public/sw.js"],
+  "ignoreExportsUsedInFile": true
+}
