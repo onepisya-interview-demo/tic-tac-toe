@@ -34,6 +34,13 @@
 
 非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。audit 脚本硬性要求 Confidence:（low|medium|high）与 Scope-risk:（narrow|moderate|broad）；触发 on-demand 验证层时 `Not-tested:` 改为 `Tested:` + 触发原因（模板见 docs/verification-gauntlet.md §2）。
 
+### 正文排版硬规则（commit-msg hook 实测，2026-09-24 补）
+
+- **WHAT:/WHY:/HOW: 的 token 独占一行**，内容从下一行起、每行 ≤72 字符——commitlint 的 footer 解析把 `WHAT: 同行长内容` 整行认作 footer token 行，超长即 footer-max-line-length 拒绝（同日三犯实证；token 独占一行的格式不触发）。
+- **subject 剥掉 Conventional 前缀后以中文或小写词开头**——大写单词开头触发 subject-case（sentence-case）拒绝：「T-B2 …」「Session …」「W-DIFF …」均实测被拒；中文/小写开头最稳。
+- **每条 trailer 行 ≤100 字符**（长值拆成多条 trailer 或收窄措辞，不要硬塞一行）。
+- 参照范本：commit `2e7104d`（@types/node 对齐，全要素合规）。
+
 ## 中文提交（默认）
 
 默认 commit message 用中文。type/scope 保留英文 token，描述默认中文（按 Unicode 码点计 ≤100），正文默认中文 prose，WHAT/WHY/HOW 显式 heading 也默认中文。
