@@ -37,9 +37,19 @@ import { emptyStats, recordOutcome, type GameStats } from './game';
  *
  * ## 行为契约
  *
- * - 每个 service 函数在 Node 单进程内是串行的（load → mutate → upsert 三步
- *   在同一进程串行执行），不会交错。多实例（Vercel + Turso HTTP）的竞态超出
- *   本文件范围。
+ * - 每个写 service（`recordOutcomeForRoom` / `mergeRecordByRoom` /
+ *   `resetRecordByRoom`）在 Node 单进程内通过 `withWriteLock` 把所有
+ *   load → mutate → upsert 三步整体串行化（promise 链，每条链附
+ *   带 catch 防止单次失败毒化后续排队），并在 drizzle 的
+ *   `db.transaction()` 包裹内执行（其内部转调 `@libsql/client`
+ *   `client.transaction('write')` 真锁 API — E5 实证）。
+ *   **修复前**这三步在两 await 点之间可被并发请求交错，单进程双
+ *   并发 100% 丢更新（E1 实验 60/60 丢，地图 ulw-rooms-race-map
+ *   T-A）；**修复后**实测零丢失零持续。
+ * - 多实例（Vercel + Turso HTTP）的跨进程竞态由本仓 README 边界
+ *   注承担，不在本服务实现承诺内；E7 实测揭示失败回滚会泄漏文件
+ *   级写锁，需客户端 close 回收（运维事实）。本仓只承诺单进程互
+ *   斥 + 事务包裹。
  * - 行不存在时返回明确信号（`null` / `not-found` 字符串），不静默建档。
  * - 行存在的累加是纯函数 `recordOutcome(current, outcome)`（lib/game.ts）。
  *
@@ -279,6 +289,48 @@ export async function loadRecordByRoom(room: string): Promise<GameStats | null> 
   };
 }
 
+/**
+ * Per-process writers chain (D9 lost-update fix).
+ *
+ * Every write that reads-then-decides-then-writes
+ * (`recordOutcomeForRoom` / `mergeRecordByRoom` /
+ * `resetRecordByRoom`) is funneled through `withWriteLock` so the
+ * JS-layer load → mutate → upsert three steps cannot interleave
+ * between concurrent callers in the same Node instance. Each
+ * `withWriteLock(fn)` call ALSO runs `fn` inside a drizzle
+ * `db.transaction()`, which delegates to `@libsql/client`
+ * `client.transaction('write')` — the official lock-aware API
+ * (E5 实证 BUSY, E2/E4 证伪裸 BEGIN/COMMIT 经 `execute()`).
+ *
+ * Failure-isolation: a rejected `fn` must NOT poison the chain.
+ * We re-anchor `writeChain` on the resolved side of `run`, so
+ * subsequent callers always queue onto a live chain even after a
+ * previous call rejected. (Bare `chain.then(fn)` would attach the
+ * rejection to the chain tail and turn it into a permanently
+ * rejected promise — every later caller would hang on the
+ * `.then(fn)` step. The `then(_, fn)` form schedules `fn`
+ * regardless of the previous step's state.)
+ *
+ * Out of scope: multi-process (Vercel + Turso HTTP) race
+ * semantics. See README「多实例 last-write-wins」boundary note.
+ * E7 proved that failed rollbacks leak file-level write locks that
+ * only recover after `client.close()` on the offending peer — that
+ * operational fact is recorded here, not mitigated inside the
+ * service.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  // `then(fn, fn)` — both fulfillment & rejection of the previous
+  // call schedule `fn` next; the chain never stalls on a rejection.
+  const run = writeChain.then(fn, fn);
+  // Re-anchor chain on the resolved side of `run` so a rejection
+  // does NOT propagate to the next `.then(fn)` consumer. A bare
+  // `chain = run` would let unhandled rejections poison later steps.
+  writeChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /** Write a per-room record (insert-or-update by room). */
 export async function upsertRecordByRoom(
   room: string,
@@ -356,10 +408,50 @@ export async function mergeRecordByRoom(
   room: string,
   clientStats: GameStats,
 ): Promise<GameStats> {
-  const server = (await loadRecordByRoom(room)) ?? emptyStats();
-  const next = accumulateMergeStats(server, clientStats);
-  await upsertRecordByRoom(room, next);
-  return next;
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      const server: GameStats = existing
+        ? {
+            totalGames: existing.totalGames,
+            xWins: existing.xWins,
+            oWins: existing.oWins,
+            draws: existing.draws,
+            currentStreak: existing.currentStreak,
+          }
+        : emptyStats();
+      const next = accumulateMergeStats(server, clientStats);
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: next.totalGames,
+          xWins: next.xWins,
+          oWins: next.oWins,
+          draws: next.draws,
+          currentStreak: next.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: next.totalGames,
+            xWins: next.xWins,
+            oWins: next.oWins,
+            draws: next.draws,
+            currentStreak: next.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return next;
+    });
+  });
 }
 
 /**
@@ -374,8 +466,9 @@ export async function mergeRecordByRoom(
  *    拒绝静默建档 — 一个匿名点击路径不该被偷渡成「已注册房间」。
  *  - 行存在 → 返回 `{ ok: true, stats }`, 传输层映射成 200 + GameStats。
  *
- * 串行保证：单 Node 进程内 load → mutate → upsert 三步串行执行；多实例
- * last-write-wins 由 README 边界注承担。
+ * Concurrency (T-C / D9 修复形态): funneled through `withWriteLock`
+ * + drizzle `db.transaction()`. 同进程并发记录不会丢失更新；E6 实
+ * 测零丢失零持续。多实例 last-write-wins 由 README 边界注承担。
  */
 export type RecordOutcomeResult =
   | { ok: true; stats: GameStats }
@@ -385,13 +478,51 @@ export async function recordOutcomeForRoom(
   room: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<RecordOutcomeResult> {
-  const current = await loadRecordByRoom(room);
-  if (current === null) {
-    return { ok: false, reason: 'not-found' };
-  }
-  const next = recordOutcome(current, outcome);
-  await upsertRecordByRoom(room, next);
-  return { ok: true, stats: next };
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      const current: GameStats = {
+        totalGames: existing.totalGames,
+        xWins: existing.xWins,
+        oWins: existing.oWins,
+        draws: existing.draws,
+        currentStreak: existing.currentStreak,
+      };
+      const next = recordOutcome(current, outcome);
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: next.totalGames,
+          xWins: next.xWins,
+          oWins: next.oWins,
+          draws: next.draws,
+          currentStreak: next.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: next.totalGames,
+            xWins: next.xWins,
+            oWins: next.oWins,
+            draws: next.draws,
+            currentStreak: next.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return { ok: true, stats: next } as const;
+    });
+  });
 }
 
 /**
@@ -419,13 +550,44 @@ export type ResetRecordResult =
 export async function resetRecordByRoom(
   room: string,
 ): Promise<ResetRecordResult> {
-  const existing = await loadRecordByRoom(room);
-  if (existing === null) {
-    return { ok: false, reason: 'not-found' };
-  }
-  const zero = emptyStats();
-  await upsertRecordByRoom(room, zero);
-  return { ok: true, stats: zero };
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      const zero = emptyStats();
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: zero.totalGames,
+          xWins: zero.xWins,
+          oWins: zero.oWins,
+          draws: zero.draws,
+          currentStreak: zero.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: zero.totalGames,
+            xWins: zero.xWins,
+            oWins: zero.oWins,
+            draws: zero.draws,
+            currentStreak: zero.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return { ok: true, stats: zero } as const;
+    });
+  });
 }
 
 /**
