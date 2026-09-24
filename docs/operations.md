@@ -39,13 +39,21 @@
 先 `pnpm build && pnpm start`（:3000），再逐个运行：
 
 ```bash
-node tests/qa/hydration-check.mjs      # 无 hydration 警告 + 全流程
-node tests/qa/audio-probe.mjs          # 真实 AudioContext 振荡器计数 ≥12
-node tests/qa/audio-cheer.mjs          # win→cheer 360ms 时序 + C5-E5-G5-C6-E6
-node tests/qa/audio-confetti-qa.mjs    # 音效开关 + confetti canvas + 战绩持久化
-node tests/qa/ux-qa.mjs after          # 9 场景截图 + qa-log.json（UX_STRICT=1 加合约断言）
-node tests/qa/visual-qa.mjs            # 三路由 + 一局胜利 + API 校验
-node tests/qa/commit-audit.mjs         # 提交消息审计（钩子同款规则）
+node tests/qa/hydration-check.mjs           # 无 hydration 警告 + 全流程
+node tests/qa/audio-probe.mjs               # 真实 AudioContext 振荡器计数 ≥12
+node tests/qa/audio-cheer.mjs               # win→cheer 360ms 时序 + C5-E5-G5-C6-E6
+node tests/qa/audio-confetti-qa.mjs         # 音效开关 + confetti canvas + 战绩持久化
+node tests/qa/ux-qa.mjs after               # 9 场景截图 + qa-log.json（UX_STRICT=1 加合约断言）
+node tests/qa/visual-qa.mjs                 # 三路由 + 一局胜利 + API 校验
+node tests/qa/commit-audit.mjs              # 提交消息审计（钩子同款规则）
+# T-L2 triage (2026-09-25) 新增 — 非 BR 绑定但仍有活场景的探针：
+node tests/qa/anonymous-first-game-qa.mjs    # W4/W5 anonymous-first-game 全链路（无预设房名）
+node tests/qa/offline-result-qa.mjs          # /result?room= SSR 三分支（无名 fallback/有名无行 404/有名有行）
+node tests/qa/one-screen-qa.mjs              # W3 移动端 viewport 单屏合约 A6/A7/sticky
+node tests/qa/result-celebration-qa.mjs      # W-A F1-F5 confetti 触发与不重放（reload/书签直达/平局/reducedMotion）
+node tests/qa/result-fresh-qa.mjs            # W-F W-F1/W-F2 胜局/平局首帧战绩新鲜度
+node tests/qa/confetti-origin-qa.mjs         # 桌面内聚起点 ≥1280px / 较小视口边缘起点
+node tests/qa/pwa-sw-cache-qa.mjs            # P3 SW dual-layer：manifest 二次 fetch 经 SW 命中
 ```
 
 可选 env：BASE_URL（默认 http://localhost:3000）、EVIDENCE_DIR（默认 .omx/evidence/<script>）、

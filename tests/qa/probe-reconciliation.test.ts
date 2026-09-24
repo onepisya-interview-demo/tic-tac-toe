@@ -13,6 +13,7 @@
 //
 // d-F1 fix (2026-09-24)：删除 docs/commands.md:43 通配展开（readdirSync 块），
 // 加 docs/operations.md 显式解析为第三引用源；KNOWN_ORPHANS 由 10 扩 13。
+// T-L2 triage (2026-09-25)：13 → 0（白名单清零，详见 KNOWN_ORPHANS 块下注释）。
 //
 // 真源：docs/anti-patterns.md:209 L1-31；research-rooms-race-probe §4.3。
 import { describe, it, expect } from "vitest";
@@ -31,29 +32,16 @@ const OPERATIONS_MD = join(REPO_ROOT, "docs", "operations.md");
 const TESTS_QA = join(REPO_ROOT, "tests", "qa");
 
 // KNOWN_ORPHANS：白名单 — 文件未在 ci.yml / docs/commands.md / docs/operations.md
-// 任一源显式引用，且无 DISABLED 标记。d-F1 fix 后 ops.md 升为第三引用源，
-// 原 4 条 ops-cited（audio-cheer / audio-confetti-qa / audio-probe /
-// hydration-check）迁出为 cited；新增 7 条 d-F1 fix 暴露的真悬空，
-// 每条按 TODO 范式注 triage 票号；新增 orphan（非此清单）立即 fail。
-const KNOWN_ORPHANS: ReadonlySet<string> = new Set([
-  // 零引用或仅 tests/qa/AGENTS.md 探针地图表历史归位（待后续票 triage）。
-  "sw-console-hygiene.mjs",
-  // 零引用：纯 ad-hoc 探针或历史归档（待后续票 triage）。
-  "anonymous-first-game-qa.mjs",
-  "offline-result-qa.mjs",
-  "one-screen-qa.mjs",
-  "result-celebration-qa.mjs",
-  "result-fresh-qa.mjs",
-  // d-F1 fix (2026-09-24) 新增：通配兜底展开暴露的真悬空（ci/cmd/ops 三源零引用）。
-  // TODO: triage in T-B1-followup-1 — 待确认是否迁 docs/operations.md 或继续归此白名单。
-  "confetti-origin-qa.mjs",
-  "home-return-qa.mjs",
-  "offline-mode-qa.mjs",
-  "offline-qa.mjs",
-  "online-direct-qa.mjs",
-  "pwa-sw-cache-qa.mjs",
-  "room-reset-qa.mjs",
-]);
+// 任一源显式引用，且无 DISABLED 标记。d-F1 fix 后 ops.md 升为第三引用源。
+// T-L2 triage (2026-09-25) 完成：13 → 0（white list cleared）：
+//   - sw-console-hygiene.mjs 删除（D-1 已移除 font preload；warning 源已不存在）
+//   - 7 个非 BR 探针迁 docs/operations.md「浏览器 QA」表（operator manual）
+//   - 5 个 BR 绑定探针新增 ci.yml job（home-return/BR-1/2/3/5, offline-mode/BR-4,
+//     offline/BR-4, online-direct/BR-2/8, room-reset/BR-7）— 调度者须同步
+//     main-gate ruleset required checks（参考 ulw-legacy-four-cleanup §T-L2）。
+//   - merge-sync-qa.mjs 仍 DISABLED（不归此白名单，T-L1 接位归调度者合流后判定）。
+// 新增 orphan（非此清单）立即 fail。
+const KNOWN_ORPHANS: ReadonlySet<string> = new Set([]);
 
 function isDisabled(header: string): boolean {
   // 第一条非空注释含「DISABLED」字样（merge-sync-qa / sync-qa 范式）。

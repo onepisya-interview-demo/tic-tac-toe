@@ -183,3 +183,269 @@ jobs:
           path: ${RUNNER_TEMP}/rooms-race-qa
           retention-days: 7
           if-no-files-found: warn
+
+
+  home-return-qa:
+    name: Home-return QA (Playwright probe) — BR-1/2/3/5
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/home-return-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3199)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/home-return-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3199 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3199/ > /dev/null; then
+              echo "Server ready after ${i}s on :3199"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run home-return-qa probe
+        run: BASE_URL=http://localhost:3199 pnpm exec node tests/qa/home-return-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: home-return-qa-evidence
+          path: ${RUNNER_TEMP}/home-return-qa
+          retention-days: 7
+          if-no-files-found: warn
+
+  offline-mode-qa:
+    name: Offline-mode QA (Playwright probe) — BR-4
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/offline-mode-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3113)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/offline-mode-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3113 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3113/ > /dev/null; then
+              echo "Server ready after ${i}s on :3113"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run offline-mode-qa probe
+        run: BASE_URL=http://localhost:3113 pnpm exec node tests/qa/offline-mode-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: offline-mode-qa-evidence
+          path: ${RUNNER_TEMP}/offline-mode-qa
+          retention-days: 7
+          if-no-files-found: warn
+
+  offline-qa:
+    name: Offline QA / pure-local (Playwright probe) — BR-4
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/offline-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3114)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/offline-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3114 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3114/ > /dev/null; then
+              echo "Server ready after ${i}s on :3114"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run offline-qa probe (pure-local W3 contract)
+        run: BASE_URL=http://localhost:3114 pnpm exec node tests/qa/offline-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: offline-qa-evidence
+          path: ${RUNNER_TEMP}/offline-qa
+          retention-days: 7
+          if-no-files-found: warn
+
+  online-direct-qa:
+    name: Online-direct QA (Playwright probe) — BR-2/8
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/online-direct-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3112)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/online-direct-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3112 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3112/ > /dev/null; then
+              echo "Server ready after ${i}s on :3112"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run online-direct-qa probe
+        run: BASE_URL=http://localhost:3112 pnpm exec node tests/qa/online-direct-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: online-direct-qa-evidence
+          path: ${RUNNER_TEMP}/online-direct-qa
+          retention-days: 7
+          if-no-files-found: warn
+
+  room-reset-qa:
+    name: Room-reset QA (Playwright probe) — BR-7
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      EVIDENCE_DIR: ${RUNNER_TEMP}/room-reset-qa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server (hermetic :3111)
+        run: |
+          set -euo pipefail
+          DB_FILE="${RUNNER_TEMP}/room-reset-qa.db"
+          DATABASE_URL="file:${DB_FILE}" PORT=3111 pnpm start &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -sf http://localhost:3111/ > /dev/null; then
+              echo "Server ready after ${i}s on :3111"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s" >&2
+          kill "$SERVER_PID" || true
+          exit 1
+      - name: Run room-reset-qa probe
+        run: BASE_URL=http://localhost:3111 pnpm exec node tests/qa/room-reset-qa.mjs
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: room-reset-qa-evidence
+          path: ${RUNNER_TEMP}/room-reset-qa
+          retention-days: 7
+          if-no-files-found: warn
