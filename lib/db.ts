@@ -46,10 +46,13 @@ import { emptyStats, recordOutcome, type GameStats } from './game';
  *   **修复前**这三步在两 await 点之间可被并发请求交错，单进程双
  *   并发 100% 丢更新（E1 实验 60/60 丢，地图 ulw-rooms-race-map
  *   T-A）；**修复后**实测零丢失零持续。
- * - 多实例（Vercel + Turso HTTP）的跨进程竞态由本仓 README 边界
- *   注承担，不在本服务实现承诺内；E7 实测揭示失败回滚会泄漏文件
- *   级写锁，需客户端 close 回收（运维事实）。本仓只承诺单进程互
- *   斥 + 事务包裹。
+ * - 多实例（Vercel + Turso HTTP）的跨进程竞态：2026-09-24 remote
+ *   实测（T-L4，`.omo/evidence/turso-race/`，回归锚
+ *   tests/db/turso-remote-race-feasibility.test.ts）证实远程 write
+ *   事务由服务端串行化——双连接裸并发 30/30 终值精确，三步只要
+ *   保持在单事务内，多实例同样不丢更新；平台语义演进不在承诺内
+ *   （单库 110 轮实测，非契约级）。E7 的失败回滚文件锁泄漏为
+ *   file: 模式特有，远程无此现象（20 轮 0 次客户端回收）。
  * - 行不存在时返回明确信号（`null` / `not-found` 字符串），不静默建档。
  * - 行存在的累加是纯函数 `recordOutcome(current, outcome)`（lib/game.ts）。
  *
@@ -316,12 +319,12 @@ export async function loadRecordByRoom(room: string): Promise<GameStats | null> 
  * `.then(fn)` step. The `then(_, fn)` form schedules `fn`
  * regardless of the previous step's state.)
  *
- * Out of scope: multi-process (Vercel + Turso HTTP) race
- * semantics. See README「多实例 last-write-wins」boundary note.
- * E7 proved that failed rollbacks leak file-level write locks that
- * only recover after `client.close()` on the offending peer — that
- * operational fact is recorded here, not mitigated inside the
- * service.
+ * Multi-process (Vercel + Turso HTTP): T-L4 remote measurement
+ * (2026-09-24) showed server-side serialization of concurrent write
+ * transactions — as long as the three steps stay inside one
+ * transaction, multi-instance writes do not lose updates either.
+ * E7's file-lock leak on failed rollback is file:-mode-specific;
+ * remote mode showed no such leak (0 client recycles in 20 rounds).
  */
 let writeChain: Promise<unknown> = Promise.resolve();
 
@@ -473,7 +476,9 @@ export async function mergeRecordByRoom(
  *
  * Concurrency (T-C / D9 修复形态): funneled through `withWriteLock`
  * + drizzle `db.transaction()`. 同进程并发记录不会丢失更新；E6 实
- * 测零丢失零持续。多实例 last-write-wins 由 README 边界注承担。
+ * 测零丢失零持续。多实例：T-L4 remote 实测（2026-09-24）证实三步
+ * 在单事务内时服务端串行化写事务，同样不丢（边界收窄为平台语义
+ * 演进不承诺）。
  */
 export type RecordOutcomeResult =
   | { ok: true; stats: GameStats }

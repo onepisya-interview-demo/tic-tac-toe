@@ -176,6 +176,7 @@ turso db shell <db-name> \
 - **`ulw-demo.vercel.app` 状态**：`404 DEPLOYMENT_NOT_FOUND`（project-level domain 与 deployment-level alias 均已清理）
 - **本地目录**：`<repo-root>`（2026-09-10 从 `ulw-demo` 改名，与项目名一致）
 - **Turso db**：`tic-tac-toe-onepisya`（aws-us-east-1，region 建库后不可改）
+- **并发写实测边界（T-L4，2026-09-24）**：远程 Turso 的 `transaction('write')` 由服务端串行化——双连接裸并发 30/30、单连接互斥 60/60、双连接重试 20/20 全部终值精确、0 锁泄漏（file: 模式的丢更新与文件锁泄漏在远程均不出现）。写路径三步保持单事务内即多实例不丢更新；平台语义演进不在承诺内。细节：`.omo/evidence/turso-race/T-L4-remote-turso-race-report.md`，复跑锚 `tests/db/turso-remote-race-feasibility.test.ts`（TURSO_RACE_EXPERIMENT=1 双门跳过）
 - **部署方式**：Vercel CLI（Phase 1）。Phase 2（Vercel for GitHub）待 GitHub 仓库创建后启用。
 - **回滚**：`vercel rollback` 或 Dashboard → Deployments → "Promote to Production"。
 

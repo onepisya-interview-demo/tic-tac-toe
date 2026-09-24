@@ -260,3 +260,13 @@ remove-ai-slops Phase 2「先锁行为」（characterization test）如果对错
 「组件在 A 页挂载、需要知道从哪来」不能靠组件内 ref 记 pathname——离开 A 页即卸载。正确机制：**layout 层挂不卸载的 NavPrevTracker**（`useLayoutEffect` 写 sessionStorage，保证先于页级 passive effect）+ 页级 consume-on-read（使硬刷新天然无标记）。
 
 Plan: .omo/plans/ulw-home-merge-trigger-spec-20260922.md
+
+### 33. file: 并发灾难 ≠ 远程并发灾难——T-L4 remote Turso 实测（2026-09-24）
+
+T-A 的 file: 双连接实验钉下两个灾难印象：E1 单进程双并发 100% lost-update、E7 失败回滚泄漏文件级写锁需客户端 close 回收。T-L4 把同型实验对真实 Turso（aws-us-east-1）复跑后**两个印象都要修正**：R-E5 双连接裸并发 `transaction('write')` 30/30 终值精确、R-E6 单连接互斥 60/60、R-E7 20/20 零回收——远程 write 事务由服务端串行化（第二事务的读发生在第一提交之后，终值才是 2 而非 1），锁泄漏是 file: 模式特有。**推论**：写路径三步保持在单事务内时，多实例也不丢更新——lib/db.ts 的「多实例 last-write-wins」边界注据此从推断升级为实测窄化结论（平台语义演进仍不承诺）。方法论上：**并发行为结论不可跨存储模式外推**，file: 实验钉的是本地形态的契约，远程形态要另行实测才能写「边界注」。
+
+#### 复刻实验的取样教训（补充）
+
+首跑三配置 100% `RangeError: Only finite numbers`：复刻 T-A 时 `SELECT_ROW` 手抄成两列（真源五列），`Number(undefined)=NaN` 撞 client 参数校验。5 行最小复现（直连 vs 事务内各 SELECT 一次）5 分钟定位——**复刻实验先做单步最小复现再跑全量**，错误信息（参数校验）与根因（列裁剪）相距甚远，靠猜会误判成远程行为问题。
+
+Plan: .omo/plans/ulw-legacy-four-cleanup-20260924.md
