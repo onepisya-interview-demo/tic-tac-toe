@@ -13,7 +13,7 @@
 | BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
 | BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
 | BR-5 | POST /merge 仅用户主动确认 | 弹框点「合并并清空」才发 merge | 确认前零调用；409 防静默建档；用户拒绝 = 零网络写 | `tests/qa/home-return-qa.mjs` step04/05 + `tests/qa/merge-sync-qa.mjs` |
-| BR-6 | 同房间并发写精确累加（不丢不重） | 两设备同名并发记局/合并，单进程内账本精确 = 实际局数（进程内互斥 + 事务包裹，71ad38d） | 多实例部署仍 last-write-wins（README 边界注承担；E7 实测失败回滚泄漏文件锁需客户端回收） | `tests/qa/rooms-race-qa.mjs` step 1 + `tests/db/lost-update-mutex.test.ts`（10 轮精确断言） |
+| BR-6 | 同房间并发写精确累加（不丢不重） | 两设备同名并发记局/合并，账本精确 = 实际局数（进程内互斥 + 事务包裹，71ad38d；多实例实测同不丢——T-L4 remote 实测 2026-09-24：三步在单事务内时服务端串行化 write 事务，110 轮零丢失） | 平台事务语义演进不承诺（单库实测非契约级）；E7 失败回滚文件锁泄漏为 file: 模式特有，远程无此现象 | `tests/qa/rooms-race-qa.mjs` step 1 + `tests/db/lost-update-mutex.test.ts`（10 轮精确断言）+ `tests/db/turso-remote-race-feasibility.test.ts`（远程回归锚，双门跳过） |
 | BR-7 | 重置清零保留身份 | POST /reset 清零战绩，房间名保留 | 重置不丢身份；前端入口需确认 | `tests/qa/room-reset-qa.mjs` |
 | BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `tests/qa/online-direct-qa.mjs` |
 | BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |

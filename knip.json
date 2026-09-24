@@ -9,5 +9,6 @@
     "scripts/**/*.{mjs,ts}"
   ],
   "ignore": ["public/sw.js"],
+  "ignoreBinaries": ["magick"],
   "ignoreExportsUsedInFile": true
 }
