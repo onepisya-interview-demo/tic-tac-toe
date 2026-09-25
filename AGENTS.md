@@ -34,7 +34,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 命令与端口：[`docs/commands.md`](docs/commands.md)
 - 反模式全集：[`docs/anti-patterns.md`](docs/anti-patterns.md)
 - 调试者备注：[`docs/notes.md`](docs/notes.md)
-- 调度者职责与派发纪律（Session 单一事则 / 正交性矩阵 / wayfinder 地图接线与试点复盘）：[`docs/dispatcher-playbook.md`](docs/dispatcher-playbook.md)
+- 调度者职责与派发纪律（Session 单一事则 / 正交性矩阵 / wayfinder 地图接线与试点复盘 / 多票波派单复盘）：[`docs/dispatcher-playbook.md`](docs/dispatcher-playbook.md)
 - 验证门禁（六层）：[`docs/verification-gauntlet.md`](docs/verification-gauntlet.md)
 - 提交策略：[`docs/commit-policy.md`](docs/commit-policy.md)
 - herdr session 协议：[`docs/herdr-session-hygiene.md`](docs/herdr-session-hygiene.md)

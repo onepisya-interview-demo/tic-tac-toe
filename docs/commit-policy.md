@@ -70,6 +70,16 @@
 | 正 ③ 标识符密集 | `refactor(store): 抽取 resetStore helper 统一 11 处 setState 重置块` | PASS |
 | 反 ① 纯英文 subject | `fix(x): hello world` | FAIL R7 |
 | 反 ② 中文 subject + 英文 free-text trailer | `Constraint: keep the leaf intact.` | FAIL R7 |
+| 反 ③ 英文路径值 trailer | `Refs: .omo/plans/foo.md` | FAIL R7——路径值也算自由文本，要引路径走 `Plan:` footer（豁免清单内） |
+
+R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
+
+### R6 BR↔探针双向绑定（全仓状态检查）
+
+`tests/qa/commit-audit.mjs` R6 只在 `--branch` 模式运行，审计对象是**仓库现状**而非逐 commit：遍历 `docs/business-rules.md` 每个 BR 行，探针列（末列）反引号引用的每个路径必须 ① 在仓内存在、② 该文件**头 20 行**内出现对应 BR 号（如 `// BR: BR-6, BR-12`）；探针列标「⚠ 未探针化」的行豁免。
+
+- 新增/修订 BR 行或探针文件时**两处头注同步改**，R6 才回绿；探针列反引号内写全路径（规范化路径不命中会误判有洞）。
+- `--branch` 模式走整条分支全历史 + 全仓 R6，因此**基线的隐性违规会在任意波的终验首爆**——不是本波引入的也要当场修（实证 2026-09-25：BR-6 探针头注缺失在两计划波终验被 R6 揪出，cdacf88 修复）。
 
 R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
 
