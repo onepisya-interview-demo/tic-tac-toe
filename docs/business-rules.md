@@ -19,6 +19,7 @@
 | BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |
 | BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/rooms-race-qa.mjs` step 5（outcomes→404） + `tests/qa/rooms-race-qa.mjs` step 8（merge→409） |
 | BR-11 | 合并弹框投递目标 = 本机身份 | 有身份 → 弹框 input readOnly 显示 current room name；无身份 → 可输入（首次收名） + 合并成功后 setStoreName 落 localStorage | ①有身份时输入框不可编辑；②合并成功不改变既有身份；③首次收名成功后身份落 localStorage（key = ttt.room.name.v1）| `tests/qa/home-return-qa.mjs` step 10（有身份 → input readOnly + 值 = 身份名 + 合并后身份不变）+ `tests/qa/home-return-qa.mjs` step 11（无身份 → 可输入 + 合并后 ttt.room.name.v1 写入）|
+| BR-12 | **删除房间销户 + TTL 兜底** | `DELETE /api/rooms/{room}` 200 `{ok:true}` 销户服务端 game_stats 行；同名重建 `POST /api/rooms` 幂等回 `existed:false` 全零账本；TTL（30 天不活跃）自动回收兜底孤儿账本 | ①对不存在房间 DELETE → 404 `room-not-found` problem+json（不静默销户）；②删除后 `GET /stats` 与 `POST /stats/outcomes` → 404 `stats-not-found` banner 链路（同 rooms-race step 5 旧路径，与 step 9 真 API 通道互补）；③删除后重进同名房间 → 全零新账本，不复活旧数据（`existed:false` + `stats` 全零键值严格匹配） | `tests/qa/rooms-race-qa.mjs` step 9（真 API DELETE + 重建全零 + ghost 404 三反面场景同端到端流） + `tests/qa/rooms-race-qa.mjs` step 5（libsql 子进程直删 + OutcomeErrorBanner 端到端，互为双通道） |
 
 
 ## 探针列格式约定（机器可校验）

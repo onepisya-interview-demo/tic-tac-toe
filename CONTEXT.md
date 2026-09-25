@@ -63,8 +63,19 @@ _Avoid_: 「拉取同步」
 
 **清空（reset-room-stats）**：
 `POST /api/rooms/{room}/stats/reset`，无 body；服务端清零计数、保留房间身分行（`game_stats.room` UNIQUE 不删），row 缺失返 404 `stats-not-found`（防静默建档）。service 真源 `lib/db.ts:resetRecordByRoom`。
-_Avoid_: 「删除房间」「清空房间」（清的是计数，不是身份）
+_Avoid_: 「清空房间」（语义弱于 reset-room-stats——清的是计数，不是身份；「删除房间（delete-room）」已 §一 D-5 解禁转正，专指资源销毁，勿回用别名）
 _Usage_: `/result?room=` 有账本分支（stats 非 null）挂 `ResetRoomStatsButton` → 确认弹框 → 清零 → `router.refresh()` 重读全零行。
+
+**删除房间（delete-room，BR-12）**：
+`DELETE /api/rooms/{room}`，无 body；服务端**销户** game_stats 整行（counts + 身分行都走，与清空严格区分），同名房间名可被 `POST /api/rooms` 幂等重建为全零账本。200 `{ok:true}` / 404 `room-not-found` / 422 `invalid-room-name` / 500 `db-unavailable`。service 真源 `lib/db.ts:deleteRoomByRoom`；端点真源 `app/api/rooms/[room]/route.ts`。TTL 兜底：`purgeStaleRooms(maxAgeDays = 30)` 按 `updated_at` 自动回收孤儿账本（端点 `app/api/maintenance/purge`，Vercel Cron 调度）——删除是用户主动销户通道，TTL 是运维兜底，两者不混。
+_Avoid_: 「清空房间」「重置房间」（与 reset-room-stats 同义但语义弱——清空只清计数，不销户）；「注销」（暗含 token/session 语义，本仓没有）；`PUT /api/rooms`（REST 资源动词语义错位）
+_Usage_: `/result?room=` 有账本分支挂 `DeleteRoomButton` → type-to-confirm 弹框（输入房间名精确匹配） → DELETE 200/404 视为成功，续 `setRoomName(null)` + `resetOfflineStats()` + `router.push('/')` 回到首页无身份态。404 当「已不存在」幂等吞掉——调用方按契约一次性翻译，不要把 404 当成错误留给用户。
+_Supersedes_（2026-09-25 §一 D-5 解禁御定）: 「删除房间」自 `_Avoid_` 转正（plan ulw-room-lifecycle-20260924 §一 D-5）；此前因 W2 之前不存在真 DELETE 端点被 `_Avoid_`。
+
+**退出房间（leave-room）**：
+前端轻确认弹框（无 type-to-confirm）→ 用户确认后只清**本机身份**（`setRoomName(null)`） + `resetOfflineStats()`；**零网络写**（offline 战绩清零 + 服务端账本保留——其他设备可继续使用该房间）。入口 `/result` `LeaveRoomButton`，与 `ResetRoomStatsButton` / `DeleteRoomButton` 同区三分。
+_Avoid_: 「离开」「登出」（「登出」暗含 token/session，与本仓无身份态正交——重进同名房间就是重新 enter-or-create，不是登录）
+_Usage_: 「我换设备用这个房间」或「我就是用本房间玩了一局 now 想停」→ 退出即可，不要用删除；「这房间真不要了」才用删除。
 
 ### 哨兵（sentinel）
 
@@ -128,6 +139,7 @@ _Avoid_: 与 vitest 单测混称「测试」
 - **pendingSyncCount** 由 **本地战绩** 与 **合并基线哨兵** 推导；**防重弹哨兵** 只作用于弹框时机，两者不可互相替代
 - **pure-local** 约束 offline 路径零 **合并**、零 **记局**；上服只经用户主动确认的弹框
 - **房间**（W3 概念）三实例互不直写：本地 ↔ 服务端只经 **合并**；服务端 → UI 只经 **刷新**（`/result` RSC SSR 直读）
+- **清空 / 删除 / 退出 三分（§一 D-5 御定）**：清空只清服务端计数，身分行保留；删除销户整行（game_stats 行 + 本机身份 + 本机 offline 战绩一并清零），同名房间名可幂等重建为全零账本，TTL 兜底孤儿；退出只清本机（身份 + offline 战绩），服务端账本保留供其他设备续用——三者入口按钮同在 `/result` 房间管理区，**绝不混称**。
 
 ## Flagged ambiguities
 
@@ -138,6 +150,7 @@ _Avoid_: 与 vitest 单测混称「测试」
 - **「战绩」未限定实例**：曾致 A2 红线反复争议（GET 响应可否入 store）。裁决：W3 后只剩「查询服务器」与「写入」两通道；查询只读展示（`/result` RSC 与 HomeStatsEntry 纯链接），持久层零污染。来源：AGENTS.md「A1 红线」
 
 - **「本机匿名记账中」卡片退役（2026-09-20）**：offline 无『匿名』UI 态——账本无条件直显；『匿名』从用户可见文案退役，仅存工程语境（防静默建档的『匿名点击路径』）。`offline-stats-anonymous` testid 随卡片退役。来源：`.omo/plans/ulw-offline-ledger-direct.md` §0。
+- **「删除房间」从 W2 `_Avoid_` 转正（2026-09-25 §一 D-5 解禁）**：此前因 W2 之前不存在真 DELETE 端点被 `_Avoid_`；T-N1 合入 `DELETE /api/rooms/{room}` 端点后产品从此有真实删除操作，与「清空房间」（仅清计数）/「退出房间」（仅清本机身份与 offline 战绩）严格三分。用户可见文案、commit 正文、探针命名禁用「删除房间」以外任何动词表示资源销毁（同义词如「注销」「销户」「解散」按 §一 D-5 御定留作工程语境词，不入白话词表）。来源：`.omo/plans/ulw-room-lifecycle-20260924.md` §一 D-5 / §二 T-N1+T-N2。
 
 ## Pending
 

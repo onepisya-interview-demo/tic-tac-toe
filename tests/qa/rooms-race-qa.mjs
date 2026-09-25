@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // rooms-race-qa.mjs — T-B1 (ulw-rooms-race-qa-ticket) probe.
-// BR: BR-6, BR-7, BR-10
+// BR: BR-6, BR-7, BR-10, BR-12
 //
 // Production build probe (BASE_URL, hermetic tmp DB). Covers plan ulw-rooms-race-step1 step 1-2-7
 // (research §五: rooms-race probe 票面建议) + 计划 ulw-legacy-four-cleanup-20260924 §T-L1 step 8：
@@ -12,6 +12,7 @@
 //   step 6 (S7) SW non-GET pass-through + 激活竞争（B-1/E1 直系后继）
 //   step 7 (D4/旧14) 慢 DB outcomes ordering + 终态 DOM===API
 //   step 8 (T-L1/N5) merge 对未登记房间 → 409 enter-room-required + 不静默建档
+//   step 9 (T-N1+N2/BR-12) 真 API DELETE 销户 + 幂等重建全零账本 + 不存在房间 404
 //
 // Usage (production build required — 禁 dev server):
 //   DATABASE_URL=file:/tmp/ulw-rr1-<unique>.db PORT=3101 pnpm start &
@@ -139,6 +140,20 @@ async function getStats(ctx, room) {
     `${BASE}/api/rooms/${encodeURIComponent(room)}/stats`,
   );
   return { status: r.status(), body: await r.json().catch(() => null) };
+}
+
+async function postDelete(ctx, room) {
+  // 真 API DELETE 销户：step 9 主通道。Playwright ctx.request.fetch 支持任意方法；
+  // 不用 ctx.request.delete() 因为它默认期望 2xx，会把 422/404 当异常抛（probe 要的是「看真实状态码」）。
+  const r = await ctx.request.fetch(
+    `${BASE}/api/rooms/${encodeURIComponent(room)}`,
+    { method: "DELETE" },
+  );
+  return {
+    status: r.status(),
+    body: await r.json().catch(() => null),
+    headers: r.headers(),
+  };
 }
 
 // ============================================================================
@@ -728,6 +743,148 @@ await step("step 8 (N5/BR-10 merge 半边) 未登记房间 merge→409 + 不静�
 
     // (c) BR-10 不静默建档双确认：merge 409 后再 GET stats 仍 404（行未被服务端
     //     暗中创建；与 step 5 outcomes→404 共构「孤儿请求零副作用」半边闭环）。
+
+// ============================================================================
+// step 9 (T-N1+N2/BR-12) — 真 API DELETE 销户 + 幂等重建全零账本 + 不存在房间 404
+// ============================================================================
+//
+// 路径（串联 BR-12 三条反面场景于同端到端流）：
+//   (a) 建房 → 写 2 局（X、O）→ 服务端 totalGames=2
+//   (b) 真 API DELETE /api/rooms/{room} → 200 {ok:true}（T-N1 DELETE 端点正面）
+//   (c) GET stats → 404 stats-not-found；POST outcome → 404 stats-not-found
+//       （服务端无行；与 step 5 子进程 libsql DELETE 模拟构成「真 API vs DB 模拟」
+//       两条独立销户通道，互补）
+//   (d) 反面场景 ①：对从未存在的房间 DELETE → 404 room-not-found
+//   (e) 反面场景 ③：重进同名房间 POST /api/rooms → 200 existed:false + stats 全零
+//       （重建为 fresh ledger，不复活旧数据；钉死 deleteRoomByRoom 真删行 +
+//       registerOrLoginRoom 的 read-then-upsert 路径天然支持）
+//   (f) GET stats → 200 全零，新账本确立
+//
+// 「真 API」= step 5 用子进程 libsql 模拟 DELETE 是 DB 层直删的 fast path，本 step
+// 走的就是端到端 HTTP 契约路径（与 commit 0817519 合入 T-N1 的 DELETE 端点对齐）。
+// ============================================================================
+await step("step 9 (T-N1+N2/BR-12) 真 API DELETE 销户 + 幂等重建全零账本", async () => {
+  const { browser, ctx } = await launchQA();
+  try {
+    const room = uniqueRoom("step9");
+
+    // (a) 建房 + 写 2 局 → 服务端 totalGames=2。uniqueRoom 保证同 session 内无残留。
+    const enter = await postRoom(ctx, room);
+    assert.equal(enter.status, 200, `POST /api/rooms 200；got ${enter.status}`);
+    assert.equal(
+      enter.body.existed,
+      false,
+      `fresh room existed=false；got ${enter.body.existed}`,
+    );
+    for (const outcome of ["X", "O"]) {
+      const o = await postOutcome(ctx, room, outcome);
+      assert.equal(o.status, 200, `seed outcome "${outcome}" 200；got ${o.status}`);
+    }
+    const beforeDelete = await getStats(ctx, room);
+    assert.equal(
+      beforeDelete.status,
+      200,
+      `pre-delete GET stats 200；got ${beforeDelete.status}`,
+    );
+    assert.equal(
+      beforeDelete.body.stats.totalGames,
+      2,
+      `pre-delete totalGames=2；got ${beforeDelete.body.stats.totalGames}`,
+    );
+
+    // (b) 真 API DELETE 销户正面：T-N1 DELETE 端点契约 200 {ok:true}。
+    const del = await postDelete(ctx, room);
+    assert.equal(del.status, 200, `DELETE 200 ok；got ${del.status}`);
+    assert.deepEqual(
+      del.body,
+      { ok: true },
+      `DELETE body 严格 == {ok:true}（防 IDL 漂移）；got ${JSON.stringify(del.body)}`,
+    );
+
+    // (c) GET stats + outcome 双 404 — 钉死服务端无行；与 step 5 banner 链路互补。
+    const afterDelete = await getStats(ctx, room);
+    assert.equal(
+      afterDelete.status,
+      404,
+      `post-delete GET stats 404 stats-not-found；got ${afterDelete.status}`,
+    );
+    assert.equal(
+      afterDelete.body.type,
+      "https://docs.example.com/probs/stats-not-found",
+      `GET stats-not-found problem slug；got ${afterDelete.body.type}`,
+    );
+
+    const postDelOutcome = await postOutcome(ctx, room, "X");
+    assert.equal(
+      postDelOutcome.status,
+      404,
+      `post-delete POST outcome 404 stats-not-found；got ${postDelOutcome.status}`,
+    );
+    assert.equal(
+      postDelOutcome.body.type,
+      "https://docs.example.com/probs/stats-not-found",
+      `outcome problem slug stats-not-found；got ${postDelOutcome.body.type}`,
+    );
+
+    // (d) 反面场景 ①：对从未存在过的房间 DELETE → 404 room-not-found（不静默销户）。
+    const ghostRoom = uniqueRoom("step9-ghost");
+    const ghostDel = await postDelete(ctx, ghostRoom);
+    assert.equal(
+      ghostDel.status,
+      404,
+      `DELETE 不存在房间 → 404 room-not-found；got ${ghostDel.status}`,
+    );
+    assert.match(
+      ghostDel.headers["content-type"] ?? "",
+      /application\/problem\+json/,
+      `ghost DELETE problem+json content-type；got ${ghostDel.headers["content-type"]}`,
+    );
+    assert.equal(
+      ghostDel.body.type,
+      "https://docs.example.com/probs/room-not-found",
+      `ghost DELETE problem slug room-not-found；got ${ghostDel.body.type}`,
+    );
+    assert.equal(ghostDel.body.title, "Room not found", `ghost DELETE title；got ${ghostDel.body.title}`);
+    assert.equal(
+      ghostDel.body.status,
+      404,
+      `ghost DELETE problem body status 404；got ${ghostDel.body.status}`,
+    );
+
+    // (e) 反面场景 ③：重进同名房间 → POST /api/rooms {room:same} 200 existed:false。
+    //     关键是 existed=false + stats 全零：钉死 deleteRoomByRoom 真删行 +
+    //     registerOrLoginRoom 的 read-then-upsert 路径天然支持（lib/db.ts:737）。
+    const reenter = await postRoom(ctx, room);
+    assert.equal(
+      reenter.status,
+      200,
+      `重进同名房间 POST /api/rooms 200；got ${reenter.status}`,
+    );
+    assert.equal(
+      reenter.body.existed,
+      false,
+      `重进 existed=false（重建为 fresh ledger，不复活旧数据）；got ${reenter.body.existed}`,
+    );
+    assert.deepEqual(
+      reenter.body.stats,
+      { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
+      `重进 stats 全零；got ${JSON.stringify(reenter.body.stats)}`,
+    );
+
+    // (f) GET stats → 200 全零，新账本经独立通道（GET vs POST）确认。
+    const reGet = await getStats(ctx, room);
+    assert.equal(reGet.status, 200, `重进后 GET stats 200；got ${reGet.status}`);
+    assert.deepEqual(
+      reGet.body.stats,
+      { totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 },
+      `重进后 stats 全零；got ${JSON.stringify(reGet.body.stats)}`,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+// ============================================================================
     const afterMerge = await getStats(ctx, room);
     assert.equal(
       afterMerge.status,
