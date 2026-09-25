@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // home-return-qa.mjs — W3-probes (ulw-room-migration-home-landing) Q5.
-// BR: BR-1, BR-2, BR-3, BR-5 (step 02c: 案① 错峰开启回归钉)
+// BR: BR-1, BR-2, BR-3, BR-5, BR-11 (step 02c: 案① 错峰开启回归钉;
+//       step 10/11: ulw-sync-dialog-identity-lock 身份锁定 + 首次回写)
 //
 // Production build probe (BASE_URL=http://localhost:3199, hermetic tmp DB).
 // Covers plan §3.5 Q5:
@@ -831,6 +832,159 @@ await step("step 09 legacy /api/sessions + /api/players/* retired — all 404", 
     assert.equal(players.status(), 404, `legacy /api/players/*/stats GET 404；got ${players.status()}`);
     await shoot(page, "home-no-reset-no-public.png");
     await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+// T-M1 (BR-11) step 10 — 有身份 → 弹框 input readOnly + 合并后身份不变。
+// 探针实现：用同 A 设备先 setItem(ROOM_KEY, name) 后离线玩 1 局 → 软
+// 导航回首页 → 弹框开 → 断言 input.readOnly===true + value===name →
+// 点确认 → 合并成功后 localStorage[ROOM_KEY] 仍 === name（不产生
+// 改名/换身份回写）。
+await step("step 10 BR-11: 有身份 → 弹框 input readOnly + 合并后身份不变", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa10-${RUN_SUFFIX}`;
+    // A 设备：设 room key → 灌 1 局 offline 数据
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ k, n }) => window.localStorage.setItem(k, n),
+      { k: ROOM_KEY, n: name },
+    );
+    // 预注册服务端 row → 否则 postMerge 409
+    await ctx.request.post(`${BASE}/api/rooms`, { data: { room: name } });
+    await page.evaluate(
+      ({ k, v }) => window.localStorage.setItem(k, v),
+      {
+        k: OFFLINE_KEY,
+        v: JSON.stringify({ totalGames: 2, xWins: 1, oWins: 0, draws: 1, currentStreak: 1 }),
+      },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    // 走 /offline 软导航回首页（BR-1 触发条件不变）
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await softNavHome(page);
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 6000,
+    });
+    // BR-11 断言 ①：有身份 → input readOnly + 值 = 身份名
+    const inputReadOnly = await page.evaluate(
+      () => document.querySelector('[data-testid="sync-confirm-name"]')?.readOnly,
+    );
+    assert.equal(inputReadOnly, true, `有身份时 input.readOnly 必须为 true；got ${inputReadOnly}`);
+    const inputValue = await page.inputValue('[data-testid="sync-confirm-name"]');
+    assert.equal(inputValue, name, `锁定 input value 必须等于身份名 ${name}；got ${inputValue}`);
+    await shoot(page, "home-dialog-step10-locked.png");
+    // 任何尝试改值都被 readOnly 拦截 — 用 Playwright locator.fill 模拟
+    // 真用户编辑（locator.fill 内部会先 focus + 清空 + 按字符 type，
+    // HTML readonly 让清空和 type 都变 no-op；直接 JS dispatchEvent
+    // 会绕过 readonly 给出假绿，所以这里走真实 Playwright API）。
+    const lockedInput = page.locator('[data-testid="sync-confirm-name"]');
+    await lockedInput.fill("mallory-attempt", { timeout: 2000 }).catch(() => undefined);
+    const stillLocked = await page.inputValue('[data-testid="sync-confirm-name"]');
+    assert.equal(stillLocked, name, `readOnly 拦截真实输入；got ${stillLocked}`);
+    // BR-11 断言 ②：合并成功后 localStorage[ROOM_KEY] 仍 === name（不换身份）
+    const writes = [];
+    page.on("request", (req) => {
+      if (isWriteToApi(req.method(), req.url())) {
+        writes.push({ method: req.method(), url: req.url() });
+      }
+    });
+    writes.length = 0;
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      { timeout: 4000 },
+    );
+    await page.click('[data-testid="sync-confirm-confirm"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      { timeout: 8000 },
+    );
+    await page.waitForTimeout(400);
+    const localAfter = await captureLocalStorage(page);
+    assert.equal(
+      localAfter[ROOM_KEY],
+      name,
+      `BR-11: 合并成功后身份不换；got localStorage[ttt.room.name.v1] = ${localAfter[ROOM_KEY]}`,
+    );
+    // 防御性兜底：本 step 全程 POST /api/rooms 只能落到 name，不应有
+    // 任何「用 mallory-attempt 之类改投其他房间」的请求
+    const sessionUrls = writes.filter(
+      (w) => w.method === "POST" && /\/api\/rooms$/.test(w.url),
+    );
+    for (const w of sessionUrls) {
+      assert.ok(
+        w.url.endsWith(`/api/rooms`) && !w.url.includes("mallory"),
+        `BR-11: POST /api/rooms 不应包含改名；got ${w.url}`,
+      );
+    }
+    await shoot(page, "home-dialog-step10-after-merge.png");
+  } finally {
+    await browser.close();
+  }
+});
+
+// T-M1 (BR-11) step 11 — 无身份 → 可输入 + 合并成功后 localStorage[ROOM_KEY] 写入。
+// 探针实现：A 设备无 ROOM_KEY → 灌 1 局 offline → 软导航回首页 → 弹框
+// 开 → 断言 input.readOnly===false → 在 input 中输入新名 → 点确认 →
+// 合并成功后 localStorage[ttt.room.name.v1] === 新名（首次回写契约）。
+await step("step 11 BR-11: 无身份 → 可输入 + 合并后 ttt.room.name.v1 写入", async () => {
+  const { browser, ctx, page } = await launchQA();
+  try {
+    const name = `hrqa11-${RUN_SUFFIX}`;
+    // A 设备：不设 ROOM_KEY（确保无身份）
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.evaluate((k) => window.localStorage.removeItem(k), ROOM_KEY);
+    // 灌 1 局 offline（让 HomeDialogMount 有 pending 触发弹框）
+    await page.evaluate(
+      ({ k, v }) => window.localStorage.setItem(k, v),
+      {
+        k: OFFLINE_KEY,
+        v: JSON.stringify({ totalGames: 1, xWins: 1, oWins: 0, draws: 0, currentStreak: 1 }),
+      },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await softNavHome(page);
+    await page.waitForSelector('[data-testid="sync-confirm-dialog"][open]', {
+      timeout: 6000,
+    });
+    // BR-11 断言 ③ (前置)：无身份 → input.readOnly === false
+    const inputReadOnly = await page.evaluate(
+      () => document.querySelector('[data-testid="sync-confirm-name"]')?.readOnly,
+    );
+    assert.equal(inputReadOnly, false, `无身份时 input.readOnly 必须为 false；got ${inputReadOnly}`);
+    await shoot(page, "home-dialog-step11-editable.png");
+    // 输入新名（首次收名）
+    const inputEl = await page.locator('[data-testid="sync-confirm-name"]');
+    await inputEl.fill(name);
+    // 等主 CTA 解锁
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      { timeout: 4000 },
+    );
+    // 点确认 → 合并 + 首次回写
+    await page.click('[data-testid="sync-confirm-confirm"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      { timeout: 8000 },
+    );
+    await page.waitForTimeout(400);
+    // BR-11 断言 ③：合并成功后 localStorage[ttt.room.name.v1] === 新名
+    const localAfter = await captureLocalStorage(page);
+    assert.equal(
+      localAfter[ROOM_KEY],
+      name,
+      `BR-11: 首次收名成功后身份落 localStorage；got localStorage[ttt.room.name.v1] = ${localAfter[ROOM_KEY]}`,
+    );
+    // 软二次进首页，弹框不应再开（pending 已清）
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await softNavHome(page);
+    await page.waitForTimeout(500);
+    const reopen = await page.locator('[data-testid="sync-confirm-dialog"][open]').count();
+    assert.equal(reopen, 0, `首次收名后，pending 清零，不重弹`);
+    await shoot(page, "home-dialog-step11-after-writeback.png");
   } finally {
     await browser.close();
   }

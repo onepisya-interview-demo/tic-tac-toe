@@ -24,6 +24,15 @@ export const SYNC_DECLINED_KEY = 'ttt.offline.sync-declined.v1';
  *    契约；isPlayerName 为退役符号名）。
  *  - 标题/副标题/CTA 文案零「玩家名/注册/登录」（A9 红线）。
  *
+ * T-M1 改动 (ulw-sync-dialog-identity-lock):
+  - 有身份（initialName 非空）→ 输入框 readOnly（身份锁定）；
+    无身份 → 可输入（首次收名是弹框的设计职责）。
+  - 首次收名回写由调用方 HomeDialogMount.handleConfirm 完成
+    （if (name && !store.roomName) setStoreName(name);）——store 与
+    localStorage 镜像与 RoomGateDialog「登记成功才写」契约对齐。
+  - 探针：BR-11（docs/business-rules.md），tests/qa/home-return-qa.mjs
+    step 10/11。
+ *
  * Decision D1: the dialog now lives on the home page, opened by the
  * home page's mount effect when `pendingSyncCount() > declinedSentinel`
  * (the sentinel is a sessionStorage value written when the user picks
@@ -140,6 +149,12 @@ export function SyncConfirmDialog({
 
   const trimmed = name.trim();
   const nameOk = isRoomName(trimmed);
+  // T-M1 (BR-11): 有身份时输入框锁定，禁止改投其他房间；无身份时
+  // 首次收名仍由弹框收（设计职责）。初始身份判定用 initialName 而
+  // 非 name state：弹框开时 useEffect 把 name 同步到 initialName，
+  // 两者瞬间同值，但 readonly 派生靠"对话前是否就有身份"决定
+  // ——锁定意图 = 锁投递目标，与 store 当前 roomName 同源。
+  const nameLocked = initialName !== '';
   const canConfirm = nameOk && !busy;
 
   async function runMergeSequence(): Promise<GameStats> {
@@ -236,11 +251,17 @@ export function SyncConfirmDialog({
             onChange={(e) => setName(e.target.value)}
             maxLength={NAME_MAX}
             disabled={busy}
+            // T-M1 (BR-11): 有身份时输入框只读，禁止改投其他房间。
+            // 与 disabled 互不影响 —— disabled 改 opacity，readOnly
+            // 保留可读样式与锁定 hint。aria-readonly 让屏幕阅读器
+            // 同步报告锁定状态。
+            readOnly={nameLocked}
+            aria-readonly={nameLocked || undefined}
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            className="flex-1 bg-bg-base border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong disabled:opacity-60"
+            className="flex-1 bg-bg-base border border-border-subtle rounded-md px-3 py-2 text-body text-text-primary focus:outline-none focus:border-border-strong disabled:opacity-60 read-only:cursor-default"
             data-testid="sync-confirm-name"
             aria-label="房间名"
             aria-invalid={!nameOk}

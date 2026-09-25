@@ -18,6 +18,7 @@
 | BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `tests/qa/online-direct-qa.mjs` |
 | BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |
 | BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/rooms-race-qa.mjs` step 5（outcomes→404） + `tests/qa/rooms-race-qa.mjs` step 8（merge→409） |
+| BR-11 | 合并弹框投递目标 = 本机身份 | 有身份 → 弹框 input readOnly 显示 current room name；无身份 → 可输入（首次收名） + 合并成功后 setStoreName 落 localStorage | ①有身份时输入框不可编辑；②合并成功不改变既有身份；③首次收名成功后身份落 localStorage（key = ttt.room.name.v1）| `tests/qa/home-return-qa.mjs` step 10（有身份 → input readOnly + 值 = 身份名 + 合并后身份不变）+ `tests/qa/home-return-qa.mjs` step 11（无身份 → 可输入 + 合并后 ttt.room.name.v1 写入）|
 
 
 ## 探针列格式约定（机器可校验）

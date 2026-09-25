@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SyncConfirmDialog } from './SyncConfirmDialog';
 
@@ -143,7 +143,12 @@ describe('components/SyncConfirmDialog (W2 房间化)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('「合并并清空」成功：onConfirm 收到 trim-room，并按序触发 POST /api/rooms + POST /api/rooms/{room}/stats/merge', async () => {
+  it('「合并并清空」成功（T-M1 锁定路径）：有身份 + 确认 → onConfirm 收到 initialName，按序触发 POST /api/rooms + POST /api/rooms/{room}/stats/merge', async () => {
+    // T-M1 (BR-11): 有身份时 input readOnly，clear/type 是 no-op；
+    // 该路径不再能测试 trim（trim 只在「无身份可输入」路径下生效）。
+    // 本测试只验证锁定路径：onConfirm 收到的就是 initialName，POST
+    // 链按序触发。trim 行为由下方 "T-M1 BR-11: 无身份 + 输入 + 确认"
+    // 一条覆盖。
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -155,14 +160,109 @@ describe('components/SyncConfirmDialog (W2 房间化)', () => {
         onReject={vi.fn()}
       />,
     );
-    await user.clear(screen.getByTestId('sync-confirm-name'));
-    await user.type(screen.getByTestId('sync-confirm-name'), '   carol   ');
+    // input 已锁定，验证值仍为初始身份名
+    const input = screen.getByTestId('sync-confirm-name') as HTMLInputElement;
+    expect(input.readOnly).toBe(true);
+    expect(input.value).toBe('alice');
     await user.click(screen.getByTestId('sync-confirm-confirm'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
-    expect(onConfirm).toHaveBeenCalledWith('carol');
+    expect(onConfirm).toHaveBeenCalledWith('alice');
     const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
     expect(urls).toContain('/api/rooms');
-    expect(urls.some((u) => u.includes('/api/rooms/carol/stats/merge'))).toBe(true);
+    expect(urls.some((u) => u.includes('/api/rooms/alice/stats/merge'))).toBe(true);
+  });
+
+  // ── T-M1 (BR-11) 身份锁定契约 ──
+  it('T-M1 BR-11: 有身份（initialName 非空）→ input readOnly 且值 = 身份名', () => {
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={3}
+        initialName="alice"
+        onConfirm={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId('sync-confirm-name') as HTMLInputElement;
+    expect(input.readOnly).toBe(true);
+    expect(input.value).toBe('alice');
+    expect(input).toHaveAttribute('aria-readonly', 'true');
+  });
+
+  it('T-M1 BR-11: 无身份（initialName 空）→ input 可编辑，readOnly=false', () => {
+    // 用 fireEvent.change 直接设值，避免 user.type 的字符级模拟在
+    // 长串 + jsdom 受控 input 下出现的部分输入（user.type 触发多
+    // 次 input/onChange，React 19 batch 时机与 userEvent 14 的 delay
+    // 配置耦合，长串易丢尾部字符）。本断言只关心"input 可编辑 +
+    // readOnly 状态"两件事，setter 模拟更确定。
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={1}
+        initialName=""
+        onConfirm={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId('sync-confirm-name') as HTMLInputElement;
+    expect(input.readOnly).toBe(false);
+    expect(input).not.toHaveAttribute('aria-readonly');
+    fireEvent.change(input, { target: { value: 'fresh-room' } });
+    expect(input.value).toBe('fresh-room');
+  });
+
+  it('T-M1 BR-11: 有身份 + 确认 → onConfirm 收到 initialName（不产生改名回写）', async () => {
+    // 探针「不产生回写调用」：本层只断言 onConfirm 收到的就是
+    // initialName，不应被 input 编辑污染。setStoreName 实际触发在
+    // HomeDialogMount.handleConfirm 的 if (!store.roomName) 分支，
+    // 由 components/HomeDialogMount.test.tsx 「handleConfirm on a
+    // returning user (already has room)」一条覆盖 — 此处封口
+    // dialog 层的"锁定后不可改名"契约。
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={2}
+        initialName="alice"
+        onConfirm={onConfirm}
+        onReject={vi.fn()}
+      />,
+    );
+    // 任何尝试改值都被 readOnly 拦截
+    const input = screen.getByTestId('sync-confirm-name') as HTMLInputElement;
+    await user.type(input, 'mallory').catch(() => undefined);
+    expect(input.value).toBe('alice');
+    // 确认 → onConfirm(alice) 不应传其他值
+    await user.click(screen.getByTestId('sync-confirm-confirm'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm).toHaveBeenCalledWith('alice');
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes('/api/rooms/alice/stats/merge'))).toBe(true);
+  });
+
+  it('T-M1 BR-11: 无身份 + 输入 + 确认 → onConfirm 收到 trim 后的房间名（首次收名契约）', async () => {
+    // 用 fireEvent.change + fireEvent.click 替代 user.type/user.click，
+    // 绕过 user.type 在受控 input 上字符级模拟与 React 19 batch 时机
+    // 耦合导致的尾部触发丢失 / 重复 onConfirm（详见上一条注释）。
+    const onConfirm = vi.fn();
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={1}
+        initialName=""
+        onConfirm={onConfirm}
+        onReject={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId('sync-confirm-name') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '  bob  ' } });
+    expect(input.value).toBe('  bob  ');
+    const confirmBtn = screen.getByTestId('sync-confirm-confirm') as HTMLButtonElement;
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm).toHaveBeenCalledWith('bob');
   });
 
   it('onReject 在 onConfirm 抛错时仍能触发（error 留在 dialog 内，不静默关）', async () => {
