@@ -1,7 +1,7 @@
 # Plan: CI 构建产物上传因隐藏目录被排除而失败（ci-artifact-hidden-files）
 
 - 日期：2026-09-13
-- 状态：执行中
+- 状态：已实现（8e08814 2026-09-13 ci: include-hidden-files 修复与计划同一提交落地；状态线 2026-09-26 按 git 实况修正）
 - 触发：`ci: pnpm 版本以 packageManager 字段为唯一真源`（42569b4）push 后，
   lint/test/typecheck 三 job 转绿，Build job 新报错。
 

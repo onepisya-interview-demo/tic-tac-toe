@@ -1,7 +1,7 @@
 # Plan: 补齐 view-transition + Alert 单测（纯新增测试文件）
 
 - 日期: 2026-09-23
-- 状态: 执行中（test/transition-alert-units worktree；基线 667b9ea）
+- 状态: 已实现（bdfc352 2026-09-23 test 补齐 view-transition + Alert 两单测文件；状态线 2026-09-26 按 git 实况修正）
 - 触发: 上轮 plan「单测覆盖 hasVT=true/false 两条路径」承诺未交付 → plan→实现漂移；本轮纯补交付物
 - Tier: LIGHT（test-only target；行为已正确，无设计决策）
 
