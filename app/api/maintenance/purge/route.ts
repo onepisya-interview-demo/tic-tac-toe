@@ -61,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
   const denied = authorize(request);
   if (denied) return denied;
   try {
-    const result = await purgeStaleRooms(30);
+    const result = await purgeStaleRooms();
     return NextResponse.json(result);
   } catch {
     return problemResponse(500, 'db-unavailable');
@@ -72,7 +72,7 @@ export async function GET(request: Request): Promise<Response> {
   const denied = authorize(request);
   if (denied) return denied;
   try {
-    const result = await purgeStaleRooms(30);
+    const result = await purgeStaleRooms();
     return NextResponse.json(result);
   } catch {
     return problemResponse(500, 'db-unavailable');

@@ -111,7 +111,7 @@ describe('app/api/maintenance/purge/route — POST/GET (T-N3 TTL 回收)', () =>
       expect(res.headers.get('content-type')).toBe('application/json');
       const body = await res.json();
       expect(body).toEqual({ deletedCount: 7, cutoffDays: 30 });
-      expect(purgeStaleRoomsMock).toHaveBeenCalledWith(30);
+      expect(purgeStaleRoomsMock).toHaveBeenCalledWith();
     });
 
     it('GET shares the same handler (Vercel Cron may use GET on Hobby plan); 200 on auth pass', async () => {
@@ -126,7 +126,7 @@ describe('app/api/maintenance/purge/route — POST/GET (T-N3 TTL 回收)', () =>
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toEqual({ deletedCount: 2, cutoffDays: 30 });
-      expect(purgeStaleRoomsMock).toHaveBeenCalledWith(30);
+      expect(purgeStaleRoomsMock).toHaveBeenCalledWith();
     });
 
     it('returns 500 problem+json (db-unavailable) when purgeStaleRooms throws (POST)', async () => {
