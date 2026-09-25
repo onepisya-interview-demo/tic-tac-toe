@@ -218,7 +218,7 @@ export function RoomGateDialog({
             className="text-small text-text-muted"
             data-testid="room-gate-hint"
           >
-            名字将永久属于这个房间，创建后不可修改。
+            将创建/进入房间【{trimmed}】——名字将永久属于这个房间，创建后不可修改。
           </p>
         )}
       </div>

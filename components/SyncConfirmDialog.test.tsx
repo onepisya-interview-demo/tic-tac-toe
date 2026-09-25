@@ -339,10 +339,26 @@ describe('components/SyncConfirmDialog (W2 房间化)', () => {
     );
     expect(screen.getByText('房间名（1-24 字符）')).toBeInTheDocument();
     // 锁 hint 在 name 合法时显形（initialName='alice' 通过 whitelist）
-    expect(screen.getByText('房间名永久属于该账本，创建后不可修改。')).toBeInTheDocument();
+    expect(screen.getByText('将创建/进入房间【alice】——房间名永久属于该账本，创建后不可修改。')).toBeInTheDocument();  // T-N4 房间名回显
     // A9 红线：用户可见文案零「玩家名/登录」+ 零旧版「注册」
     // （hint 文案「创建后」是新的房间语义，不算旧版 注册）。
     expect(screen.queryByText(/玩家名|登录/)).toBeNull();
+  });
+
+  // T-N4 补：合法名 → 锁定 hint 含「将创建/进入房间【<房间名>】」回显
+  it('T-N4: 无身份 + 输入合法名 → 锁定 hint 回显房间名', () => {
+    render(
+      <SyncConfirmDialog
+        open
+        pendingGamesCount={1}
+        initialName=""
+        onConfirm={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByTestId('sync-confirm-name') as HTMLInputElement, { target: { value: 'foobar' } });
+    const hint = screen.getByTestId('sync-confirm-lock-hint');
+    expect(hint).toHaveTextContent('将创建/进入房间【foobar】');
   });
 
 });

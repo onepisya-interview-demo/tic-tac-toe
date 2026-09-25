@@ -286,7 +286,7 @@ export function SyncConfirmDialog({
             className="text-small text-text-muted"
             data-testid="sync-confirm-lock-hint"
           >
-            房间名永久属于该账本，创建后不可修改。
+            将创建/进入房间【{trimmed}】——房间名永久属于该账本，创建后不可修改。
           </p>
         )}
       </div>
