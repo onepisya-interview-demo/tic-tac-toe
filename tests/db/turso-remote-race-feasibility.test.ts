@@ -1,5 +1,6 @@
 // T-L4 remote Turso 并发写实测的回归锚（结论真源：
 // .omo/evidence/turso-race/T-L4-remote-turso-race-report.md，2026-09-24）。
+// BR: BR-6（远程回归锚，双门跳过）
 //
 // 实测结论：远程 Turso 的 transaction('write') 由服务端串行化——双连接裸并发
 // 30/30、单连接互斥 60/60、双连接重试 20/20 全部终值精确，无 BUSY、无锁泄漏
