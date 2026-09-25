@@ -601,6 +601,57 @@ export async function resetRecordByRoom(
 }
 
 /**
+ * Per-room server-authoritative room deletion (T-N1, plan
+ * ulw-room-lifecycle-20260924 §二 T-N1).
+ *
+ * 销户 = DELETE 行（与 resetRecordByRoom 的「清零保留身份」是不同语义）。
+ * 触发者：用户在 result 页 type-to-confirm 删除房间。读 `game_stats` 中
+ * 该 room 的行：缺失 → `{ ok: false, reason: 'not-found' }`（防静默建档
+ * 同款纪律）；命中 → `db.delete(gameStats).where(eq(room, ?))`，返回
+ * `{ ok: true, deleted: true }`。
+ *
+ * 行为契约：删除后对原 room 的 `POST /api/rooms` 是幂等重建（全零账本）
+ * ——registerOrLoginRoom 的 read-then-upsert 路径天然支持。删除时起对
+ * `outcomes`/`merge` 返回 404/409（现役 banner 链路承接，rooms-race step 5
+ * 验证）。
+ *
+ * Concurrency：与 recordOutcomeForRoom / mergeRecordByRoom / resetRecordByRoom
+ * 同型 — `withWriteLock` + `db.transaction()` 双锁。多实例由 Turso 服务端
+ * 串行化（2026-09-24 T-L4 远程实测，30/30 终值精确）；同进程并发经 E1/E2
+ * 60/60 实测零丢失。
+ *
+ * 返回值不带 stats（销户语义下「删除前的统计」不是交付物）：调用方需要
+ * 旧值请自取 `loadRecordByRoom`。
+ */
+export type DeleteRoomResult =
+  | { ok: true; deleted: true }
+  | { ok: false; reason: 'not-found' };
+
+export async function deleteRoomByRoom(
+  room: string,
+): Promise<DeleteRoomResult> {
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      await tx
+        .delete(gameStats)
+        .where(eq(gameStats.room, room))
+        .run();
+      return { ok: true, deleted: true } as const;
+    });
+  });
+}
+
+
+/**
  * Idempotent empty-row bootstrap for "create a room on device A, pick
  * it up on device B" vertical slice. Reads the row; if absent,
  * upserts emptyStats() under the trimmed room and returns the

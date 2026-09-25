@@ -82,9 +82,12 @@ W3 房间术语迁移后，本仓的「房间」= 这台设备上这组人的战
 | 方法 + 路径 | Body | 200/2xx 响应 | 错误（problem+json） |
 | --- | --- | --- | --- |
 | `POST /api/rooms` | `{ room }` | `200 { stats, existed }` —— 进入房间幂等（`existed:false` 新建空行，`existed:true` 返回既有行） | `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
+| `DELETE /api/rooms/{room}` | — | `200 { ok: true }` —— 销户服务端账本（删除后 `POST /api/rooms` 幂等重建全零账本；plan ulw-room-lifecycle-20260924 §二 T-N1） | `404 room-not-found`（防静默建档）/ `422 invalid-room-name` / `500 db-unavailable` |
 | `GET /api/rooms/{room}/stats` | — | `200 { stats }` —— 服务端权威按房间名查 row | `404 stats-not-found` / `422 invalid-room-name` / `500 db-unavailable` |
 | `POST /api/rooms/{room}/stats/merge` | `{ stats }` | `200 { stats }` —— 服务端 `load → accumulateMergeStats per-field 相加 → upsert` | `409 enter-room-required`（防静默建档）/ `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
 | `POST /api/rooms/{room}/stats/outcomes` | `{ outcome: 'X' \| 'O' \| 'draw' }` | `200 { stats }` —— 服务端 `load → recordOutcome → upsert`（`lib/db.ts:recordOutcomeForRoom`） | `404 stats-not-found`（防静默建档）/ `400 invalid-json` / `422 invalid-request-shape` / `422 invalid-room-name` / `500 db-unavailable` |
+| `POST /api/rooms/{room}/stats/reset` | — | `200 { stats }` —— 全零行，room 身份保留（plan ulw-online-reset-and-result-fresh D-1：清零 ≠ 销户） | `404 stats-not-found`（防静默建档）/ `422 invalid-room-name` / `500 db-unavailable` |
+| `POST/GET /api/maintenance/purge` | header `Authorization: Bearer ${CRON_SECRET}` | `200 { deletedCount, cutoffDays }` —— 删 `updated_at < now - 30 天` 的孤儿账本（plan §二 T-N3，Vercel Cron 每日 3 点 UTC） | `401 unauthorized` / `500 db-unavailable` |
 
 ### problem+json 错误形态
 
@@ -102,7 +105,7 @@ Content-Type: application/problem+json
 }
 ```
 
-`type` 字段是稳定的 https 形态短 URI（`lib/api-problem.ts:TYPE_BASE + slug`），客户端按 type 分支而非爬文案。已登记的 slug：`stats-not-found` / `enter-room-required`（对齐 CONTEXT.md「进入房间」动词；W-C D-5b 自 W1 player 术语迁移）/ `invalid-room-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`。
+`type` 字段是稳定的 https 形态短 URI（`lib/api-problem.ts:TYPE_BASE + slug`），客户端按 type 分支而非爬文案。已登记的 slug：`room-not-found`（plan ulw-room-lifecycle-20260924 §二 T-N1 新增）/ `stats-not-found` / `enter-room-required`（对齐 CONTEXT.md「进入房间」动词；W-C D-5b 自 W1 player 术语迁移）/ `invalid-room-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`。
 
 ### 客户端调用方
 

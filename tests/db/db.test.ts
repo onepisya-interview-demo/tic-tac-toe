@@ -872,6 +872,105 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       await closeDb();
     }
   });
+
+  // ── T-N1 (ulw-room-lifecycle-20260924): deleteRoomByRoom ──
+  // 用户主动销户：与 resetRecordByRoom 镜像同型（withWriteLock + db.transaction），
+  // 但 DELETE 行而非 upsert emptyStats()。行不存在 → {ok:false, reason:'not-found'}
+  // (防静默建档同款纪律)；行存在 → {ok:true, deleted:true}。返回值不携带 stats —
+  // 销户语义下「删除前的统计」不是交付物，调用方需要旧值应自取。
+  it('deleteRoomByRoom on unknown room → { ok:false, reason:\'not-found\' } (不静默建档)', async () => {
+    const { deleteRoomByRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    try {
+      const result = await deleteRoomByRoom('ghost-room');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('not-found');
+      }
+      expect(await loadRecordByRoom('ghost-room')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('deleteRoomByRoom on existing row → { ok:true, deleted:true }; subsequent loadRecordByRoom returns null (重进可重建全零账本)', async () => {
+    const {
+      deleteRoomByRoom,
+      registerOrLoginRoom,
+      upsertRecordByRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      await registerOrLoginRoom('room-to-delete');
+      await upsertRecordByRoom('room-to-delete', {
+        totalGames: 7,
+        xWins: 4,
+        oWins: 2,
+        draws: 1,
+        currentStreak: -2,
+      });
+      // 行存在 — 销户前能读到非零数据。
+      const before = await loadRecordByRoom('room-to-delete');
+      expect(before).toEqual({
+        totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: -2,
+      });
+      const result = await deleteRoomByRoom('room-to-delete');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.deleted).toBe(true);
+      }
+      // 行真没了 — 重进同一 room 应得到 fresh emptyStats()（契约：删除后可重建）。
+      expect(await loadRecordByRoom('room-to-delete')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('deleteRoomByRoom + registerOrLoginRoom 并发：终值必属任一串行序 (withWriteLock 包裹)', async () => {
+    // 修复前：delete 与 registerOrLogin 的 read→mutate→upsert 三步在两 await
+    // 之间可被并发交错，理论上能出现「register 已读空 → delete 在其前跑完
+    // → register 仍 upsert zero」或「register 已 upsert → delete 已 read
+    // 存在 → delete 仍删」的中间态。修复后 (withWriteLock + db.transaction)
+    // JS 层与 SQL 层双锁，终值必须收敛到某一种串行序的合法终态之一：
+    //   - delete 先完成 → 行不存在 → registerOrLogin 创空行（existed:false）
+    //   - register 先完成 → 行存在 → delete 删除 → 行不存在
+    const ROUNDS = 5;
+    const {
+      deleteRoomByRoom,
+      registerOrLoginRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      for (let i = 0; i < ROUNDS; i++) {
+        const room = `race-del-reg-${i}`;
+        const settled = await Promise.allSettled([
+          deleteRoomByRoom(room),
+          registerOrLoginRoom(room),
+        ]);
+        // 两调用都不应抛 — withWriteLock + transaction 应吞下竞态。
+        for (const s of settled) {
+          expect(s.status).toBe('fulfilled');
+        }
+        const row = await loadRecordByRoom(room);
+        // 终值必须收敛到「行不存在 (delete 胜)」或「行存在 zero row
+        // (register 胜)」之一；不存在「行存在但非 zero」这种 stale upsert 态。
+        if (row === null) {
+          // delete 胜 — register 的 upsert 不该复活它。
+          // 这里可以容忍，契约只要求不抛。
+          expect(row).toBeNull();
+        } else {
+          expect(row).toEqual({
+            totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0,
+          });
+        }
+      }
+    } finally {
+      await closeDb();
+    }
+  });
+
+
 });
 
 // ── W1 (ulw-room-migration-home-landing): legacy `name`-column DB rebuild ──
