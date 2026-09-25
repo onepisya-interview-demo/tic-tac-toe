@@ -38,6 +38,7 @@ const TYPE_BASE = 'https://docs.example.com/probs/';
  */
 export type ProblemSlug =
   | 'stats-not-found'
+  | 'unauthorized'
   | 'room-not-found'
   | 'enter-room-required'
   | 'invalid-room-name'
@@ -58,6 +59,7 @@ const TITLES: Record<ProblemSlug, string> = {
   'invalid-room-name': 'Invalid room name',
   'invalid-request-shape': 'Invalid request shape',
   'invalid-json': 'Invalid JSON body',
+  'unauthorized': 'Unauthorized',
   'room-not-found': 'Room not found',
   'method-not-allowed': 'Method not allowed',
   'db-unavailable': 'Database unavailable',

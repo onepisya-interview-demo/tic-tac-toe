@@ -105,7 +105,7 @@ Content-Type: application/problem+json
 }
 ```
 
-`type` 字段是稳定的 https 形态短 URI（`lib/api-problem.ts:TYPE_BASE + slug`），客户端按 type 分支而非爬文案。已登记的 slug：`room-not-found`（plan ulw-room-lifecycle-20260924 §二 T-N1 新增）/ `stats-not-found` / `enter-room-required`（对齐 CONTEXT.md「进入房间」动词；W-C D-5b 自 W1 player 术语迁移）/ `invalid-room-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`。
+`type` 字段是稳定的 https 形态短 URI（`lib/api-problem.ts:TYPE_BASE + slug`），客户端按 type 分支而非爬文案。已登记的 slug：`room-not-found`（plan ulw-room-lifecycle-20260924 §二 T-N1 新增）/ `unauthorized`（同 plan §二 T-N3 新增）/ `stats-not-found` / `enter-room-required`（对齐 CONTEXT.md「进入房间」动词；W-C D-5b 自 W1 player 术语迁移）/ `invalid-room-name` / `invalid-request-shape` / `invalid-json` / `method-not-allowed` / `db-unavailable`。
 
 ### 客户端调用方
 

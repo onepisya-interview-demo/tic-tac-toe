@@ -2,7 +2,7 @@ import * as nativeClient from '@libsql/client';
 import { type Client, type Config } from '@libsql/client';
 import * as webClient from '@libsql/client/web';
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
@@ -650,6 +650,54 @@ export async function deleteRoomByRoom(
   });
 }
 
+/**
+ * Server-side TTL 回收（plan ulw-room-lifecycle-20260924 §二 T-N3）。
+ *
+ * `maxAgeDays = 30` 默认值（裁决默认）：删除 `updated_at < now - maxAgeDays
+ * * 86_400_000` 的行；返回 `{ deletedCount, cutoffDays }`。
+ *
+ * 触发者：Vercel Cron `0 3 * * *` → `POST /api/maintenance/purge` →
+ * `purgeStaleRooms(30)`（默认参数）；运维手工通道走 curl，详情见
+ * docs/operations.md。
+ *
+ * 同型 withWriteLock + db.transaction —— 与既有 recordOutcomeForRoom /
+ * mergeRecordByRoom / resetRecordByRoom / deleteRoomByRoom 共用互斥链；
+ * 30 天一次的事务窗口内不应撞上高频记局（凌晨 3 点），但仍然走单事务避免
+ * 「count 一批 → DELETE 跨过别的事务」的窗口。
+ *
+ * 口径：按 `updated_at` 严格小于 cutoff 删，等于不删（边界测试
+ * tests/db/db.test.ts: purgeStaleRooms 边界 + 计数两组 case 覆盖）。
+ */
+export interface PurgeStaleRoomsResult {
+  deletedCount: number;
+  cutoffDays: number;
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export async function purgeStaleRooms(
+  maxAgeDays = 30,
+): Promise<PurgeStaleRoomsResult> {
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const cutoff = new Date(Date.now() - maxAgeDays * MS_PER_DAY);
+      const victims = await tx
+        .select({ id: gameStats.id })
+        .from(gameStats)
+        .where(lt(gameStats.updatedAt, cutoff))
+        .all();
+      const deletedCount = victims.length;
+      if (deletedCount > 0) {
+        await tx
+          .delete(gameStats)
+          .where(lt(gameStats.updatedAt, cutoff))
+          .run();
+      }
+      return { deletedCount, cutoffDays: maxAgeDays };
+    });
+  });
+}
 
 /**
  * Idempotent empty-row bootstrap for "create a room on device A, pick

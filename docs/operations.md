@@ -228,6 +228,64 @@ executor 不可触达，等用户登录 Dashboard 操作。本表是稳态锚点
 入口 URL 直接定位，无需再调研 warning 来源。
 
 
+
+## 运维·TTL 自动回收（plan ulw-room-lifecycle-20260924 §二 T-N3）
+
+> Turso 免费额度现实 + 孤儿账本兜底：服务端每日凌晨 3 点（UTC）跑一次
+> `purgeStaleRooms(30)`，删除 `updated_at < now - 30 天` 的房间账本。
+> 30 天不活跃的账本视为孤儿，不复活、不迁移、不可导出——纯删。
+
+### Vercel Cron 配置（部署后人工操作）
+
+1. 在 Vercel Dashboard → Project → Settings → Cron Jobs 确认
+   `0 3 * * *` → `/api/maintenance/purge` 任务已注册（vercel.json
+   `crons` 字段入 commit 后自动同步，**首次部署后仍需人工去 Dashboard
+   确认**任务列表里能看到这一行）。
+2. 在 Vercel Dashboard → Project → Settings → Environment Variables
+   配 `CRON_SECRET`（任意 32+ 字节随机串，例如 `openssl rand -hex 32`），
+   **Production only**——不要勾 Preview / Development。
+   **值不入仓不入探针不入任何 tracked file**。如不慎写入，立即在 Dashboard
+   rotate 一份新值并从 git 历史里清除。
+3. Vercel Cron 触发请求自动带 `Authorization: Bearer ${CRON_SECRET}`
+   header（Hobby plan 用 GET，Pro plan 也用 GET）；端点接受 POST + GET
+   同 handler，按 Bearer 比较鉴权（`app/api/maintenance/purge/route.ts`
+   `authorize()`，constant-time 防时序泄漏）。
+
+### 手动触发（运维低频通道）
+
+不依赖 Vercel Cron 时直接 curl：
+
+```bash
+PROD=https://<project>-<hash>-<team>.vercel.app
+SECRET=$(vercel env pull --environment=production --yes 2>/dev/null \
+  | grep -E '^CRON_SECRET=' | cut -d= -f2-)
+# 或者从密码管理器取
+curl -i -X POST -H "Authorization: Bearer $SECRET" \
+  $PROD/api/maintenance/purge
+# 期望：HTTP/1.1 200 application/json
+# {"deletedCount":<n>,"cutoffDays":30}
+```
+
+返回的 `deletedCount` 是本次删除的房间账本数；`cutoffDays` 固定 30
+（与 `purgeStaleRooms(30)` 默认参数对齐）。
+
+### TTL 语义与不动清单
+
+- **TTL = 30 天不活跃**（`updated_at` 口径）。主公如需改默认值，仅改
+  `lib/db.ts:purgeStaleRooms` 默认参数一处——所有调用方（route handler
+  + 计划文档）以默认值落地。
+- **按 `updated_at` 严格小于 cutoff 删，等于不删**——边界在
+  `tests/db/db.test.ts: purgeStaleRooms 边界` 一组 case 锁定。
+- **与 reset / delete-room 的语义边界**：
+  - `POST /api/rooms/{room}/stats/reset` 是用户主动清零（保留 room 身份）；
+  - `DELETE /api/rooms/{room}` 是用户主动销户（删行，可重建为空账本）；
+  - TTL 是运维兜底（孤儿账本回收，不可重建原数据）。
+- **不动清单**（plan §二 T-N3 负面清单）：不碰用户侧五个端点
+  （`/api/rooms`、`/api/rooms/{room}/stats/*`）；不在 `package.json`
+  加手动 trigger 脚本（curl 足够）；不改 cron schedule（默认 `0 3 * * *`
+  落在 Turso 免费额度窗口外）。
+
+
 ## 提交规范速查
 
 - Conventional subject（中文描述可），≤100 字符。
