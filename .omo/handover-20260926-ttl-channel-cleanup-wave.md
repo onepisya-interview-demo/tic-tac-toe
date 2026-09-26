@@ -2,6 +2,7 @@
 
 > 性质：移交主公核对与决策。票源：[ulw-ttl-channel-and-cleanup-20260926.md](plans/ulw-ttl-channel-and-cleanup-20260926.md)（T-P1/T-P2）——主公四项批注（Q3 选 a / Q4 维持 30 / Q5 删 `ulw/t-n4` / Q1 已 push）转执行。上波交接：[handover-20260926-two-plans-wave.md](handover-20260926-two-plans-wave.md)。
 > 执行形态：`/workflow` 强制路径，run `dwfrun-3c4e787c`——herdr codex fresh 席（`$omo:ulw-plan` 首行触发 omo 流程，先写 ulw 计划再修复）× 3 席 + 脚本 world.run 机械门禁 + 换人独立终验 + 返工闭环两轮 + 调度者亲自终裁。
+> **批注回执（2026-09-26，主公文字批注）**：Q-A 已 push（现查 dev 与 origin/dev 齐平）；Q-F 同意开票修 → 转执行计划 [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md)；Q-B 待裁决（冲突机制解释见该计划 §三，与 [alignment-20260926-doc-governance.md](../alignment-20260926-doc-governance.md) 项 3 同口径）；Q-C / Q-D / Q-E 继续待定。
 
 ---
 
