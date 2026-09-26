@@ -1008,6 +1008,11 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       await registerOrLoginRoom('all-stale-a');
       await registerOrLoginRoom('all-stale-b');
       await registerOrLoginRoom('all-stale-c');
+      // 竞态防护：registerOrLoginRoom 内部用 new Date() 写 updated_at，
+      // 若与下行 cutoff 撞进同一毫秒，BR「严格小于才删、等于不删」会让
+      // 该行幸存（实证：全量并发下 3/5 假红）。睡 2ms 保证全部种子行
+      // updated_at 严格早于 cutoff。
+      await new Promise((resolve) => setTimeout(resolve, 2));
       // maxAgeDays=0 → cutoff = now; 所有行 updated_at < now → 全部删除。
       const all = await purgeStaleRooms(0);
       expect(all.deletedCount).toBe(3);

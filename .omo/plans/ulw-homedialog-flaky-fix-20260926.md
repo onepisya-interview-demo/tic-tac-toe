@@ -33,6 +33,14 @@
 - **commit 契约**：type 用 `test` 或 `fix`，subject 中文开头（示例：`fix(test): 合并确认钮断言消竞态——等待终态再断言`）；WHAT:/WHY:/HOW: token 独占行、内容每行 ≤72 字符；trailer 含 `Confidence: high` / `Scope-risk: narrow` / `Plan: .omo/plans/ulw-homedialog-flaky-fix-20260926.md`。
 - **执行形态**：herdr codex fresh 单席（session `3t`，tab 优先 `--no-focus`），brief 首行 `$omo:start-work .omo/plans/ulw-homedialog-flaky-fix-20260926.md` + 硬声明「本席范围=仅 T-F1 一票；§三 Q-B 是待裁决说明，非票，禁执行」。审批权前置授予（主公 Q-F 批注）。调度者收尾独立复跑 AC②（另跑 5 轮全量）+ 文件面/hook 核对，不信任自报。
 
+### T-F2：db 全删用例毫秒竞态消治（调度者亲自，bash 级小票；T-F1 独立复跑暴露后增补）
+
+- **来源**：T-F1 调度者独立复跑暴露——5 轮全量中 3 轮假红，失败面与 HomeDialogMount 零交集：`tests/db/db.test.ts:1013` 期望 `purgeStaleRooms(0)` 全删 3 行、实得 2（`expected 2 to be 3`）。
+- **机制**：`registerOrLoginRoom` 内部以 `new Date()` 写 `updated_at`；种子后立即 `purgeStaleRooms(0)`（cutoff=now），若同毫秒撞上 BR「严格小于才删、等于不删」，该行幸存 → deletedCount 偏少。种子→purge 间隔越短撞毫秒概率越高（早晨低载 6 轮全绿、夜间连续热跑 3/5 红，非确定复现）。服务层零改动，与 TTL 波及 T-F1 均无因果。
+- **修法**：`:1012` 调用前插入 `await new Promise((r) => setTimeout(r, 2))`（Node 定时器保证 ≥2ms 推进 → 全部种子行 updated_at 严格早于 cutoff）+ 注释说明竞态与 BR 依据；**断言零改动**。`:988`（maxAgeDays=30 期望 0 删）与 `:1019`（行不可能早于 cutoff-1d）无此竞态不碰；`:976` 边界锁定用例禁改原则不变。
+- **AC**：① db.test.ts 单文件 3 轮绿；② 全量连跑 10 轮绿（同时覆盖 T-F1 无复发）；③ hook 一次过。
+- **commit 契约**：`test(db): 全删用例消毫秒竞态——purge 前保证种子行严格过期`；与计划增补同一原子 commit。
+
 ## 三、Q-B 层⑤口径：承诺与现状的冲突到底在哪（待主公裁决）
 
 **承诺**：`docs/commands.md` 验证六层第 5 层写「每个 commit 必跑 `node tests/qa/commit-audit.mjs --branch main`（0 violations）」。隐含前提：main 的**全部历史**都满足**当前的**提交规范。
