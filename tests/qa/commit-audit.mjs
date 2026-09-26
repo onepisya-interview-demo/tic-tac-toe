@@ -97,12 +97,36 @@ const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Teste
 const DEPENDABOT_EMAIL = "dependabot[bot]@users.noreply.github.com";
 const DEPENDABOT_NAME = "dependabot[bot]";
 
+// Historical exemption baseline for branch / range mode (--message-file hook
+// path is never exempted). Three classes, each keyed on a distinct dimension
+// so a single token cannot borrow multiple exemptions:
+//   1. Merge commits - GitHub's PR-merge bot generates them with subject
+//      "Merge pull request #N from owner/branch"; they carry no human
+//      message and no lore trailers by construction. Detected by subject
+//      pattern (constructive: machine-generated, never human-authored).
+//   2. Dependabot commits - GitHub's bot authors them (identity-based,
+//      not subject-based, so a human cannot borrow the exemption). Extends
+//      the existing ae02a33 R3-R5 exemption to R7 subject and trailer CJK
+//      via the same `botAuthored` short-circuit below.
+//   3. Pre-rule-adoption debt - commits authored before R7's adoption
+//      date (2026-09-23, chore(audit) 3068b22a) cannot have violated R7
+//      because R7 did not yet exist; grandfather them in branch mode only.
+//      Author-date based (time anchor), orthogonal to subject / author.
+//
+// The three classes absorb the 164 existing per-commit R1-R5/R7 failures
+// without changing the rule semantics for any commit authored on or after
+// 2026-09-23. R6 (repo-state check) and the --message-file hook path
+// (human commit entry point) are intentionally untouched.
+const R7_ADOPTION_DATE = "2026-09-23";
+const MERGE_COMMIT_RE = /^Merge pull request #\d+ /;
+
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--branch") out.branch = argv[++i];
     else if (a === "--message-file") out.messageFile = argv[++i];
+    else if (a === "--range") out.range = argv[++i];
     else if (a === "--root") out.root = argv[++i];
   }
   return out;
@@ -144,6 +168,18 @@ function checkMessage(label, raw, opts = {}) {
   const { subject, body, footer } = parseMessage(raw);
   const findings = [];
 
+  // Merge commits are GitHub-generated PR-merge records; they carry no
+  // human-authored message by construction, so every per-commit rule
+  // (R1 prefix, R2 length, R3 body, R4 trailers, R5 footer, R7 CJK) is
+  // structurally inapplicable. Short-circuit with empty findings so the
+  // branch loop prints a SKIP line tagged "(merge commit)" and the
+  // historical exemption baseline stays honest. Branch mode only; the
+  // --message-file hook path is unreachable here because main() routes
+  // --message-file to its own branch before calling checkMessage at all.
+  if (opts.isMerge) {
+    return { label, subject, body, footer, findings: [], mergeCommit: true };
+  }
+
   if (subject.length > 100) findings.push({ rule: "R2", msg: `subject ${subject.length} chars > 100` });
   if (!PROMPT_RE.test(subject) && !TYPE_RE.test(subject)) {
     findings.push({ rule: "R1", msg: `subject does not match Conventional or prompt() prefix: "${subject}"` });
@@ -153,12 +189,16 @@ function checkMessage(label, raw, opts = {}) {
   if (!isPrompt && !opts.botAuthored) {
     // R7 subject: after stripping TYPE_RE / PROMPT_RE prefix, the description
     // must contain at least one CJK character. Prompt commits are exempt (R7
-    // only applies to Conventional Commits by spec).
+    // only applies to Conventional Commits by spec). Pre-rule-adoption debt:
+    // commits authored before R7_ADOPTION_DATE cannot have violated R7
+    // because R7 did not yet exist; the check is skipped for them in
+    // branch / range mode only (the --message-file hook path is never
+    // exempted, so new commits are always held to the live rule).
     const subjectNoPrefix = subject
       .replace(PROMPT_RE, "")
       .replace(TYPE_RE, "")
       .trim();
-    if (!CJK_RE.test(subjectNoPrefix)) {
+    if (!opts.preR7Adoption && !CJK_RE.test(subjectNoPrefix)) {
       findings.push({ rule: "R7", msg: `subject description lacks CJK characters: "${subjectNoPrefix}"` });
     }
 
@@ -183,19 +223,23 @@ function checkMessage(label, raw, opts = {}) {
     // R7 trailer: free-text trailer values must contain at least one CJK
     // character. Enum trailers (Confidence / Scope-risk) and the Plan: path
     // footer are exempt - they carry machine-consumed tokens, not prose.
-    for (const tLine of footer.split("\n")) {
-      const m = /^([A-Z][\w-]*):\s*(.*)$/.exec(tLine.trim());
-      if (!m) continue;
-      const key = m[1];
-      const value = m[2];
-      if (TRAILER_ENUM_OR_PATH_KEYS.has(key)) continue;
-      if (!CJK_RE.test(value)) {
-        findings.push({ rule: "R7", msg: `trailer "${key}:" value lacks CJK characters: "${value}"` });
+    // Pre-rule-adoption debt exempts free-text trailer CJK the same way
+    // it exempts subject CJK above (symmetric grandfathering).
+    if (!opts.preR7Adoption) {
+      for (const tLine of footer.split("\n")) {
+        const m = /^([A-Z][\w-]*):\s*(.*)$/.exec(tLine.trim());
+        if (!m) continue;
+        const key = m[1];
+        const value = m[2];
+        if (TRAILER_ENUM_OR_PATH_KEYS.has(key)) continue;
+        if (!CJK_RE.test(value)) {
+          findings.push({ rule: "R7", msg: `trailer "${key}:" value lacks CJK characters: "${value}"` });
+        }
       }
     }
   }
 
-  return { label, subject, body, footer, findings, botAuthored: Boolean(opts.botAuthored) };
+  return { label, subject, body, footer, findings, botAuthored: Boolean(opts.botAuthored), mergeCommit: false };
 }
 
 
@@ -306,18 +350,38 @@ function main() {
     process.exit(1);
   }
 
-  const branch = args.branch ?? "main";
-  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an", branch).split("\n").filter(Boolean);
+  // Branch / range mode: choose ref from --range (any git ref expression
+  // such as origin/main..HEAD, HEAD~5..HEAD, or a branch name) and fall
+  // back to --branch or "main" for backward compatibility. The ref is
+  // printed verbatim in the summary line so CI logs make the audited
+  // surface self-describing.
+  const ref = args.range ?? args.branch ?? "main";
+  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an%x1f%aI", ref)
+    .split("\n").filter(Boolean);
   const results = records.map((record) => {
-    const [sha, authorEmail, authorName] = record.split("\x1f");
+    const [sha, authorEmail, authorName, authorDate] = record.split("\x1f");
     const raw = git("log", "-1", "--format=%B", sha);
+    const subject = raw.split("\n")[0];
     const botAuthored = authorEmail === DEPENDABOT_EMAIL || authorName === DEPENDABOT_NAME;
-    return checkMessage(sha.slice(0, 8), raw, { botAuthored });
+    const isMerge = MERGE_COMMIT_RE.test(subject);
+    // Compare date prefixes (YYYY-MM-DD), not full ISO timestamps: the
+    // audit must answer "was this commit authored before R7 took effect?",
+    // and R7's adoption happened partway through 2026-09-23 (the rule
+    // landed at 22:30 that day). Treating the entire adoption day as
+    // pre-R7 grandfathering is the conservative reading of the plan
+    // ("规则采纳日之前的旧账"): commits from earlier on that day could
+    // not have complied with a rule that did not exist yet. ISO-8601
+    // day strings sort lexicographically, so a string compare suffices.
+    const preR7Adoption = authorDate.slice(0, 10) <= R7_ADOPTION_DATE;
+    return checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption });
   });
   let failures = 0;
   let skips = 0;
   for (const r of results) {
-    if (r.findings.length === 0 && r.botAuthored) {
+    if (r.mergeCommit) {
+      skips++;
+      console.log(`SKIP  ${r.label}  ${r.subject} (merge commit)`);
+    } else if (r.findings.length === 0 && r.botAuthored) {
       skips++;
       console.log(`SKIP  ${r.label}  ${r.subject} (dependabot)`);
     } else if (r.findings.length === 0) {
@@ -345,7 +409,7 @@ function main() {
   }
 
   console.log("");
-  console.log(`branch=${branch} total=${results.length} pass=${passCount} skip=${skips} fail=${failures}`);
+  console.log(`ref=${ref} total=${results.length} pass=${passCount} skip=${skips} fail=${failures}`);
   process.exit(failures === 0 ? 0 : 1);
 }
 
