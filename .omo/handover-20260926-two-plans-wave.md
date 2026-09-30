@@ -9,6 +9,8 @@
 
 dev @ `f756129`，origin/dev 未动（未 push）。`git log --format='%h %ci %s' origin/dev..dev` 现查：
 
+> 快照时效补注（2026-09-27 现查）：上行数字为 2026-09-26 成稿时快照——此后主公已按 §五 Q1 批注「已 push」执行，`git branch -r --contains f756129` 现含 origin/dev，dev 与 origin/dev 全量齐平（ahead 8 清零）。
+
 | commit | 时间（2026-09-25） | 交付 |
 |---|---|---|
 | `818ea02` | 18:05 | 两份计划入档（派发基线） |
@@ -61,6 +63,7 @@ dev @ `f756129`，origin/dev 未动（未 push）。`git log --format='%h %ci %s
 - 选项：a) 现在push；b) 等 CRON_SECRET 配好、部署验证后一起推。
 - 利弊：a) 及早释放远端 CI 背书，避免后续票基线漂移；b) 单次部署含全部改动但拖长本地领先窗口。
 - 建议：**a) 现在 push**。
+- **已决回填（2026-09-27 补）**：主公批注 Q1「已 push」（2026-09-26）→ 已执行；现查 dev 与 origin/dev 全量齐平——闭环。
 
 **Q2 CRON_SECRET 生成与配置**
 - 事实：端点已按 `Authorization: Bearer ${CRON_SECRET}` 落地；值需进 Vercel 环境变量（调度者无 Vercel 凭据，Dashboard 操作属主公亲手项）。
@@ -73,15 +76,18 @@ dev @ `f756129`，origin/dev 未动（未 push）。`git log --format='%h %ci %s
 - 选项：a) 删端点两处显式实参（2 行改动，恢复「改一处即全局生效」，兑现计划裁决「主公可改一个常数」）；b) 保留显式传参、改 operations.md 为「改三处」。
 - 利弊：a) 兑现原裁决、运维心智最简；b) 零代码改动但文档退化为三处同步。
 - 建议：**a)**——单票可并入下波或作为本波补丁（等主公定）。
+- **已决回填（2026-09-27 补）**：主公批注选 a → T-P1 落地 `2d7709b`（端点删显式实参，「改一处」承诺恢复成立）；批注记录见 [ulw-ttl-channel-and-cleanup-20260926.md](plans/ulw-ttl-channel-and-cleanup-20260926.md) 与 [handover-20260926-ttl-channel-cleanup-wave.md](handover-20260926-ttl-channel-cleanup-wave.md) 头部。
 
 **Q4 TTL = 30 天维持确认**
 - 事实：现值 30 天（`updated_at` 严格小于 cutoff 删、等于不删，边界有测试锁定）。
 - 建议：**维持**；改则随 Q3 一并落地。
+- **已决回填（2026-09-27 补）**：主公批注维持 30 天——T-P1（`2d7709b`）未动 `lib/db.ts` 默认值，与此裁决一致。
 
 **Q5 `ulw/t-n4` 受阻分支处置**
 - 事实：分支内容是 t-n4 席跑偏产物（五票全跑版），已被 dev 各席等价覆盖；worktree 已拆，分支保留中。
 - 选项：a) 主公验收后删除（`git branch -D ulw/t-n4`）；b) 长期保留备查。
 - 建议：**a)**——验收通过即删，留档价值已由本报告 §四 与执行报告覆盖。
+- **已决回填（2026-09-27 补）**：主公批注删除 → T-P2 清扫执行；`git branch --list 'ulw/*'` 现查空输出——闭环。
 
 **Q6 验收结论与稳定 tag**
 - 事实：按 09-22/09-23 惯例，主公手动验收「未发现业务不符合」后令打 `dev-stable-*` annotated tag（只留本地，消息含覆盖范围 + 门禁数字 + 验收结论）。

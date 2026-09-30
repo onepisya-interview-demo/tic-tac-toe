@@ -3,6 +3,7 @@
 > 性质：移交主公核对与决策。票源：[ulw-ttl-channel-and-cleanup-20260926.md](plans/ulw-ttl-channel-and-cleanup-20260926.md)（T-P1/T-P2）——主公四项批注（Q3 选 a / Q4 维持 30 / Q5 删 `ulw/t-n4` / Q1 已 push）转执行。上波交接：[handover-20260926-two-plans-wave.md](handover-20260926-two-plans-wave.md)。
 > 执行形态：`/workflow` 强制路径，run `dwfrun-3c4e787c`——herdr codex fresh 席（`$omo:ulw-plan` 首行触发 omo 流程，先写 ulw 计划再修复）× 3 席 + 脚本 world.run 机械门禁 + 换人独立终验 + 返工闭环两轮 + 调度者亲自终裁。
 > **批注回执（2026-09-26，主公文字批注）**：Q-A 已 push（现查 dev 与 origin/dev 齐平）；Q-F 同意开票修 → 转执行计划 [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md)；Q-B 待裁决（冲突机制解释见该计划 §三，与 [alignment-20260926-doc-governance.md](../alignment-20260926-doc-governance.md) 项 3 同口径）；Q-C / Q-D / Q-E 继续待定。
+> 批注落实补注（2026-09-27 补，git 现查）：Q-B 已裁决（a+b 并施）转执行票 T-B1 并交付——`f3ca573` 票入档 → `d9f8a36` audit 口径收窄本波面 + 历史豁免基线落地 → `2f11c36` 交付入档；Q-F 治理票已交付——`74e1a56` / `4ee9fa6`（见 [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md) 状态线）；Q-A 两笔 docs 亦已 push，dev 与 origin/dev 现全量齐平。
 
 ---
 
@@ -58,29 +59,36 @@
 - **选项**：a) 顺手 push 两笔 docs；b) 等 doc-status 会话收尾后一起推。
 - **利弊**：a) 报告与状态线尽早进远端，防再次漂移；b) 若该会话还有在途 commit 可一次推净。
 - **建议**：a)（若主公确认另一会话已收尾）。
+- **落实回填（2026-09-27 现查）**：两笔 docs 已 push，`git status -sb` dev 与 origin/dev 全量齐平——本项闭环。
 
 ### Q-B：commit-audit 层⑤口径裁决（本波暴露的工具口径问题）
 - **事实**：`docs/commands.md` 层⑤承诺 `--branch main`（0 violations），但 2026-09-26 现查 main/dev 全史均 fail=164（存量：PR merge / dependabot / 旧格式，最新一笔 2026-09-24 15:16）。规则是逐波叠加的（R6/R7 等），新规则回扫旧历史必然欠账；先例 `ae02a33` 曾靠豁免 dependabot 让全史复绿，其后又欠。另：上波交接报告「`--branch dev` 0 violations」的记载与今查矛盾——引用交接数字前应现查（已入调度者记忆）。
 - **选项**：a) 层⑤收窄为本波 commit 面（`origin/main..HEAD` 或逐 commit `--message-file`，hook 已天然逐 commit 把关）；b) audit 工具加历史豁免基线（沿 ae02a33 先例，欠账清单入 `knip.json` 式配置）；c) 全史专项清理（改史，不现实，不建议）。
 - **利弊**：a) 零工具改动、语义就是「本波合规」；b) 保留全史视野但要维护豁免清单；c) 成本高且违背「历史不可改写」纪律。
 - **建议**：a)（b 可作为规则机械化调研的活案例一并考虑）。
+- **落实回填（2026-09-27 现查）**：主公裁决 a+b 并施 → T-B1 执行票（`f3ca573` 入档）→ `d9f8a36` 落地（audit 口径收窄本波面 + 历史豁免基线，层⑤恢复信号）→ `2f11c36` 交付入档——本项闭环。
 
 ### Q-F：HomeDialogMount 既有 flaky 是否开票治理
 - **事实**：`components/HomeDialogMount.test.tsx:288` `expect(confirmBtn).not.toBeDisabled()`（「合并并清空」按钮）全量并发下约 1/6 概率假红（6 轮全量 1 次复现，单文件 3/3 绿）。属 T-M1 域（d685cf6），与本票零交集。放着会随机打红未来六层门禁。
 - **选项**：a) 下波开 ulw 票修（嫌疑：确认钮 disabled 态的异步竞态——名称校验/loading 窗口与断言时序）；b) 暂留档观察。
 - **建议**：a)——小票，主检 disabled 态驱动链路即可定位。
+- **落实回填（2026-09-27 现查）**：主公批注同意开票 → [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md) 票入档（`c8a692d`）→ `74e1a56` / `4ee9fa6` 交付——本项闭环。
 
 ### Q-C：上波遗留 Q2（CRON_SECRET 配置 Vercel）
 - **事实**：端点已按 `Authorization: Bearer ${CRON_SECRET}` 落地；配值属 Vercel Dashboard 操作，须主公亲手（调度者无凭据）。本地 `.env.local` 建议同步一份以启用 `operations.md` 手动 curl 通道。
 - **建议**：主公 `openssl rand -hex 32` 自生成后配置（沿上波建议 a）。
+- **落实回填（2026-09-27 现查）**：仍待主公亲手配置（调度者无凭据；[ulw-ttl-channel-and-cleanup-20260926.md](plans/ulw-ttl-channel-and-cleanup-20260926.md) 头部同口径「Q2 仍待主公」）。
 
 ### Q-D：上波遗留 Q6（验收结论 + 稳定 tag）
 - **事实**：惯例是主公业务语义抽查后给「未发现业务不符合」结论，令打 `dev-stable-*` annotated tag（只留本地）。上波 §六想法统一区四条语义（清空/退出/删除三分、删除自愈、TTL 口径、身份锁定边界）主公尚未给对齐确认。本波 TTL 语义已在上波 Q3/Q4 批注中确认落地。
 - **建议**：主公抽查后给结论 + tag 指令（可含本波 2d7709b）。
+- **落实回填（2026-09-27 现查）**：仍待主公——`git tag -l` 现查最新为 `dev-stable-20260923`，本波后无新 tag。
 
 ### Q-E：更早遗留（不阻塞本波，列此备查）
 - `ulw-anonymous-online-server-row-missing-20260922` 仍待主公 A/B/C/D 裁决（状态行陈旧不可信，对账靠 `Plan:` footer 反查 git log，见 [doc-status-map-20260926.md](doc-status-map-20260926.md)）。
+  - 【2026-09-27 口径更新】选项集已改 A/B/C/E（D 排除、新增 E 挂起不修），说明已重写进该档头部「背景速读」节；出路仍待主公（总图 doc-status-map-20260927.md §二①）。
 - 规则机械化调研 [research-rules-mechanization-20260926.md](research-rules-mechanization-20260926.md) 待唤醒（触发条件：三犯法则 / t-n4 式再犯 / 点名）。本波 Q-B 的 audit 口径即其「规则演进回扫欠账」洞察的活案例，主公点名即可拉报告立票。
+- **落实回填（2026-09-27 现查）**：仍挂起——ulw-anonymous 票待主公裁决不动；规则机械化调研 §五 C2（文档契约测试）已随 T-P1（`2d7709b`）实质兑现，评估记录见该档案 §六补注。
 
 ## 四、我需要主公什么
 
