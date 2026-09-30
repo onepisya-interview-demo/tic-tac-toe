@@ -1,6 +1,7 @@
 # Plan: ulw · 治理小件二则（ulw-governance-small-20260913）
 
 - 日期：2026-09-13
+- 状态：已实现（f4e9ad8 / bdbf760，2026-09-14）
 - ulw-loop：`.omo/ulw-loop/ulw-governance-small-20260913/`
 
 ## 背景与既裁事项

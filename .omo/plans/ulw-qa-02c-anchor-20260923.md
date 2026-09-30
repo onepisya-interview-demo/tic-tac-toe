@@ -1,5 +1,7 @@
 # ulw-qa-02c-anchor-20260923
 
+> **状态**：已实现（`0451656`，整改 `4be54dc`，2026-09-23）
+
 ## Goal
 
 修复 `tests/qa/home-return-qa.mjs` step 02c（BR-1 错峰开启回归钉）的时序锚点脆性：

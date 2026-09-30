@@ -1,6 +1,7 @@
 # 调研报告：/api/rooms 竞态探针补齐（rooms-race-probe）
 
-> 性质：调研报告 + 票面提案，待主公审查后立票。基线 v2.0.0（merge commit 8310bc2）。
+> 性质：调研报告 + 票面提案（已经主公裁决立票并全部兑现，状态线 2026-09-27 补）。基线 v2.0.0（merge commit 8310bc2）。
+> 状态：主公 2026-09-24 裁决（§六，立全 7 steps）→ 兑现：统一地图 [plans/ulw-rooms-race-map-20260924.md](plans/ulw-rooms-race-map-20260924.md) 入档（`c102fcd`）、七票全落收口（`87e7c7a`）、lost-update 事务修复（`71ad38d`）、探针 job 进 CI（`e1ea4b1`）——均为 2026-09-24；本文件转为地图证据资产。
 > 调研人：调度者（ZCode）。方法：本地 git 历史 / 源码取证 + llm-wiki 检索（只读）+ 外部检索（web-search-prime / ddgs@7890 / grep.searchGitHub[504 弃用]）。
 
 ---

@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-22
 - **分支**：dev（只在 dev 上开发；执行走独立 worktree + ff 合入，历史保持 dev 线性）
-- **状态**：**已全部拍板（D-1~D-8），转正执行**——W-R（房间战绩清空）+ W-F（/result 首屏新鲜度）两波并行 + 独立验证波
+- **状态**：**已全部拍板（D-1~D-8），已执行收官**（终验 V12 入档 ACCEPT，`b27d49d`，2026-09-22）——W-R（房间战绩清空）+ W-F（/result 首屏新鲜度）两波并行 + 独立验证波
 - **来源**：主公 2026-09-22 两条现场反馈——「在线版本没有清空战绩的选项」「在线实时成绩单的战绩显示是延迟的，需要刷新一次之后才会显示最新战绩」
 - **前置阅读**：CONTEXT.md 同步族、lib/db.ts 头注释（service/transport 分离契约）、components/ResetStatsButton.tsx（offline 清空语义）、components/ResultNavigator.tsx
 

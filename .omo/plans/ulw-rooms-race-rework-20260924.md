@@ -1,5 +1,7 @@
 # ulw-rooms-race-rework-20260924 - Work Plan
 
+> 状态：已实现——C1 `7e04985` + C2 `cddf174`（2026-09-24，双原子 commit 按票面交付）
+
 ## TL;DR (For humans)
 
 **What you'll get:** 两处独立复核确认的防线漏洞修掉——反向对账测试不再被 docs/commands.md 的通配展开全员豁免，新增孤儿探针会立刻红；`lib/db.ts` 两个测试 seam（factory 与 delay）从隐式耦合变正交，并发竞态复现用的 delay 注入不会被任一 seam 静默清零。

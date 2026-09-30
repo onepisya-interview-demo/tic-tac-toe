@@ -83,9 +83,12 @@
 | C4 | eslint --fix / format 自动化 | lint script 无 --fix，无 format 层 | script 改造 + 一次性全仓 format commit（diff 噪声需主公裁决） | 小，但噪声取舍需裁决 |
 | C5 | 派发红线断言模板化 | t-n4 型漂移靠司机人工拦截 | .omo/ 或 scripts/ 沉淀 workflow 脚本模板（diff 文件面 vs brief 白名单集合断言） | 小 |
 
+> 落实补注（2026-09-27）：C2 已实质兑现——T-P1（`2d7709b` 2026-09-26）把 `tests/api/maintenance-purge.test.ts:114/:129` 改为 `purgeStaleRoomsMock).toHaveBeenCalledWith()`，即「断言 route handler 不含 purgeStaleRooms 字面实参」的端点契约测试；C1 / C3 / C4 / C5 维持未裁决。本节标题「全部未裁决」措辞保留作入档时快照。
+
 ## 六、唤醒条件与检索路径
 
 - **唤醒触发**（任一即拉出本报告进 planning）：① 同类错误第 3 次重犯（三犯法则）；② t-n4 型派发漂移再犯；③ Q3 批注落地时顺手评估 C2；④ 主公点名「规则机械化」。
+- **触发与评估记录（2026-09-27 补）**：条件③已触发——Q3 批注落地（主公批注选 a）随 T-P1 兑现（`2d7709b` 2026-09-26）。评估结论：C2 以 maintenance-purge.test.ts 端点契约断言（`purgeStaleRoomsMock).toHaveBeenCalledWith()`）随 T-P1 同波实质兑现，无需另立票；其余唤醒条件未触发，报告整体维持「不立项不开坑」。
 - **检索路径**：ZCode 记忆索引「规则机械化调研待命」条目 → 本文件。
 - **建议第一步**：读 §五候选清单 → docs/requirement-intake.md 对齐 → `$omo:ulw-plan` 立票（候选间正交，可单票可组合；C2 与 Q3 补丁同波最顺）。
 - **本次调研用过的检索词**（复搜起点）：AGENTS.md standard enforcement 2026 / ast-grep YAML rule autofix / Claude Code hooks deterministic guardrails / AI code review learnings conventions / LLM lint rule synthesis / Uber Fixit autofix。

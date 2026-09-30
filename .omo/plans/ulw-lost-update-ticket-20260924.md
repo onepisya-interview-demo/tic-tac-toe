@@ -1,5 +1,6 @@
 # ulw-lost-update-ticket-20260924 — 票 T-C：lost-update 产品修复
 
+> **状态**：已实现（`71ad38d`，2026-09-24）
 > **基线**：`ed25cb046ac4d40774fd7377890a2f422895dc94`
 > **分支**：`fix/lost-update-mutex`
 > **Worktree**：`/private/tmp/ttt-wt-20260924/lostupdate`

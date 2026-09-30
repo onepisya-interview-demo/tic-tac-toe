@@ -1,6 +1,7 @@
 # 方法论探索：Session 单一事则与任务正交性（主公三条主张的精确化 + 落地计划）
 
-> 性质：探索报告 + 计划提案，待主公审查。方法论来源：主公 2026-09-24 口述三条主张 + wayfinder-analysis-report.md（mattpocock/skills 机制拆解，268k stars）+ 本仓多席调度波次的实证复盘。
+> 性质：探索报告 + 计划提案（已经主公 2026-09-24 裁决并落地，状态线 2026-09-27 补）。方法论来源：主公 2026-09-24 口述三条主张 + wayfinder-analysis-report.md（mattpocock/skills 机制拆解，268k stars）+ 本仓多席调度波次的实证复盘。
+> 状态：主公 2026-09-24 裁决（§五：矩阵获准附对抗性评审修正、T4 试点=rooms-race 地图、T2/T3 立即融合）→ 落地：两份调研入档（`c102fcd`）、Session 单一事则与正交性矩阵落库 docs/dispatcher-playbook.md（`ed25cb0`）、wayfinder 试点复盘入 playbook（`87e7c7a`）——均为 2026-09-24；本文件此后作为地图证据资产被引用。
 > 关联文件：[research-rooms-race-probe-20260924.md](./research-rooms-race-probe-20260924.md)（票面拆分将按本方法论修订）。
 
 ---

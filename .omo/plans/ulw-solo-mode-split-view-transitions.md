@@ -1,7 +1,7 @@
 # ulw · 拆分单机模式 + 复用组件 + View Transitions 技术选型
 
 - **日期**：2026-09-15（同日 R2 修订：主公三谕已决，见 §4）
-- **状态**：APPROVED（已批，执行中）
+- **状态**：APPROVED（已批）——已完结：C1-C6 全链 2026-09-15 落地入档（`bb171bf` / `4f5ec71` / `c65d876` / `2b79d14` / `0bab68e` / `f45ddbf` / `02c654d`），对抗验收所遣 W6 缺陷修复两 commit 亦入档（`7c29d62` / `f8fd69e`）
 - **触发**：「拆分单机模式，复用组件，演示组件拆分」+「MPA 多页跳转动画 vs antfu 式状态迁移」
 - **基线**：main @ 51f164c（worktree 干净）
 - **执行体**：fresh codex / pi worker（herdr **tab**，非 split pane），调度者只拆解、派发、独立验收

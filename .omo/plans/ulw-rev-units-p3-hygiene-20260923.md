@@ -1,5 +1,7 @@
 # ulw-rev-units-p3-hygiene-20260923 - Work Plan
 
+> 状态：已实现并合入——b2bda4c（2026-09-23 chore(test): 票③ P3×5 修单测卫生与 plan 文档同步）
+
 ## TL;DR (For humans)
 
 **What you'll get:** 票③五项 finding 逐项闭环——修一处 jest-style 的 spy 残留（vi.spyOn 留下的 Object.defineProperty 不还原）、修一处 §三/§四 行号与实际源码的漂移、修 Alert.test.tsx 三处 comment 的同型漂移、给 §三「补充 case（4b）」补 footnote 说明它是有意合入 case 4。零行为改动；零用例新增；零用例删除。

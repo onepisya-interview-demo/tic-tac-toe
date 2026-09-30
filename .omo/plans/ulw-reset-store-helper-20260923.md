@@ -1,5 +1,7 @@
 # Plan: ulw-reset-store-helper
 
+> **状态**：已实现（`47ad7d7`，2026-09-23）
+
 ## Goal
 
 票② 立票兑现：把 `components/**/*.test.tsx` 里散落的 `useGameStore.setState({...})` 重置块全部收敛到单一 `tests/helpers/reset-store.ts`，从而消除「store 加字段 → 12 处手抄块漏同步」漂移复发机制（含 outcomeError、roomName 的已知案例与 GameShell 的当前漂移）。每个测试文件以 `resetStore()` 单点替代完整重置块，保留各文件原有的 localStorage / sessionStorage / fetchSpy.mockClear / routerPush.mockClear 等额外清理的相对顺序与语义。

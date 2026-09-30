@@ -1,5 +1,7 @@
 # ulw-rooms-race-qa-ticket - Work Plan
 
+> 状态：已实现——e148b9a / e046e96 / f327646 / e1ea4b1（2026-09-24，探针 step 2-7 + probe-reconciliation 对账用例 + ci.yml rooms-race job + 删僵尸 concurrent-surface-qa）
+
 ## TL;DR (For humans)
 <!-- Filled LAST after detailed plan below -->
 

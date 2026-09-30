@@ -3,6 +3,7 @@
 - 日期：2026-09-14
 - ulw-loop：`.omo/ulw-loop/ulw-research-twitter-cards-20260914/`
 - 授权：主公 2026-09-14「Twitter card 类型调研+改进」
+- 状态：调研已闭环，并被 c16e9e8（2026-09-14 feat(meta): 部署站扩 og locale + 3 张 social-card 变体 + twitter 双行元）消费实施
 
 ## 背景
 

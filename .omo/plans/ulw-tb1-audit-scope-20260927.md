@@ -73,16 +73,18 @@ node tests/qa/commit-audit.mjs --range main                # 显式等价 --bran
 
 ## 四、AC 映射
 
+> 交付回填：T-B1 已由 d9f8a36（2026-09-27 chore(qa)）交付、2f11c36（2026-09-27 docs(plans)）入档总档；下表「实际」列为 2026-09-27 复跑结果（HEAD=2f11c369）。
+
 | AC | 验证 | 期望 | 实际（自验时填） |
 |---|---|---|---|
-| ① dev 全史 fail=0 | `node tests/qa/commit-audit.mjs --branch dev` | `fail=0` | TBD |
-| ①' main 全史 fail=0 | `node tests/qa/commit-audit.mjs --branch main` | `fail=0` | TBD |
-| ② 本波面 0 violations | `node tests/qa/commit-audit.mjs --range origin/dev..HEAD` | `fail=0` | TBD |
-| ③ hook 回归 PASS | `node tests/qa/commit-audit.mjs --message-file <(git log -1 --format=%B HEAD)` | exit 0 / PASS | TBD |
-| ④ docs 新口径落档 | grep `docs/commands.md` 层⑤；grep `docs/commit-policy.md` §hook | 见 §五 | TBD |
-| ⑤ 文件面 + typecheck/lint/vitest | grep + `pnpm typecheck` + `pnpm lint` + `pnpm vitest run` | typecheck/lint 0 错；vitest 540 passed/11 skipped 基线 | TBD |
-| 副作用：R6 零变化 | `--branch main` 输出 R6 行 diff | 仅豁免逻辑新增；R6 段相同 | TBD |
-| 副作用：--message-file 零变化 | 现有 commit-audit.test.ts 全过 | exit codes 与 PASS/FAIL 行一致 | TBD |
+| ① dev 全史 fail=0 | `node tests/qa/commit-audit.mjs --branch dev` | `fail=0` | ✅ fail=0（ref=dev total=407 pass=397 skip=10） |
+| ①' main 全史 fail=0 | `node tests/qa/commit-audit.mjs --branch main` | `fail=0` | ✅ fail=0（ref=main total=362 pass=352 skip=10） |
+| ② 本波面 0 violations | `node tests/qa/commit-audit.mjs --range origin/dev..HEAD` | `fail=0` | ✅ 交付波面 `74e1a56^..d9f8a36` total=4 pass=4 fail=0；现 `origin/dev..HEAD` 已随 push 清空（total=0） |
+| ③ hook 回归 PASS | `node tests/qa/commit-audit.mjs --message-file <(git log -1 --format=%B HEAD)` | exit 0 / PASS | ✅ PASS，exit=0（HEAD=2f11c369 message） |
+| ④ docs 新口径落档 | grep `docs/commands.md` 层⑤；grep `docs/commit-policy.md` §hook | 见 §五 | ✅ commands.md:42 新口径 + :45 豁免说明；commit-policy.md:102-108 三类豁免条款，与 §五 一致 |
+| ⑤ 文件面 + typecheck/lint/vitest | grep + `pnpm typecheck` + `pnpm lint` + `pnpm vitest run` | typecheck/lint 0 错；vitest 540 passed/11 skipped 基线 | ✅ typecheck exit 0；lint 0 错（28 warnings 既有）；vitest 540 passed / 11 skipped |
+| 副作用：R6 零变化 | `--branch main` 输出 R6 行 diff | 仅豁免逻辑新增；R6 段相同 | ✅ R6 逻辑未动（`auditBrProbeBinding` 照常调用）；`--branch main` 无 R6 违例行 |
+| 副作用：--message-file 零变化 | 现有 commit-audit.test.ts 全过 | exit codes 与 PASS/FAIL 行一致 | ✅ commit-audit.test.ts 随全量 vitest 通过（540 绿） |
 
 ## 五、文档变更要点
 
@@ -104,13 +106,15 @@ node tests/qa/commit-audit.mjs --range main                # 显式等价 --bran
 
 ## 六、验证清单
 
-1. `pnpm typecheck` → 0 errors。
-2. `pnpm lint` → 0 errors。
-3. `pnpm vitest run` → 540 passed / 11 skipped（防意外回归）。
-4. `node tests/qa/commit-audit.mjs --branch dev` → fail=0。
-5. `node tests/qa/commit-audit.mjs --branch main` → fail=0。
-6. `node tests/qa/commit-audit.mjs --range origin/dev..HEAD` → fail=0（本波 4 commit）。
-7. `git log -1 --format=%B HEAD > /tmp/head-msg.txt && node tests/qa/commit-audit.mjs --message-file /tmp/head-msg.txt` → exit 0 / PASS。
+> 结果回填（2026-09-27 复跑，HEAD=2f11c369；交付 commit d9f8a36）：1-7 全过。
+
+1. `pnpm typecheck` → 0 errors。——✅ exit 0。
+2. `pnpm lint` → 0 errors。——✅ 0 errors（28 warnings 为既有，exit 0）。
+3. `pnpm vitest run` → 540 passed / 11 skipped（防意外回归）。——✅ 540 passed / 11 skipped。
+4. `node tests/qa/commit-audit.mjs --branch dev` → fail=0。——✅ fail=0（total=407 pass=397 skip=10）。
+5. `node tests/qa/commit-audit.mjs --branch main` → fail=0。——✅ fail=0（total=362 pass=352 skip=10）。
+6. `node tests/qa/commit-audit.mjs --range origin/dev..HEAD` → fail=0（本波 4 commit）。——✅ 交付波面 `74e1a56^..d9f8a36` 4 commit 全 PASS；现 `origin/dev..HEAD` 已随 push 清空（total=0，fail=0）。
+7. `git log -1 --format=%B HEAD > /tmp/head-msg.txt && node tests/qa/commit-audit.mjs --message-file /tmp/head-msg.txt` → exit 0 / PASS。——✅ PASS（exit=0）。
 
 ## 七、不改项（再确认）
 

@@ -1,5 +1,7 @@
 # Plan: ulw-modal-collision-and-error-alerts-20260923 —— 三弹框穿模 + 错误行告警升级
 
+> **状态**：已实现（`873a255`/`667b9ea`，2026-09-23）
+
 ## 目标
 修复 tic-tac-toe 仓库的两个 UX 缺陷：(1) 三弹框在 React `<ViewTransition>` 路由过渡期间 `showModal()` 导致「穿模」；(2) 网络超时/错误行用 `text-small text-text-secondary` 灰文本不醒目。BR-1 业务语义保持不变。
 

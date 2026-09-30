@@ -1,6 +1,7 @@
 # Plan: ulw-vercel-ignore-script-20260914 · ignoreCommand 外置脚本
 
 - 日期：2026-09-14
+- 状态：已实现（`83cd313` 2026-09-15 chore(deploy) 外置脚本 + 单测；`9403f14` 2026-09-15 vercel.json 改引脚本 + docs 核心目录约定节；状态行 2026-09-27 补）
 - ulw-loop：`.omo/ulw-loop/ulw-vercel-ignore-script-20260914/`
 - 前批：84091bd fix(deploy): ignoreCommand 增核心文件过滤（inline regex）
 

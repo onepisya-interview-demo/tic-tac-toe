@@ -1,5 +1,7 @@
 # ulw-rooms-race-step1-20260924 - Work Plan
 
+> 状态：已实现——2304554（2026-09-24 feat(qa): rooms-race-qa step 1 — S2 双设备同房间并发 outcomes 精确累加契约）
+
 ## TL;DR (For humans)
 
 <!-- Auto-generated; below summarizes the real plan. -->

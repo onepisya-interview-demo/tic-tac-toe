@@ -1,6 +1,7 @@
 # 计划：TTL 调整通道修复 — T-P1 单票（ulw）
 
 > 性质：执行计划（worker-facing，T-P1 单票；T-P2 分支清扫归调度者）。
+> 状态：已实现（`2d7709b` 2026-09-26 fix(api): 端点删显式实参——TTL 调整通道改一处生效；AC-4 随该 commit 经 commit-msg hook 一次过，状态线 2026-09-27 补）。
 > 关系：上承 `.omo/plans/ulw-ttl-channel-and-cleanup-20260926.md`（决策总览），本票是该计划 T-P1 的实施落地页。
 > 基线：dev @ `8f7a114`（主公 2026-09-26 批注：Q3 选 a、Q4 维持 30 天）。
 > 授权：ulw-plan 流程审批前置授予，调度者视同已批，直派直做。
@@ -41,7 +42,7 @@
 | AC-2 | `pnpm lint` | 0 errors（warnings 可接受但不得新增） | 0 errors（12 warnings 均为既有 `.zcode/workflow-runs/*` 噪声，未新增） PASS |
 | AC-2 | `pnpm build` | exit 0 + `/api/maintenance/purge` 路由编译通过 | exit 0 PASS |
 | AC-3 | 负对照 `rg 'purgeStaleRooms\([^)\s]' app/` | 零命中 | 零命中 PASS |
-| AC-4 | `git commit` 经 commit-msg hook | exit 0 | 待 commit 后实测 |
+| AC-4 | `git commit` 经 commit-msg hook | exit 0 | PASS（`2d7709b` 存在即证） |
 | 端口 | `lsof -ti :3000 :3009 :3101` | 全空 | 全空 PASS |
 
 ## 五、commit 契约

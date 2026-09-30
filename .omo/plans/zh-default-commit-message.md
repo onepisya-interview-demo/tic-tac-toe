@@ -1,5 +1,7 @@
 # zh-default-commit-message - Work Plan
 
+> 状态：已实现（`5c51f4a` 2026-09-12 docs(agents-md): 中文提交章节改为默认中文加例外清单，沉淀 learnings #31；状态行 2026-09-27 补）。
+
 ## TL;DR (For humans)
 
 **What you'll get:** AGENTS.md「### 中文提交」章节从 permissive（"可中文"/"可用中文 prose"/"也可"）改写为 prescriptive（首句硬约束"默认 commit message 用中文" + 封闭三条例外清单），并在 docs/learnings.md 追加 #31 条目，沉淀 commit `0f49375` 英文正文事件的可复现根因。单一 atomic docs commit，commit message 自身用中文 prose——即新规则的第一个端到端证据。

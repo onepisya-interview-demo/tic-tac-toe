@@ -1,5 +1,7 @@
 # vercel-deploy-runbook - Work Plan
 
+> 状态：已实现并锁定（`b8e0a40` 2026-09-09 feat(db) 深模块化 driver 工厂 + `dfc4634` / `002bff5` 2026-09-09 docs 两笔；部署终态见文末「Final state (2026-09-10 lock)」；状态行 2026-09-27 补）。
+
 ## TL;DR (For humans)
 <!-- Plain English for a non-engineer: NO file paths, NO todo numbers, NO wave/agent/tool names. -->
 
