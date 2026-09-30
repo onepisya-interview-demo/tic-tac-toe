@@ -134,3 +134,5 @@
 ### 状态（2026-09-23）
 
 > **未裁决。** 项 1 已定「不 reword commit」，push 技术上已解锁；等主公点头后执行。
+
+> 实况批注（2026-09-27 补）：push 此后已多轮发生——09-24 rooms-race 波、09-25 两计划波、09-26 TTL 通道波交付均已进远端（主公亲手 push，见 [handover-20260926-ttl-channel-cleanup-wave.md](handover-20260926-ttl-channel-cleanup-wave.md) 头部 Q-A 批注回执）；2026-09-27 现查 `git status -sb` dev 与 origin/dev 全量齐平，本项实际闭环。上行「未裁决」原文保留作 2026-09-23 当时快照。

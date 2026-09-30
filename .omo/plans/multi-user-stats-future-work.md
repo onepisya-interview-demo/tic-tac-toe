@@ -1,11 +1,9 @@
 # Multi-user stats — future work (DO NOT implement)
 
-> **Status: placeholder. DO NOT implement until a future plan explicitly
-> scopes this as its own deliverable.** This file documents a candidate
-> shape change that the user mentioned in chat during plan
-> `.omo/plans/stats-server-authoritative-delta.md` drafting, and was
-> explicitly deferred because it is a product-shape change that should not
-> be lumped into a bug-fix plan.
+> **状态：已终结（declined）——2026-09-27 主公裁决：放弃多用户方案（密码加密、登录页成本过高，太麻烦）；已知并接受的缺陷：知晓房间名者可删除他人房间。**
+
+> **裁决块（2026-09-27 主公裁决，Q1《多用户档结案或唤醒》原话照录）：**
+> 直接终结——我们不要多用户的方案了，不然还要密码加密之类的东西，还要登录页面，太麻烦了。现在的缺陷是我们知道、并且接受的：其他人能删除你的房间，如果他知道你的房间名。
 
 ## Context (user's original mention)
 
