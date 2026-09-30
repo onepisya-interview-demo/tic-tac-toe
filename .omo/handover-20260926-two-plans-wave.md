@@ -2,6 +2,7 @@
 
 > 性质：移交主公核对与决策。票源：[ulw-sync-dialog-identity-lock-20260924.md](plans/ulw-sync-dialog-identity-lock-20260924.md)（T-M1）+ [ulw-room-lifecycle-20260924.md](plans/ulw-room-lifecycle-20260924.md)（T-N1..N4 + 收口）。执行波 dwfrun-926d642f（herdr codex × 5 席 + 合流执行员 + 独立终验 + 换人复核返工闭环）。
 > 主公三项核对结论已逐条对照现查证据：① 一致；② 定点一致但**升级出决策项 Q3**；③ 「未 push」一致、**数字修正为 ahead 8**（见 §三）。
+> 【2026-09-30 补】余项进展：CRON_SECRET 已注入 Vercel Production + .env.local（vercel CLI，主公授权），部署后 401/200 两态验证通过——本档 §五 Q 面的密钥项收口；验收结论随主公亲测通过解锁，dev-stable tag 按主公令等正式上线、测试内容齐后再打。
 
 ---
 

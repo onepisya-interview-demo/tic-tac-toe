@@ -191,6 +191,10 @@ turso db shell <db-name> \
 历史 `ulw-demo-*` / `tic-tac-5s4zst0o5-*` 等 deployment URL 全部 404；新部署只走
 `3t-tic-tac-toe.vercel.app` / `tic-tac-arkhtecz7-onepisyas-projects.vercel.app`。
 
+> 【2026-09-30 勘误补注】生产正式入口现为自定义域 **`https://3t.onepis.net`**（Vercel project
+> `tic-tac-toe` 的 Latest Production URL，`vercel projects ls` 实证）；上列 `3t-tic-tac-toe.vercel.app`
+> 等仍作系统域名别名，运维文档与探针一律以 `3t.onepis.net` 为准。
+
 生产部署验证（2026-09-10 起 ranked 单行历史）：`curl -i https://3t-tic-tac-toe.vercel.app/api/stats` 返回
 `200 application/json` + 当前战绩；6 步 curl round-trip 全过——`GET` 当前
 `{totalGames:6,xWins:4,oWins:2,draws:0,currentStreak:2}` → `PUT` 临时值

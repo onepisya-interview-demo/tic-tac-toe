@@ -1,6 +1,7 @@
 # ulw-rooms-race-qa-ticket - Work Plan
 
 > 状态：已实现——e148b9a / e046e96 / f327646 / e1ea4b1（2026-09-24，探针 step 2-7 + probe-reconciliation 对账用例 + ci.yml rooms-race job + 删僵尸 concurrent-surface-qa）
+> 【2026-09-30 补】ci.yml rooms-race job 探针 step 漏传 `BASE_URL`（server 起 hermetic :3101、脚本默认打 :3000），该 job 自 e1ea4b1 进 CI 起必红——dev 分支 CI 仅 PR 触发，沉默 12 天至 PR #18 首次暴露；已修 `a2a667d`（单行补前缀），PR #18 run_attempt=1 首跑全绿（历史首次真绿）。
 
 ## TL;DR (For humans)
 <!-- Filled LAST after detailed plan below -->
