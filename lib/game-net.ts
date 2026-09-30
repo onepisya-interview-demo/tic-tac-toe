@@ -198,3 +198,39 @@ export async function postResetRoomStats(
     { method: 'POST' },
   );
 }
+
+
+/**
+ * DELETE /api/rooms/{room} (no body) → { ok: true }。
+ * ulw-room-lifecycle T-N2 (T-N1 服务端契约配套):
+ * 销户通道；服务端 lib/db.ts:deleteRoomByRoom 删除 game_stats 行
+ * （200）。**写路径对 404 problem+json 做幂等翻译**：防静默建档的
+ * 纪律把行不存在回答成 404，但 delete 是幂等操作（已删 = 终态），
+ * 与 read 路径「找不到就是没有」语义不同 — 调用方期望「删成功」
+ * 这一行为事实，并不关心是 200 还是 404。本 helper 与
+ * fetchRoomStats 一样保留 inline try/withTimeout 不走 httpJson，
+ * 把 404 → { ok: true } 的状态翻译收紧在 helper 内，调用方只需
+ * 判 r.ok。其他非 2xx（5xx）→ http-error。
+ * 不带 body；POST 同款 8s AbortController。
+ */
+export async function deleteRoom(
+  room: string,
+): Promise<FetchResult<{ ok: true }>> {
+  try {
+    const r = await withTimeout(
+      `/api/rooms/${encodeRoom(room)}`,
+      { method: 'DELETE' },
+    );
+    if (r.status === 404) {
+      // 幂等：已删
+      return { ok: true, value: { ok: true } };
+    }
+    if (!r.ok) {
+      return { ok: false, reason: 'http-error', status: r.status };
+    }
+    const value = (await r.json()) as { ok: true };
+    return { ok: true, value };
+  } catch (err) {
+    return { ok: false, reason: reasonFromError(err) };
+  }
+}

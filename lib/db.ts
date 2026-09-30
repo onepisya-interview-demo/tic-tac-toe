@@ -2,7 +2,7 @@ import * as nativeClient from '@libsql/client';
 import { type Client, type Config } from '@libsql/client';
 import * as webClient from '@libsql/client/web';
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as schema from '../db/schema';
@@ -37,9 +37,22 @@ import { emptyStats, recordOutcome, type GameStats } from './game';
  *
  * ## 行为契约
  *
- * - 每个 service 函数在 Node 单进程内是串行的（load → mutate → upsert 三步
- *   在同一进程串行执行），不会交错。多实例（Vercel + Turso HTTP）的竞态超出
- *   本文件范围。
+ * - 每个写 service（`recordOutcomeForRoom` / `mergeRecordByRoom` /
+ *   `resetRecordByRoom`）在 Node 单进程内通过 `withWriteLock` 把所有
+ *   load → mutate → upsert 三步整体串行化（promise 链，每条链附
+ *   带 catch 防止单次失败毒化后续排队），并在 drizzle 的
+ *   `db.transaction()` 包裹内执行（其内部转调 `@libsql/client`
+ *   `client.transaction('write')` 真锁 API — E5 实证）。
+ *   **修复前**这三步在两 await 点之间可被并发请求交错，单进程双
+ *   并发 100% 丢更新（E1 实验 60/60 丢，地图 ulw-rooms-race-map
+ *   T-A）；**修复后**实测零丢失零持续。
+ * - 多实例（Vercel + Turso HTTP）的跨进程竞态：2026-09-24 remote
+ *   实测（T-L4，`.omo/evidence/turso-race/`，回归锚
+ *   tests/db/turso-remote-race-feasibility.test.ts）证实远程 write
+ *   事务由服务端串行化——双连接裸并发 30/30 终值精确，三步只要
+ *   保持在单事务内，多实例同样不丢更新；平台语义演进不在承诺内
+ *   （单库 110 轮实测，非契约级）。E7 的失败回滚文件锁泄漏为
+ *   file: 模式特有，远程无此现象（20 轮 0 次客户端回收）。
  * - 行不存在时返回明确信号（`null` / `not-found` 字符串），不静默建档。
  * - 行存在的累加是纯函数 `recordOutcome(current, outcome)`（lib/game.ts）。
  *
@@ -103,17 +116,22 @@ let createClientFn: CreateClientFn = defaultCreateClient;
  * Test-only knobs for injecting latency or replacing the client factory.
  * Production code must never call these.
  *
- * Two surfaces so callers can pick the lightest seam:
- *   - `__setCreateClientForTests(fn)` replaces `createClient` wholesale.
- *   - `__setDbOpDelayForTests(ms)`  adds a fixed pre-DB sleep so races that
+ * Two orthogonal seams so callers can pick the lightest one:
+ *   - `__setCreateClientForTests(fn)` — replaces `createClient` wholesale;
+ *     **does NOT touch `dbOpDelayMs`**. To clear delay alongside factory,
+ *     call `__setDbOpDelayForTests(null)` explicitly.
+ *   - `__setDbOpDelayForTests(ms)` — adds a fixed pre-DB sleep so races that
  *     only manifest under a slow upstream (e.g. Turso HTTP) become
- *     reproducible locally with a local sqlite. Set to 0 / null to clear.
+ *     reproducible locally with a local sqlite. **Does NOT touch
+ *     `createClientFn`**. Set to 0 / null to clear.
  *
- * Both reset by passing null.
+ * Each seam resets only its own state. d-F2 fix (2026-09-24): prior to this,
+ * `__setCreateClientForTests` silently set `dbOpDelayMs = 0`, which let any
+ * earlier `__setDbOpDelayForTests` call be bypassed by a later factory
+ * re-set — exactly the path concurrency race tests inject delay on.
  */
 export function __setCreateClientForTests(fn: CreateClientFn | null): void {
   createClientFn = fn ?? defaultCreateClient;
-  dbOpDelayMs = 0;
 }
 
 export function __setDbOpDelayForTests(ms: number | null): void {
@@ -279,6 +297,48 @@ export async function loadRecordByRoom(room: string): Promise<GameStats | null> 
   };
 }
 
+/**
+ * Per-process writers chain (D9 lost-update fix).
+ *
+ * Every write that reads-then-decides-then-writes
+ * (`recordOutcomeForRoom` / `mergeRecordByRoom` /
+ * `resetRecordByRoom`) is funneled through `withWriteLock` so the
+ * JS-layer load → mutate → upsert three steps cannot interleave
+ * between concurrent callers in the same Node instance. Each
+ * `withWriteLock(fn)` call ALSO runs `fn` inside a drizzle
+ * `db.transaction()`, which delegates to `@libsql/client`
+ * `client.transaction('write')` — the official lock-aware API
+ * (E5 实证 BUSY, E2/E4 证伪裸 BEGIN/COMMIT 经 `execute()`).
+ *
+ * Failure-isolation: a rejected `fn` must NOT poison the chain.
+ * We re-anchor `writeChain` on the resolved side of `run`, so
+ * subsequent callers always queue onto a live chain even after a
+ * previous call rejected. (Bare `chain.then(fn)` would attach the
+ * rejection to the chain tail and turn it into a permanently
+ * rejected promise — every later caller would hang on the
+ * `.then(fn)` step. The `then(_, fn)` form schedules `fn`
+ * regardless of the previous step's state.)
+ *
+ * Multi-process (Vercel + Turso HTTP): T-L4 remote measurement
+ * (2026-09-24) showed server-side serialization of concurrent write
+ * transactions — as long as the three steps stay inside one
+ * transaction, multi-instance writes do not lose updates either.
+ * E7's file-lock leak on failed rollback is file:-mode-specific;
+ * remote mode showed no such leak (0 client recycles in 20 rounds).
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  // `then(fn, fn)` — both fulfillment & rejection of the previous
+  // call schedule `fn` next; the chain never stalls on a rejection.
+  const run = writeChain.then(fn, fn);
+  // Re-anchor chain on the resolved side of `run` so a rejection
+  // does NOT propagate to the next `.then(fn)` consumer. A bare
+  // `chain = run` would let unhandled rejections poison later steps.
+  writeChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /** Write a per-room record (insert-or-update by room). */
 export async function upsertRecordByRoom(
   room: string,
@@ -356,10 +416,50 @@ export async function mergeRecordByRoom(
   room: string,
   clientStats: GameStats,
 ): Promise<GameStats> {
-  const server = (await loadRecordByRoom(room)) ?? emptyStats();
-  const next = accumulateMergeStats(server, clientStats);
-  await upsertRecordByRoom(room, next);
-  return next;
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      const server: GameStats = existing
+        ? {
+            totalGames: existing.totalGames,
+            xWins: existing.xWins,
+            oWins: existing.oWins,
+            draws: existing.draws,
+            currentStreak: existing.currentStreak,
+          }
+        : emptyStats();
+      const next = accumulateMergeStats(server, clientStats);
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: next.totalGames,
+          xWins: next.xWins,
+          oWins: next.oWins,
+          draws: next.draws,
+          currentStreak: next.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: next.totalGames,
+            xWins: next.xWins,
+            oWins: next.oWins,
+            draws: next.draws,
+            currentStreak: next.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return next;
+    });
+  });
 }
 
 /**
@@ -374,8 +474,11 @@ export async function mergeRecordByRoom(
  *    拒绝静默建档 — 一个匿名点击路径不该被偷渡成「已注册房间」。
  *  - 行存在 → 返回 `{ ok: true, stats }`, 传输层映射成 200 + GameStats。
  *
- * 串行保证：单 Node 进程内 load → mutate → upsert 三步串行执行；多实例
- * last-write-wins 由 README 边界注承担。
+ * Concurrency (T-C / D9 修复形态): funneled through `withWriteLock`
+ * + drizzle `db.transaction()`. 同进程并发记录不会丢失更新；E6 实
+ * 测零丢失零持续。多实例：T-L4 remote 实测（2026-09-24）证实三步
+ * 在单事务内时服务端串行化写事务，同样不丢（边界收窄为平台语义
+ * 演进不承诺）。
  */
 export type RecordOutcomeResult =
   | { ok: true; stats: GameStats }
@@ -385,13 +488,51 @@ export async function recordOutcomeForRoom(
   room: string,
   outcome: 'X' | 'O' | 'draw',
 ): Promise<RecordOutcomeResult> {
-  const current = await loadRecordByRoom(room);
-  if (current === null) {
-    return { ok: false, reason: 'not-found' };
-  }
-  const next = recordOutcome(current, outcome);
-  await upsertRecordByRoom(room, next);
-  return { ok: true, stats: next };
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      const current: GameStats = {
+        totalGames: existing.totalGames,
+        xWins: existing.xWins,
+        oWins: existing.oWins,
+        draws: existing.draws,
+        currentStreak: existing.currentStreak,
+      };
+      const next = recordOutcome(current, outcome);
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: next.totalGames,
+          xWins: next.xWins,
+          oWins: next.oWins,
+          draws: next.draws,
+          currentStreak: next.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: next.totalGames,
+            xWins: next.xWins,
+            oWins: next.oWins,
+            draws: next.draws,
+            currentStreak: next.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return { ok: true, stats: next } as const;
+    });
+  });
 }
 
 /**
@@ -419,13 +560,143 @@ export type ResetRecordResult =
 export async function resetRecordByRoom(
   room: string,
 ): Promise<ResetRecordResult> {
-  const existing = await loadRecordByRoom(room);
-  if (existing === null) {
-    return { ok: false, reason: 'not-found' };
-  }
-  const zero = emptyStats();
-  await upsertRecordByRoom(room, zero);
-  return { ok: true, stats: zero };
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      const zero = emptyStats();
+      await tx
+        .insert(gameStats)
+        .values({
+          room,
+          totalGames: zero.totalGames,
+          xWins: zero.xWins,
+          oWins: zero.oWins,
+          draws: zero.draws,
+          currentStreak: zero.currentStreak,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: gameStats.room,
+          set: {
+            totalGames: zero.totalGames,
+            xWins: zero.xWins,
+            oWins: zero.oWins,
+            draws: zero.draws,
+            currentStreak: zero.currentStreak,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return { ok: true, stats: zero } as const;
+    });
+  });
+}
+
+/**
+ * Per-room server-authoritative room deletion (T-N1, plan
+ * ulw-room-lifecycle-20260924 §二 T-N1).
+ *
+ * 销户 = DELETE 行（与 resetRecordByRoom 的「清零保留身份」是不同语义）。
+ * 触发者：用户在 result 页 type-to-confirm 删除房间。读 `game_stats` 中
+ * 该 room 的行：缺失 → `{ ok: false, reason: 'not-found' }`（防静默建档
+ * 同款纪律）；命中 → `db.delete(gameStats).where(eq(room, ?))`，返回
+ * `{ ok: true, deleted: true }`。
+ *
+ * 行为契约：删除后对原 room 的 `POST /api/rooms` 是幂等重建（全零账本）
+ * ——registerOrLoginRoom 的 read-then-upsert 路径天然支持。删除时起对
+ * `outcomes`/`merge` 返回 404/409（现役 banner 链路承接，rooms-race step 5
+ * 验证）。
+ *
+ * Concurrency：与 recordOutcomeForRoom / mergeRecordByRoom / resetRecordByRoom
+ * 同型 — `withWriteLock` + `db.transaction()` 双锁。多实例由 Turso 服务端
+ * 串行化（2026-09-24 T-L4 远程实测，30/30 终值精确）；同进程并发经 E1/E2
+ * 60/60 实测零丢失。
+ *
+ * 返回值不带 stats（销户语义下「删除前的统计」不是交付物）：调用方需要
+ * 旧值请自取 `loadRecordByRoom`。
+ */
+export type DeleteRoomResult =
+  | { ok: true; deleted: true }
+  | { ok: false; reason: 'not-found' };
+
+export async function deleteRoomByRoom(
+  room: string,
+): Promise<DeleteRoomResult> {
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(gameStats)
+        .where(eq(gameStats.room, room))
+        .get();
+      if (!existing) {
+        return { ok: false, reason: 'not-found' } as const;
+      }
+      await tx
+        .delete(gameStats)
+        .where(eq(gameStats.room, room))
+        .run();
+      return { ok: true, deleted: true } as const;
+    });
+  });
+}
+
+/**
+ * Server-side TTL 回收（plan ulw-room-lifecycle-20260924 §二 T-N3）。
+ *
+ * `maxAgeDays = 30` 默认值（裁决默认）：删除 `updated_at < now - maxAgeDays
+ * * 86_400_000` 的行；返回 `{ deletedCount, cutoffDays }`。
+ *
+ * 触发者：Vercel Cron `0 3 * * *` → `POST /api/maintenance/purge` →
+ * `purgeStaleRooms(30)`（默认参数）；运维手工通道走 curl，详情见
+ * docs/operations.md。
+ *
+ * 同型 withWriteLock + db.transaction —— 与既有 recordOutcomeForRoom /
+ * mergeRecordByRoom / resetRecordByRoom / deleteRoomByRoom 共用互斥链；
+ * 30 天一次的事务窗口内不应撞上高频记局（凌晨 3 点），但仍然走单事务避免
+ * 「count 一批 → DELETE 跨过别的事务」的窗口。
+ *
+ * 口径：按 `updated_at` 严格小于 cutoff 删，等于不删（边界测试
+ * tests/db/db.test.ts: purgeStaleRooms 边界 + 计数两组 case 覆盖）。
+ */
+export interface PurgeStaleRoomsResult {
+  deletedCount: number;
+  cutoffDays: number;
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export async function purgeStaleRooms(
+  maxAgeDays = 30,
+): Promise<PurgeStaleRoomsResult> {
+  return withWriteLock(async () => {
+    const db = await getDb();
+    return db.transaction(async (tx) => {
+      const cutoff = new Date(Date.now() - maxAgeDays * MS_PER_DAY);
+      const victims = await tx
+        .select({ id: gameStats.id })
+        .from(gameStats)
+        .where(lt(gameStats.updatedAt, cutoff))
+        .all();
+      const deletedCount = victims.length;
+      if (deletedCount > 0) {
+        await tx
+          .delete(gameStats)
+          .where(lt(gameStats.updatedAt, cutoff))
+          .run();
+      }
+      return { deletedCount, cutoffDays: maxAgeDays };
+    });
+  });
 }
 
 /**

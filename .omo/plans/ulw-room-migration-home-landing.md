@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-19
 - **分支**：dev
-- **状态**：已与维护者达成一致（三决议见 §0），待批准执行
+- **状态**：已实现（7586e82/c75cfdf 2026-09-19 W1 服务端+客户端一波迁移，e6bd762 2026-09-20 W3 探针迁移，a8abea9 终验 V9 ACCEPT-WITH-NOTES；状态线 2026-09-26 按 git 实况修正）
 - **前置阅读**：AGENTS.md §查找入口 / §本项目反模式（DB schema drift 流程）、docs/verification-gauntlet.md
 
 ---

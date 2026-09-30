@@ -34,6 +34,13 @@
 
 非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。audit 脚本硬性要求 Confidence:（low|medium|high）与 Scope-risk:（narrow|moderate|broad）；触发 on-demand 验证层时 `Not-tested:` 改为 `Tested:` + 触发原因（模板见 docs/verification-gauntlet.md §2）。
 
+### 正文排版硬规则（commit-msg hook 实测，2026-09-24 补）
+
+- **WHAT:/WHY:/HOW: 的 token 独占一行**，内容从下一行起、每行 ≤72 字符——commitlint 的 footer 解析把 `WHAT: 同行长内容` 整行认作 footer token 行，超长即 footer-max-line-length 拒绝（同日三犯实证；token 独占一行的格式不触发）。
+- **subject 剥掉 Conventional 前缀后以中文或小写词开头**——大写单词开头触发 subject-case（sentence-case）拒绝：「T-B2 …」「Session …」「W-DIFF …」均实测被拒；中文/小写开头最稳。
+- **每条 trailer 行 ≤100 字符**（长值拆成多条 trailer 或收窄措辞，不要硬塞一行）。
+- 参照范本：commit `2e7104d`（@types/node 对齐，全要素合规）。
+
 ## 中文提交（默认）
 
 默认 commit message 用中文。type/scope 保留英文 token，描述默认中文（按 Unicode 码点计 ≤100），正文默认中文 prose，WHAT/WHY/HOW 显式 heading 也默认中文。
@@ -63,6 +70,16 @@
 | 正 ③ 标识符密集 | `refactor(store): 抽取 resetStore helper 统一 11 处 setState 重置块` | PASS |
 | 反 ① 纯英文 subject | `fix(x): hello world` | FAIL R7 |
 | 反 ② 中文 subject + 英文 free-text trailer | `Constraint: keep the leaf intact.` | FAIL R7 |
+| 反 ③ 英文路径值 trailer | `Refs: .omo/plans/foo.md` | FAIL R7——路径值也算自由文本，要引路径走 `Plan:` footer（豁免清单内） |
+
+R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
+
+### R6 BR↔探针双向绑定（全仓状态检查）
+
+`tests/qa/commit-audit.mjs` R6 只在 `--branch` 模式运行，审计对象是**仓库现状**而非逐 commit：遍历 `docs/business-rules.md` 每个 BR 行，探针列（末列）反引号引用的每个路径必须 ① 在仓内存在、② 该文件**头 20 行**内出现对应 BR 号（如 `// BR: BR-6, BR-12`）；探针列标「⚠ 未探针化」的行豁免。
+
+- 新增/修订 BR 行或探针文件时**两处头注同步改**，R6 才回绿；探针列反引号内写全路径（规范化路径不命中会误判有洞）。
+- `--branch` 模式走整条分支全历史 + 全仓 R6，因此**基线的隐性违规会在任意波的终验首爆**——不是本波引入的也要当场修（实证 2026-09-25：BR-6 探针头注缺失在两计划波终验被 R6 揪出，cdacf88 修复）。
 
 R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
 
@@ -82,6 +99,12 @@ R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7�
 
 `.git/hooks/commit-msg` 会调用 `node tests/qa/commit-audit.mjs --message-file "$1"`。消息不合规时提交失败；**禁止用 `git commit --no-verify` 绕过**。需要独立校验时使用 `pnpm exec commitlint --edit <message-file>`。
 
-branch 全史审计（`--branch main`）对 Dependabot 自动提交（author 为 `dependabot[bot]`）豁免正文/尾注规则 R3-R5，输出记 `SKIP` 并单列计数：bot 消息由 GitHub 生成，无法携带人类 lore trailer；其 subject 仍受 R1/R2 约束。`--message-file` 模式（人类提交入口）不受此豁免。豁免按 author 身份判定，不按 subject 猜测。
+branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref 表达式）对三类来源做规则化豁免，输出记 `SKIP` 并单列计数；`--message-file` 模式（人类提交入口，commit-msg hook 闸门）不受任何豁免。判别维度各异避免单 token 多义：
+
+- **GitHub merge commit**（subject `Merge pull request #N from …`）：按构造豁免——机器生成的合并记录无人类正文/尾注，按 subject 模式识别；R1-R5/R7 全豁免。
+- **Dependabot 自动提交**（author 为 `dependabot[bot]`）：identity-based 即现有架构（ae02a33 先例）；R3-R5/R7 豁免（subject 仍受 R1/R2 约束，不按 subject 猜测避免人类借用豁免）。
+- **规则采纳日之前的旧账**（author date 在 R7 采纳日 2026-09-23 或更早）：按时间锚点豁免——commit 写于该日时 R7 还未上线（commit `3068b22a` 落仓于 22:30:11），结构性无法事后合规；仅豁免 R7 的 subject 与 trailer CJK 检查，R1-R5 仍走全检。
+
+三层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
 
 hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。

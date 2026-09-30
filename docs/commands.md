@@ -39,10 +39,16 @@ BASE_URL=http://localhost:3101 node tests/qa/one-identity-qa.mjs
 2. `pnpm typecheck`
 3. `pnpm lint`
 4. `pnpm build`
-5. `node tests/qa/commit-audit.mjs --branch main`（0 violations）
+5. `node tests/qa/commit-audit.mjs --range origin/main..HEAD`（本波 commit 面，0 violations）
 6. 触及浏览器界面时跑 `tests/qa/*.mjs` 探针
 
+层⑤走本波 commit 面（默认 ref=main；可用 `--branch <name>` 走全史或 `--range <git-rev>` 走任意 git ref 表达式）。全史扫描由「历史豁免基线」吸收存量 fail：merge commit（subject `Merge pull request #N from …`）、dependabot 作者（identity-based）、R7 采纳日（2026-09-23）之前的旧账——见 [docs/commit-policy.md §hook 段](./commit-policy.md#commit-msg-hook) 与 [`.omo/plans/ulw-homedialog-flaky-fix-20260926.md` §二 T-B1](../.omo/plans/ulw-homedialog-flaky-fix-20260926.md)。R6 全仓状态检查与 `--message-file` 模式不受豁免，hook 路径仍逐 commit 严格闸门。
+
 on-demand 三层（coverage / mutation / property-based）按改动 scope 触发；触发规则、thresholds、Tested trailer 模板、engines.node 三环境对齐契约，全部以 [docs/verification-gauntlet.md](./verification-gauntlet.md) 为 single source of truth。
+
+## 定期体检（手动，不进 CI 门禁）
+
+- `pnpm qa:audit`：knip 未用文件/导出/依赖审计（仓规配置见 `knip.json`：探针与脚本视为入口）。定期跑，输出为清理票线索而非门禁；探针↔CI 引用的机械对账由测试用例承担（见 [docs/anti-patterns.md §L1-31](./anti-patterns.md)）。
 
 ## 提交策略速查
 

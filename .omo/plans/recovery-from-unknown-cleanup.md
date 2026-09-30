@@ -1,6 +1,6 @@
 # recovery-from-unknown-cleanup - 恢复计划（未提交，untracked）
 
-- **状态**: 待执行（planner: pi；executor: Codex @ herdr w1:p1）
+- **状态**: 已执行完毕（本档 §5.2 实录 40/40 全部救回、恢复剧本三条已实练；adbdfbd 2026-09-12 计划与执行实录同档入档；状态线 2026-09-26 按 git 实况修正）
 - **事故**: 2026-09-12 00:00:08–00:00:23 之间，未知进程删除了 40 个 tracked 工作树文件、清空 `.git/hooks/`、删除 `.git/HEAD`，并删除了部分 untracked/ignored 内容（`.omx/backups/` 备份 tar 等）
 - **Git 基线**: `main` = `38ccb9a`（docs(agents-md): anti-pattern bullets for fetch timeout + cache headers），9 个实现 commit `812c3ac..38ccb9a` 全部在 objects 中，reflog/index/refs 完好
 - **本计划的边界**: 只计划，不执行；执行时不得运行任何 `git reset` / `git clean` / `rm -rf` / `--no-verify`（AGENTS.md:72 明确禁止 --no-verify）

@@ -2,6 +2,7 @@
 
 - 日期：2026-09-14
 - ulw-loop：`.omo/ulw-loop/ulw-verify-handoff-20260914/`
+- 状态：复核已执行完毕（2026-09-14 verifier 报告总判 DONE，V1–V5 全 PASS、2 轻微瑕疵不阻塞）——结论全文存于运行产物 `.omo/ulw-loop/ulw-verify-handoff-20260914/report.md`（依 ignore 政策 `.gitignore:114` 不入 git，本地在档，不回填本档）；本计划档经 `20f5d50` 2026-09-14 追溯补交入库（状态行 2026-09-27 补）
 - 授权：主公 2026-09-14 面谕「VERIFY: fresh-context adversarial verification，
   开 fresh 子代理（herdr tab 非分屏）复核，缺陷则修」
 

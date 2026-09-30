@@ -1,7 +1,7 @@
 # ulw: 字体 preload 偶发警告残留——调研结论与拆除计划（2026-09-22）
 
 - 日期: 2026-09-22
-- 状态: proposed（待主公批准执行）
+- 状态: 已实现（11baadd 2026-09-22 perf(font) 拆除 preload 根治偶发警告；状态线 2026-09-26 按 git 实况修正）
 - 分支: dev
 - 来源: 主公报告「上轮修复（fa76a39 + 95c57e1）后，线上仍**偶发** woff 字体 preload 警告」
 - 前序: `.omo/plans/ulw-font-preload-sw-fetch-20260914.md`（上轮 Fix A/B + 预案 B 条款）

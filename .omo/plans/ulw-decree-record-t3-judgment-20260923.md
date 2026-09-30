@@ -14,6 +14,8 @@
 
 Your next move: 已批准,直接进入执行 — 写两文件 → atomic commit → vitest 全绿 → 终验。
 
+> **状态**：已实现（93f890e，2026-09-23）——两文件单行插入已随单 atomic commit 落库（subject 即上行计划主题）；上行「Your next move」为执行前快照。
+
 ---
 
 > TL;DR (machine): quick, low risk, 2 文档行插入 + 单 atomic commit + vitest 全绿 + 计划合规审查。

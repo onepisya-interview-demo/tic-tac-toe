@@ -16,6 +16,7 @@
 | 脚本 | 证明内容 |
 | --- | --- |
 | visual-qa.mjs | 路由流程、胜局、刷新持久化、API 响应和截图 |
+| rooms-race-qa.mjs | `/api/rooms` 链竞态端到端（merge×outcomes 累加、reset×in-flight、POST 幂等、404+banner、SW non-GET、慢 DB ordering+DOM===API） |
 | hydration-check.mjs | 持久化“取消静音”后没有 hydration 错误 |
 | audio-probe.mjs | 至少 12 个 Web Audio oscillator 和匹配的 gain 使用 |
 | audio-cheer.mjs | win-to-cheer 360ms 时序和精确欢呼频率程序 |
@@ -48,4 +49,11 @@
 - 阈值必须有推导依据（动画时长 + commit 余量 + safety 上限），写入 plan；禁拍脑袋数。
 - 实证：`home-return-qa.mjs` step 02c（clickToOpen 实测 327~354ms、animationend margin ~137ms、600ms safety 未触发；1/5 run 的 -1338ms 异常靠诊断字段 `evtName/evtPseudo/evtCount` 闭合）。
 - 02c EARLY 阈值（100ms）暂不放宽；CI 首次 flake 时读 DIAG 行 `clickToOpenMs`，若 path C 实测 >80ms 则 EARLY = 实测 P99 + 20ms（判据来源：`.omo/decisions-20260923.md` 项 3）。
+
+## 页面网络断言通道（2026-09-24 新增）
+
+- 验证 SW 拦截 / 页面网络行为的触发必须走**页面内通道**（`page.evaluate` 里 `fetch`/XHR）——`ctx.request.post`（Playwright APIRequestContext）不进页面网络栈：不触发 `page.on('request')`、不经 SW，用它断言页面行为必然空转（假绿）。APIRequestContext 只用于纯 API 场景（无页面语义断言时）。
+- resourceType 语义以实测为准：页面 `fetch` 发起的请求是 `'fetch'`（`'xhr'` 是 XMLHttpRequest 专用）——写期望值前先打诊断行确认，不凭直觉。
+- 捕获类断言禁止包 `if (captured)` 静默跳过：记录缺失即 FAIL——断言的前提本身要被断言。
+- 实证：`rooms-race-qa.mjs` step 6 假绿通道修复（commit 54045f7，修复后首跑即红、暴露期望值错，两处都已堵死）。
 

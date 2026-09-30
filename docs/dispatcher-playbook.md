@@ -81,4 +81,41 @@
 - **并行正解 = git worktree 隔离**：任务按「文件面零交集」切正交后，调度者预建 N 个 worktree（各开分支 + 串行 `pnpm install`），herdr `tab create --cwd` 直指各 worktree，多席 fresh session 并行互不污染；完成后主仓 cherry-pick 序列合入（文件面零交集时冲突率为 0）+ 统一终验。同一 worktree 多席并行写必然互踩，不要试。
 - **双盲审**：修复席与审查席分离（各自 fresh session），每席深审一案；审查 brief 预埋「假绿来源清单」（rAF×fake timers、事件派发属性、mock 形状、SSR stub 污染、cleanup 残留），让 reviewer 逐项正面核查而不是复述执行席自报。
 - **REJECT 闭环**：reviewer REJECT → 调度者**亲自验证证据** → 同 worktree 起新席整改（brief 直接带已验证的证据链，禁止 re-查证浪费）→ 整改 commit 由调度者复核 diff 后 cherry-pick 合入。REJECT 根因若在调度者 brief 的前提错误（实证：'not-found' 死键误判），如实认领，不甩执行席。
-- **语言一致性**：plan 正文与 commit subject 默认中文（Goal / Scope / WHY 等骨架词可英文）。实证：brief 不钉语言时，各执行席漂移程度从 1% 到 60% 中文占比不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts` 英文骨架+中文正文）；历史 plan 惯例约 65% 中文。是否升级为 commit-audit 机械规则（R7）待主公裁决。
+- **语言一致性**：plan 正文与 commit subject 默认中文（Goal / Scope / WHY 等骨架词可英文）。实证：brief 不钉语言时，各执行席漂移程度从 1% 到 60% 中文占比不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts` 英文骨架+中文正文）；历史 plan 惯例约 65% 中文。commit 端已升级为 commit-audit 机械规则 **R7**（2026-09-23 主公裁决 A+B 组合落地，commit 3068b22）；brief 端的中文要求与 R7 配套闭环。
+
+## Session 单一事则与正交性矩阵（2026-09-24 新增）
+
+> 依据：主公三条主张 + wayfinder 体系对齐。完整推导、本波实证复盘表与裁决记录见 [`.omo/research-session-orthogonality-20260924.md`](../.omo/research-session-orthogonality-20260924.md)；wayfinder 试点地图见 [`.omo/plans/ulw-rooms-race-map-20260924.md`](../.omo/plans/ulw-rooms-race-map-20260924.md)。
+
+- **Session 单一事则**：一个 session 只做一件事；「事」的计量单位是**上下文容量**——所需全部上下文（代码面 + 决策史 + 被检对象）装得进一个干净会话且不互相稀释。做不好 → 继续拆小到单会话闭环。判定测试：**上下文域是否在会话内连续生长**——连续生长的多域探索（如 rooms-race 调研）算一件事，不因「摸了多个领域」而违反单一事则。
+- **探索先行，执行后置**：能精确陈述问题才立票（禁预切片）；地图（票面 + 雾区 + 决策）先行，派发只认地图票面；「想直接开干的冲动 = 该继续探索的信号」。
+- **正交性 2×2 判定矩阵**（拆不拆 session 按共享上下文判断，不按任务内容判断）：
+
+| | 工作/检查方式相同 | 工作/检查方式不同 |
+|---|---|---|
+| **共享上下文** | 同 session 串行做（省上下文重建税） | **强制拆 fresh session——仅限对抗性评审**（D5：强制力来源是评审独立性——模型自身有偏见与漂移；非对抗场景不强制拆，但关键裁决仍应交外部新鲜眼睛） |
+| **上下文正交** | 可并行（为墙钟速度；worktree 隔离） | 隔离并行的最大价值区（异镜头各占干净会话，被检对象重叠也不合并） |
+
+- **派发前三问（brief 模板必答，写进派发记录）**：① 这张票与哪一席共享上下文？（共享 + 同方式 → 同 session 串行；共享 + 异方式对抗 → 强制 fresh）；② 检查/工作方式是否异镜头？（异镜头 → 隔离会话，上下文开销是必要的）；③ 预估上下文容量是否单会话闭环？（装不下 → 拆票，不塞）。
+- **验证性工作默认隔离**：检查强度 > token 成本；「自我确认不是确认」——hunter 不得兼任 confirmer（独立复核换人换会话）。
+
+### wayfinder 试点复盘（2026-09-24，地图 ulw-rooms-race-map）
+
+**接线方式（定式）**：地图 = 本地 markdown tracker（`.omo/plans/ulw-*-map-*.md`，Destination + Session 票面 + Decisions 编号 + 雾区 F 编号 + Out of scope）；票面即 brief 的唯一素材（自包含，不引用会话上下文）；开雾票（判据性实验）由调度者亲自先跑，毕业雾区后才派发依赖票；裁决以 D 编号累积在地图内；每票落地后票面回填 commit 指针。与 omo ulw 流程兼容：席位仍走 `$omo:ulw-plan`，地图取代「口头 decree」成为票源真源。
+
+**试点实证的三条教训**：
+
+1. **「票被静默跳过」必须升级为 finding**——自动化派发脚本的条件分支若依赖司机自报的字符串格式（如 cherry-pick 清单是否含分支名），判否即静默跳票。机械判定要用结构化字段；汇总报告必须逐票核对落地状态，缺一张票 = 波次未收口。
+2. **席位技能可能自带审批门**——`$omo:ulw-plan` 流程会写完 plan 后停机等 approve 关键字（三轮无响应自落 blocked）。派发 brief 应声明「审批权已前置授予地图裁决，plan 落盘即视为已批」；或调度者备好 approve 关键字及时解阻（勿重发原 brief）。
+3. **席位可能漏提交 plan 文件**——commit footer 的 `Plan:` 指向的文件必须随波入仓；调度者收尾核对每个 footer 指向的文件存在，缺失即调度者入档补齐（不改写席位 commit）。
+
+**复审的复利实证**：T-D 交叉审的 d-F5（step 6 断言可能静默跳过）在收口修复第一跑即暴露更深一层的假绿——探针 POST 走 APIRequestContext 绕过页面网络栈，SW 拦截断言从未真实生效。异镜头审查抓到的不是「这一处错」而是「这一类断言通道不可信」，验证了「验证性工作默认隔离」的成本正当性。
+
+### 多票波派单复盘（2026-09-25/26，两计划五票波 dwfrun-926d642f）
+
+- **`$omo:start-work` 指向多票计划会被席位解读为「执行整份计划」**（实证：t-n4 席侦察后自行 dispatching 五票全跑，被司机 pane 取证拦截、未合入零污染）。对策：席 brief 首行后紧跟「本席范围 = 仅 §X 一票，其余票归别席，越界即 drift」硬声明；更稳的形态是每票单独一份 ulw 计划文件。worktree 隔离 + 司机独立 diff 复核再次兑现为最后防线。
+- **omo 触发器语义速查**：`$ulw-plan` 只规划不实现（产出 awaiting-approval 计划即停）；`$start-work [plan] [--worktree <abs>]` 执行既有计划（Boulder 状态机 + 五证据门）。计划已批时 brief 必写「审批已前置授予：遇审批等待点视为已批直接继续」，防审批门三轮无响应自落 blocked（与 wayfinder 教训 2 同源）。
+- **brief 白名单要含票面「最小新增」载体文件**：票面明示的共享文件（如新增 problem slug 必然落 `lib/api-problem.ts`）不写进白名单字面清单，司机面检只能靠裁量放行——本波裁量正确且留档，但白名单一次写全可省一轮裁决。
+- **清场闭环有两类残留**：合流执行员只清「合入席」。① 首派即废的席位 tab 不进任何清理链；② 受阻席 tab/worktree 有意保留供返工——返工若改走 dev 直修，这两类 tab + worktree 由调度者收尾补清（`tab close` / `worktree remove`，分支可留档备查）。
+- **codex parser 故障处置**：席位所有工具调用持续参数解析错误 = runtime 故障而非任务问题，整席重建 fresh 重派即好（t-m1 实证一次过），不要在同一会话反复重试。
+- **合流干净树前置显式豁免生成噪声**：`next-env.d.ts` 的 dev/build 变体翻转不是人为改动（[notes.md](./notes.md)），干净树检查须点名豁免，否则合流 driver 会误停。

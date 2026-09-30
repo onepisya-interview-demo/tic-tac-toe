@@ -1,6 +1,6 @@
 // BR: BR-1, BR-9
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, act, fireEvent } from '@testing-library/react';
+import { cleanup, render, act, fireEvent, waitFor } from '@testing-library/react';
 
 // Mutable pathname surface: HomeDialogMount only mounts on '/', so the
 // transition itself is simulated via the NavPrevTracker marker (what the
@@ -278,6 +278,20 @@ describe('components/HomeDialogMount handleConfirm integration (test-only covera
     render(<HomeDialogMount />);
     const { screen } = await import('@testing-library/react');
     const dlg = await screen.findByTestId('sync-confirm-dialog');
+    // afterViewTransition opens the dialog asynchronously via two rAFs
+    // (jsdom falls into the no-VT path of lib/view-transition.ts:60).
+    // Wait for the native <dialog> to actually mount as a modal before
+    // typing — otherwise the [open, initialName] useEffect on
+    // components/SyncConfirmDialog.tsx:107 can run AFTER our
+    // fireEvent.input's setName commit and reset the typed name back to
+    // the empty initialName, leaving canConfirm=false and the button
+    // disabled when the test asserts. Flake rate ~1/6 under full
+    // concurrency; file isolation is stable, so the symptom only shows
+    // up under worker pressure. See plan
+    // .omo/plans/ulw-homedialog-flaky-fix-20260926.md §一 #1.
+    await waitFor(() => {
+      expect(dlg.hasAttribute('open')).toBe(true);
+    });
     // Type the new room into the dialog.
     const nameInput = dlg.querySelector('[data-testid="sync-confirm-name"]') as HTMLInputElement;
     await act(async () => {
@@ -321,6 +335,20 @@ describe('components/HomeDialogMount handleConfirm integration (test-only covera
     render(<HomeDialogMount />);
     const { screen } = await import('@testing-library/react');
     const dlg = await screen.findByTestId('sync-confirm-dialog');
+    // afterViewTransition opens the dialog asynchronously via two rAFs
+    // (jsdom falls into the no-VT path of lib/view-transition.ts:60).
+    // Wait for the native <dialog> to actually mount as a modal before
+    // typing — otherwise the [open, initialName] useEffect on
+    // components/SyncConfirmDialog.tsx:107 can run AFTER our
+    // fireEvent.input's setName commit and reset the typed name. For
+    // THIS test the reset is a no-op (initialName already matches the
+    // typed value), but keeping the two integration tests structurally
+    // identical immunises against future races if either test ever
+    // varies its initialName. Flake rate ~1/6 under full concurrency;
+    // file isolation is stable.
+    await waitFor(() => {
+      expect(dlg.hasAttribute('open')).toBe(true);
+    });
     const nameInput = dlg.querySelector('[data-testid="sync-confirm-name"]') as HTMLInputElement;
     // initialName from store.roomName should pre-fill the input.
     await act(async () => {

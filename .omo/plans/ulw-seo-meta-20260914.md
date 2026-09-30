@@ -3,6 +3,7 @@
 - 日期：2026-09-14
 - ulw-loop：`.omo/ulw-loop/ulw-seo-meta-20260914/`
 - 授权：主公 2026-09-14 择 A（最小动：metadata API + public/ 副本）
+- 状态：已实现——7b230b8（2026-09-14 feat(meta): 部署站增 og/twitter 元，Next 16 metadata API）；续批 2879b2f 扩 og:url 与 twitter:creator/site
 
 ## 背景与既裁事项
 

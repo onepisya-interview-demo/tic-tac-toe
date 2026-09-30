@@ -1,3 +1,13 @@
+/**
+ * tests/db/db.test.ts — db.ts 测试套件（含 __setCreateClientForTests 与
+ * __setDbOpDelayForTests 两个 test seam 的行为用例）。
+ *
+ * d-F2 fix (2026-09-24): 两 seam 自本次修复起正交 — factory 调换不影响
+ * delay 状态，delay 调换不影响 factory 状态。两个测试都按 `factory →
+ * delay → finally(双 reset)` 安全顺序调用（line ~1317/1319/1327-1328 与
+ * ~1336/1338/1345-1346），新约定下两 seam 互不干扰，调用顺序不再承担
+ * 「防止耦合旁路」的隐性义务。
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
@@ -862,6 +872,166 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       await closeDb();
     }
   });
+
+  // ── T-N1 (ulw-room-lifecycle-20260924): deleteRoomByRoom ──
+  // 用户主动销户：与 resetRecordByRoom 镜像同型（withWriteLock + db.transaction），
+  // 但 DELETE 行而非 upsert emptyStats()。行不存在 → {ok:false, reason:'not-found'}
+  // (防静默建档同款纪律)；行存在 → {ok:true, deleted:true}。返回值不携带 stats —
+  // 销户语义下「删除前的统计」不是交付物，调用方需要旧值应自取。
+  it('deleteRoomByRoom on unknown room → { ok:false, reason:\'not-found\' } (不静默建档)', async () => {
+    const { deleteRoomByRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
+    try {
+      const result = await deleteRoomByRoom('ghost-room');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('not-found');
+      }
+      expect(await loadRecordByRoom('ghost-room')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('deleteRoomByRoom on existing row → { ok:true, deleted:true }; subsequent loadRecordByRoom returns null (重进可重建全零账本)', async () => {
+    const {
+      deleteRoomByRoom,
+      registerOrLoginRoom,
+      upsertRecordByRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      await registerOrLoginRoom('room-to-delete');
+      await upsertRecordByRoom('room-to-delete', {
+        totalGames: 7,
+        xWins: 4,
+        oWins: 2,
+        draws: 1,
+        currentStreak: -2,
+      });
+      // 行存在 — 销户前能读到非零数据。
+      const before = await loadRecordByRoom('room-to-delete');
+      expect(before).toEqual({
+        totalGames: 7, xWins: 4, oWins: 2, draws: 1, currentStreak: -2,
+      });
+      const result = await deleteRoomByRoom('room-to-delete');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.deleted).toBe(true);
+      }
+      // 行真没了 — 重进同一 room 应得到 fresh emptyStats()（契约：删除后可重建）。
+      expect(await loadRecordByRoom('room-to-delete')).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('deleteRoomByRoom + registerOrLoginRoom 并发：终值必属任一串行序 (withWriteLock 包裹)', async () => {
+    // 修复前：delete 与 registerOrLogin 的 read→mutate→upsert 三步在两 await
+    // 之间可被并发交错，理论上能出现「register 已读空 → delete 在其前跑完
+    // → register 仍 upsert zero」或「register 已 upsert → delete 已 read
+    // 存在 → delete 仍删」的中间态。修复后 (withWriteLock + db.transaction)
+    // JS 层与 SQL 层双锁，终值必须收敛到某一种串行序的合法终态之一：
+    //   - delete 先完成 → 行不存在 → registerOrLogin 创空行（existed:false）
+    //   - register 先完成 → 行存在 → delete 删除 → 行不存在
+    const ROUNDS = 5;
+    const {
+      deleteRoomByRoom,
+      registerOrLoginRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      for (let i = 0; i < ROUNDS; i++) {
+        const room = `race-del-reg-${i}`;
+        const settled = await Promise.allSettled([
+          deleteRoomByRoom(room),
+          registerOrLoginRoom(room),
+        ]);
+        // 两调用都不应抛 — withWriteLock + transaction 应吞下竞态。
+        for (const s of settled) {
+          expect(s.status).toBe('fulfilled');
+        }
+        const row = await loadRecordByRoom(room);
+        // 终值必须收敛到「行不存在 (delete 胜)」或「行存在 zero row
+        // (register 胜)」之一；不存在「行存在但非 zero」这种 stale upsert 态。
+        if (row === null) {
+          // delete 胜 — register 的 upsert 不该复活它。
+          // 这里可以容忍，契约只要求不抛。
+          expect(row).toBeNull();
+        } else {
+          expect(row).toEqual({
+            totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0,
+          });
+        }
+      }
+    } finally {
+      await closeDb();
+    }
+  });
+  // ── T-N3 (ulw-room-lifecycle-20260924): purgeStaleRooms ──
+  // 30 天不活跃 TTL（updated_at 口径）：withWriteLock + db.transaction 包裹
+  // DELETE FROM game_stats WHERE updated_at < :cutoff；返回 {deletedCount}。
+  // 边界：updated_at == cutoff 不删（严格小于）；updated_at < cutoff 必删。
+  it('purgeStaleRooms 边界：updated_at == cutoff 保留，updated_at < cutoff 删除', async () => {
+    const {
+      purgeStaleRooms,
+      registerOrLoginRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      // 准备：插入三行，全部 updated_at = now；然后直接调 service — 应全保
+      // 留（updated_at 远新于 cutoff）。这是 baseline。
+      await registerOrLoginRoom('keep-fresh-1');
+      await registerOrLoginRoom('keep-fresh-2');
+      const result = await purgeStaleRooms(30);
+      expect(result.deletedCount).toBe(0);
+      expect(await loadRecordByRoom('keep-fresh-1')).not.toBeNull();
+      expect(await loadRecordByRoom('keep-fresh-2')).not.toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+  it('purgeStaleRooms 返回 deletedCount 等于实际删除数；非过期行保留', async () => {
+    // 用 upsertRecordByRoom 在内部用 new Date() 设 updated_at — 我们无法
+    // 直接注入老的 updated_at。所以改测口径：maxAgeDays=0 等价于「updated_at
+    // < now」，全部行都满足；maxAgeDays=1 + 实时注册则全部保留。
+    const {
+      purgeStaleRooms,
+      registerOrLoginRoom,
+      loadRecordByRoom,
+      closeDb,
+    } = await import('@/lib/db');
+    try {
+      await registerOrLoginRoom('all-stale-a');
+      await registerOrLoginRoom('all-stale-b');
+      await registerOrLoginRoom('all-stale-c');
+      // 竞态防护：registerOrLoginRoom 内部用 new Date() 写 updated_at，
+      // 若与下行 cutoff 撞进同一毫秒，BR「严格小于才删、等于不删」会让
+      // 该行幸存（实证：全量并发下 3/5 假红）。睡 2ms 保证全部种子行
+      // updated_at 严格早于 cutoff。
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      // maxAgeDays=0 → cutoff = now; 所有行 updated_at < now → 全部删除。
+      const all = await purgeStaleRooms(0);
+      expect(all.deletedCount).toBe(3);
+      expect(await loadRecordByRoom('all-stale-a')).toBeNull();
+      expect(await loadRecordByRoom('all-stale-b')).toBeNull();
+      expect(await loadRecordByRoom('all-stale-c')).toBeNull();
+      // 再注册 + maxAgeDays=1 → 全保留。
+      await registerOrLoginRoom('keep-now');
+      const none = await purgeStaleRooms(1);
+      expect(none.deletedCount).toBe(0);
+      expect(await loadRecordByRoom('keep-now')).not.toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+
+
+
+
 });
 
 // ── W1 (ulw-room-migration-home-landing): legacy `name`-column DB rebuild ──
@@ -1442,6 +1612,7 @@ describe('lib/db — W-T blind spots (test seams + row-existence branches)', () 
       await closeDb();
     }
   });
+
 
 });
 

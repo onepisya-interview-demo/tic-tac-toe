@@ -1,5 +1,7 @@
 # audit-transitively-calls-commitlint - Work Plan
 
+> **状态**：已实现（0ffde83，2026-09-12）——commit-audit 在 `--message-file` 模式 R1-R5 全过后串联 spawn commitlint。以下为计划态原文存档。
+
 ## TL;DR (For humans)
 
 **What you'll get:** commit-audit.mjs（项目 commit 策略单一信源）在 `--message-file` 模式下、自身 R1-R5 全过之后，同步 spawn `pnpm exec commitlint --edit <message-file>` 作为第二检查点。hook（`.git/hooks/commit-msg`）仍只调 audit——commitlint 从"文档里说可以手动跑"变成"每次 commit 事实必跑"，规则闭环不增加任何 agent 负担。

@@ -1,7 +1,7 @@
 # ulw · dev-emfile-watch —— dev 服 EMFILE 风暴文档化 + 构建冻结反模式
 
 - **日期**：2026-09-19
-- **状态**：APPROVED（主公 2026-09-19 审定：只写文档不改 script；F2 构建冻结进入；本计划入档即执行）
+- **状态**：APPROVED（主公 2026-09-19 审定：只写文档不改 script；F2 构建冻结进入；本计划入档即执行）——已交付（471967b，2026-09-19，`docs(agents+readme): dev EMFILE 已知问题与构建冻结反模式入档`）
 - **触发**：两事故——① 主公 :3000 `pnpm dev` 冷启即爆 Watchpack EMFILE 风暴 + `.next/dev` deleted 重启循环，服务不可用；② 今夜波次产线 build 删 `.next/dev` 撞死 dev 服
 - **基线**：dev @ b49968a
 - **执行体**：fresh codex（ulw-fix2，herdr 3t tab）；调度者独立验收（dev 冷启探针已由调度者在调查阶段实证）

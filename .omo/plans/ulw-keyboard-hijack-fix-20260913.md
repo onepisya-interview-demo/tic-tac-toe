@@ -1,6 +1,7 @@
 # Plan: ulw · 键盘劫持修复（ulw-keyboard-hijack-fix-20260913）
 
 - 日期：2026-09-13
+- 状态：已实现（6778bd8，2026-09-14）
 - ulw-loop：`.omo/ulw-loop/ulw-keyboard-hijack-fix-20260913/`
 - 性质：产品代码修复（主公实测报障：「游玩中切换焦点之后无法返回首页
   和重新开局，因为键位被落子占用了」）

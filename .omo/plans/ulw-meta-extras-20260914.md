@@ -1,6 +1,7 @@
 # Plan: ulw-meta-extras-20260914 · Twitter card 元扩展（A+B+C）
 
 - 日期：2026-09-14
+- 状态：已实现（`c16e9e8`，2026-09-14）
 - ulw-loop：`.omo/ulw-loop/ulw-meta-extras-20260914/`
 - 调研基础：`.omo/ulw-loop/ulw-research-twitter-cards-20260914/report.md`
 - 主公择：A + B + C

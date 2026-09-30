@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-20
 - **分支**：dev（维护者指示：只在 dev 上开发；执行走独立 worktree + ff 合入，历史保持 dev 线性）
-- **状态**：**已全部拍板（D-1~D-5），转正执行**——W-A（/result 庆祝）+ W-A2（/online 直达门控）+ W-B（docs 清账 + D-5a 探针）+ W-C（D-5b slug 迁移，无兼容期）四波并行
+- **状态**：**已完结**——四波（W-A /result 庆祝 + W-A2 /online 直达门控 + W-B docs 清账/D-5a 探针 + W-C D-5b slug 迁移无兼容期）2026-09-21 全部落地（W-A `1c3899e` / W-A2 `2d8f8d4` / W-B `133397c`·`0483513` / W-C `5fe93c0`·`adab290`），终验 V11 ACCEPT 入档（`122a24c`，2026-09-21）
 - **前置阅读**：DESIGN.md:198（Result confetti 1.1s once 契约仍在动效表）、.omo/plans/ulw-offline-ledger-direct.md（文案送审纪律/等待规范沿用）
 
 ---

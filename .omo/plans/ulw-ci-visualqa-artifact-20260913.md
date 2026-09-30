@@ -2,7 +2,7 @@
 
 - 日期：2026-09-13
 - ulw-loop：`.omo/ulw-loop/ulw-ci-visualqa-20260913/`
-- 状态：派发 fresh codex 执行中（调度者：本 session）
+- 状态：已实现（64ccec0 2026-09-13 ci visual QA 经 artifact 下发生产构建；状态线 2026-09-26 按 git 实况修正）
 - 背景：开源发布后 main CI 三连修（pnpm 双源 → 隐藏目录 → 本次），病层剥开至最后一 job。
 
 ## 1. 现象（run 34764435449）

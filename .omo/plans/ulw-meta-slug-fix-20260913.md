@@ -1,6 +1,7 @@
 # Plan: ulw · 修 package.json 元数据错 slug（ulw-meta-slug-fix-20260913）
 
 - 日期：2026-09-13
+- 状态：已实现（`f883fc7`，2026-09-14）
 - ulw-loop：`.omo/ulw-loop/ulw-meta-slug-fix-20260913/`
 
 ## 1. 现象

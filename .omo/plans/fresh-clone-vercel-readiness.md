@@ -12,7 +12,7 @@
 **Risk:** Low - docs-only surface change backed by a runtime smoke; no production code touched.
 **Decisions to sanity-check:** README §部署 uses `<your-db-name>` placeholders (public repo serves fresh cloners; the private db name `tic-tac-toe-onepisya` stays in `docs/local-turso-setup.md`); Vercel local-simulation recipe lives in README §部署, not a new doc; 4 standard troubleshooting scenarios (stats gone / fetch failed / 401-403 / build fails); ONE chore commit with `Plan:` footer.
 
-Your next move: read this plan, approve at the gate, then run `$start-work fresh-clone-vercel-readiness` in a worker session to execute the 10 todos + F1-F4. Full execution detail follows below.
+**Status (2026-09-09): 已落地** —— fix(db) 与 chore(docs) 两份原子提交均已入 main（fix 链：ecbc9b1 → 5878107 revert → d0e69a6 恢复 unset 分支父目录自动创建；docs：ff1e2c0），todos 1-10 与 F1-F4 已勾选（dba25f5）。下文为计划态原文存档。
 
 ---
 

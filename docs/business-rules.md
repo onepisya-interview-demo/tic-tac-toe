@@ -13,11 +13,13 @@
 | BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
 | BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
 | BR-5 | POST /merge 仅用户主动确认 | 弹框点「合并并清空」才发 merge | 确认前零调用；409 防静默建档；用户拒绝 = 零网络写 | `tests/qa/home-return-qa.mjs` step04/05 + `tests/qa/merge-sync-qa.mjs` |
-| BR-6 | 同名并发 last-write-wins | 两设备同名并发合并，后写胜出 | —（无例外） | `tests/qa/concurrent-surface-qa.mjs` |
+| BR-6 | 同房间并发写精确累加（不丢不重） | 两设备同名并发记局/合并，账本精确 = 实际局数（进程内互斥 + 事务包裹，71ad38d；多实例实测同不丢——T-L4 remote 实测 2026-09-24：三步在单事务内时服务端串行化 write 事务，110 轮零丢失） | 平台事务语义演进不承诺（单库实测非契约级）；E7 失败回滚文件锁泄漏为 file: 模式特有，远程无此现象 | `tests/qa/rooms-race-qa.mjs` step 1 + `tests/db/lost-update-mutex.test.ts`（10 轮精确断言）+ `tests/db/turso-remote-race-feasibility.test.ts`（远程回归锚，双门跳过） |
 | BR-7 | 重置清零保留身份 | POST /reset 清零战绩，房间名保留 | 重置不丢身份；前端入口需确认 | `tests/qa/room-reset-qa.mjs` |
 | BR-8 | /online 直达门控 | 未完成身份引导时直达 /online 被 RoomGate 拦截引导 | 门控不产生静默建档 | `tests/qa/online-direct-qa.mjs` |
 | BR-9 | 弹框初焦落主 CTA | 合并弹框打开后初焦点落「合并并清空」（rAF） | 初焦不落在「保留本地」/输入框 | `components/HomeDialogMount.test.tsx` |
-| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/merge-sync-qa.mjs` |
+| BR-10 | 合并/上报不静默建档 | merge 对未登记房间 409；outcomes 对未知房间 404 | 服务端不因孤儿请求静默创建行 | `tests/qa/rooms-race-qa.mjs` step 5（outcomes→404） + `tests/qa/rooms-race-qa.mjs` step 8（merge→409） |
+| BR-11 | 合并弹框投递目标 = 本机身份 | 有身份 → 弹框 input readOnly 显示 current room name；无身份 → 可输入（首次收名） + 合并成功后 setStoreName 落 localStorage | ①有身份时输入框不可编辑；②合并成功不改变既有身份；③首次收名成功后身份落 localStorage（key = ttt.room.name.v1）| `tests/qa/home-return-qa.mjs` step 10（有身份 → input readOnly + 值 = 身份名 + 合并后身份不变）+ `tests/qa/home-return-qa.mjs` step 11（无身份 → 可输入 + 合并后 ttt.room.name.v1 写入）|
+| BR-12 | **删除房间销户 + TTL 兜底** | `DELETE /api/rooms/{room}` 200 `{ok:true}` 销户服务端 game_stats 行；同名重建 `POST /api/rooms` 幂等回 `existed:false` 全零账本；TTL（30 天不活跃）自动回收兜底孤儿账本 | ①对不存在房间 DELETE → 404 `room-not-found` problem+json（不静默销户）；②删除后 `GET /stats` 与 `POST /stats/outcomes` → 404 `stats-not-found` banner 链路（同 rooms-race step 5 旧路径，与 step 9 真 API 通道互补）；③删除后重进同名房间 → 全零新账本，不复活旧数据（`existed:false` + `stats` 全零键值严格匹配） | `tests/qa/rooms-race-qa.mjs` step 9（真 API DELETE + 重建全零 + ghost 404 三反面场景同端到端流） + `tests/qa/rooms-race-qa.mjs` step 5（libsql 子进程直删 + OutcomeErrorBanner 端到端，互为双通道） |
 
 
 ## 探针列格式约定（机器可校验）

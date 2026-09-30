@@ -115,7 +115,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
 
 ### Wave 1: 5 个并行文件操作
 
-- [ ] 1. feat(scripts): build-favicon-assets.mjs 扩展生成 maskable icon
+- [x] 1. feat(scripts): build-favicon-assets.mjs 扩展生成 maskable icon
   What to do / Must NOT do: 在 `scripts/build-favicon-assets.mjs` 的 `TARGETS` 数组追加 `{ file: "public/icon-maskable-512.png", size: 512, maskable: true }`；把单步 `magick` 调用改成条件分支：非 maskable 走原路径（保留 `-define png:exclude-chunks=tIME,tEXt,zTXt,iTXt`），maskable 走两步（先 `magick source -filter Lanczos -resize 410x410 -define png:exclude-chunks=tIME,tEXt,zTXt,iTXt /tmp/m-410.png`，再 `magick -size 512x512 canvas:#0b0f17 /tmp/m-bg.png && magick /tmp/m-bg.png /tmp/m-410.png -gravity center -composite -define png:exclude-chunks=tIME,tEXt,zTXt,iTXt public/icon-maskable-512.png`）。**禁止**改其它非 maskable 路径的逻辑；**禁止**改 `DEFAULT_SOURCE` / `SIZES` 之外的既有逻辑；**禁止**添加新 npm 依赖；**禁止**用 sharp / node-canvas 等替代 ImageMagick；**禁止**把 `#0b0f17` 写死到非 maskable 路径。**禁止**用 `git commit --no-verify`。
   Parallelization: Wave 1 | Blocked by: 无 | Blocks: 6
   References (executor has NO interview context - be exhaustive):
@@ -140,7 +140,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
   Evidence: `.omx/evidence/pwa-install-experience/task-1-{identify,determinism,typecheck,lint}.log`
   Commit: N（与 todo 2/3/4/5 一起进 todo 6 的原子 commit）
 
-- [ ] 2. feat(manifest): 新增 app/manifest.ts 类型化 manifest route
+- [x] 2. feat(manifest): 新增 app/manifest.ts 类型化 manifest route
   What to do / Must NOT do: 新增 `app/manifest.ts`（约 30 行 TypeScript），default export 一个 `manifest()` 函数返回 `MetadataRoute.Manifest` 对象。manifest 字段：name / short_name / description（与 `app/layout.tsx:21-24` 的 metadata 保持一致）/ start_url: "/" / scope: "/" / display: "standalone" / orientation: "portrait" / theme_color: "#0A0A0A" / background_color: "#0A0A0A"。icons 数组 9 项（见 Must have 第 1 条）。**禁止**手写 `public/manifest.json`（用 app/manifest.ts 走 Next.js 路由约定）；**禁止**改其它任何文件；**禁止**引入新依赖。**禁止**把 theme_color 改成 `#0b0f17`（那是 apple-icon 专用，会与 layout.themeColor 冲突）。**禁止**用 `git commit --no-verify`。
   Parallelization: Wave 1 | Blocked by: 无 | Blocks: 5 (layout 引用), 6
   References (executor has NO interview context - be exhaustive):
@@ -165,7 +165,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
   Evidence: `.omx/evidence/pwa-install-experience/task-2-{typecheck,lint,build,curl-manifest,html-head}.log`
   Commit: N（与 todo 1/3/4/5 一起进 todo 6 的原子 commit）
 
-- [ ] 3. feat(sw): 新增 public/sw.js 最小 service worker
+- [x] 3. feat(sw): 新增 public/sw.js 最小 service worker
   What to do / Must NOT do: 新增 `public/sw.js`（~15 行原生 JS，无 TypeScript，无依赖）。内容：3 个 `self.addEventListener` 监听 `install` / `activate` / `fetch`，fetch handler 走 `fetch(event.request)`（network-first，零缓存）。**禁止**写任何缓存策略（cacheStorage / caches.open / caches.match）；**禁止**用 Workbox / sw-toolbox / sw-precache 等第三方；**禁止**写 importScripts 加载额外脚本；**禁止**改其它任何文件。**禁止**用 `git commit --no-verify`。
   Parallelization: Wave 1 | Blocked by: 无 | Blocks: 4 (sw 注册组件引用), 6
   References (executor has NO interview context - be exhaustive):
@@ -186,7 +186,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
   Evidence: `.omx/evidence/pwa-install-experience/task-3-{syntax,curl-headers,curl-body,build}.log`
   Commit: N（与 todo 1/2/4/5 一起进 todo 6 的原子 commit）
 
-- [ ] 4. feat(client): 新增 components/ServiceWorkerRegister.tsx SW 注册组件
+- [x] 4. feat(client): 新增 components/ServiceWorkerRegister.tsx SW 注册组件
   What to do / Must NOT do: 新增 `components/ServiceWorkerRegister.tsx`（~10 行 React client component）。内容：`'use client'` 指令；default export 一个无 props 函数组件；在 `useEffect` 内（依赖数组 `[]`）调用 `navigator.serviceWorker.register('/sw.js').catch(console.warn)`，外层 `if (process.env.NODE_ENV === "production")` 守卫。**禁止**添加 props；**禁止**在 dev 模式注册（会破坏 HMR / fast refresh）；**禁止**加 setTimeout / setInterval / onerror UI 提示；**禁止**用 next/script 替代（脚本已是显式 client component 写法）。**禁止**改其它任何 components/ 文件。**禁止**用 `git commit --no-verify`。
   Parallelization: Wave 1 | Blocked by: 3 (引用 /sw.js) | Blocks: 5 (layout import), 6
   References (executor has NO interview context - be exhaustive):
@@ -208,7 +208,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
   Evidence: `.omx/evidence/pwa-install-experience/task-4-{typecheck,lint,vitest,build,grep-use-client}.log`
   Commit: N（与 todo 1/2/3/5 一起进 todo 6 的原子 commit）
 
-- [ ] 5. feat(layout): app/layout.tsx 加 metadata + ServiceWorkerRegister
+- [x] 5. feat(layout): app/layout.tsx 加 metadata + ServiceWorkerRegister
   What to do / Must NOT do: 修改 `app/layout.tsx`：在 `export const metadata: Metadata = { ... }` 对象中追加 `manifest: "/manifest.webmanifest"` 和 `appleWebApp: { capable: true, title: "井字棋", statusBarStyle: "black" }` 字段；在 `export default function RootLayout({...})` 的 body JSX 里，紧邻 `<Analytics />` 添加 `<ServiceWorkerRegister />`（import 在文件顶）。**禁止**改 viewport export（已含 themeColor / colorScheme，重复添加会冲突）；**禁止**改 metadata 的 title / description / metadataBase（已有正确值）；**禁止**改 `<html>` / `<body>` className（已有 `h-full antialiased` + `bg-bg-base text-text-primary`）；**禁止**改 Analytics 组件本身。**禁止**用 `git commit --no-verify`。
   Parallelization: Wave 1 | Blocked by: 2 (引用 manifest URL), 4 (引用 ServiceWorkerRegister 组件) | Blocks: 6
   References (executor has NO interview context - be exhaustive):
@@ -234,7 +234,7 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
 
 ### Wave 2: 原子 commit + 完整 gauntlet
 
-- [ ] 6. feat(pwa): 提交 manifest + service worker + maskable icon + layout 集成
+- [x] 6. feat(pwa): 提交 manifest + service worker + maskable icon + layout 集成
   What to do / Must NOT do: 把 todo 1-5 的全部改动（scripts/build-favicon-assets.mjs / app/manifest.ts / public/sw.js / components/ServiceWorkerRegister.tsx / public/icon-maskable-512.png / app/layout.tsx）一次性 `git add` + `git commit` 为单份原子 commit `feat(pwa): manifest + service worker + maskable icon 触发 PWA 安装体验`。commit body 写 WHAT/WHY/HOW 3 段；lore trailers 含 Constraint / Rejected / Confidence / Scope-risk / Directive / Tested / Not-tested + `Plan: .omo/plans/pwa-install-experience.md` footer。commit message 必须先 `node tests/qa/commit-audit.mjs --message-file <tmp>` 校验 PASS 再正式 commit。**禁止**拆 commit（5 个改动必须合一，因为 service worker 单独存在而 manifest 没引用 = 不完整，反之亦然）；**禁止**用 `git commit --no-verify`；**禁止**改 commit 历史（amend 已发布 commit）；**禁止**commit 未在 todo 1-5 中显式列出的文件（dirty worktree 一律不进 commit）。
   Parallelization: Wave 2 | Blocked by: 1, 2, 3, 4, 5 | Blocks: F1, F2, F3, F4
   References (executor has NO interview context - be exhaustive):
@@ -266,10 +266,10 @@ Your next move: approve the plan, then a worker session picks it up via `$start-
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit
-- [ ] F2. Code quality review
-- [ ] F3. Real manual QA
-- [ ] F4. Scope fidelity
+- [x] F1. Plan compliance audit
+- [x] F2. Code quality review
+- [x] F3. Real manual QA
+- [x] F4. Scope fidelity
 
 ### F1 具体口径
 - 6 层 inline gauntlet（typecheck/lint/vitest 88/build/commit-audit 0 violations）全部 exit 0

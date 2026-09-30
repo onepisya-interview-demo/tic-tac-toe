@@ -1,5 +1,7 @@
 # Plan: ulw-reset-store-outcome-error
 
+> **状态**：已实现（`f68e328`，2026-09-23）
+
 ## 目标
 
 修复测试隔离缺陷：测试套件里三处手抄的 `resetStore` 路径没有清掉

@@ -179,7 +179,7 @@
 > 实现 + 测试 = 一个 todo，绝不分拆。
 <!-- 下面的 todo 行用 edit/apply_patch 追加，绝不重写上面的 headers。 -->
 
-- [ ] 1. baseline: 跑仓库就绪审计并捕获基线 `pnpm build` 警告
+- [x] 1. baseline: 跑仓库就绪审计并捕获基线 `pnpm build` 警告
   怎么做 / 不要做：在仓库根跑 `pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build` 四件，必须全部 exit 0；将 build 输出（含任何 warning）原样写入 `.omx/evidence/favicon-analytics-warnings/task-0-baseline-build.log`。不动任何代码；不动 dirty `package.json` / `pnpm-lock.yaml`。
   并行度：Wave 0 | 阻塞：— | 被阻塞于：W1.1, W1.2, W1.3
   参考：AGENTS.md §验证门禁（`pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build`）；docs/operations.md §日常命令
@@ -188,7 +188,7 @@
   证据：`.omx/evidence/favicon-analytics-warnings/task-0-baseline-build.log`
   提交：N
 
-- [ ] 2. 删除 app/favicon.ico
+- [x] 2. 删除 app/favicon.ico
   怎么做 / 不要做：`git rm app/favicon.ico`（不是 `rm`，保留 index 历史）；不要触碰 `public/logo.svg`；不要新建任何 favicon 文件。
   并行度：Wave 1 | 阻塞：1 | 被阻塞于：5
   参考：AGENTS.md §「已有命名令牌时...」反模式 + DESIGN.md 视觉契约不涉及此删除（DESIGN.md 全文不引用 favicon）
@@ -197,7 +197,7 @@
   证据：`git status -s` + 后续 `git show --raw HEAD | grep favicon`
   提交：Y（在 commit 1 内）
 
-- [ ] 3. 新增 app/icon.svg（复制 public/logo.svg 字节一致）
+- [x] 3. 新增 app/icon.svg（复制 public/logo.svg 字节一致）
   怎么做 / 不要做：`cp public/logo.svg app/icon.svg`；不要修改任何字节；不要 inline 重排或换成 design token 配色；不要在两个文件间建立任何 `import` 关系（每个独立文件）。
   并行度：Wave 1 | 阻塞：1 | 被阻塞于：5
   参考：node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/app-icons.md（icon 接受 .svg）；public/logo.svg 现状
@@ -206,7 +206,7 @@
   证据：`cmp` 输出 + `git status -s`
   提交：Y（在 commit 1 内）
 
-- [ ] 4. layout.tsx：viewport export + metadataBase + THEME_COLOR 常量
+- [x] 4. layout.tsx：viewport export + metadataBase + THEME_COLOR 常量
   怎么做 / 不要做：编辑 `app/layout.tsx`，按以下精确顺序：(a) 文件顶部（在 import 之前）添加 `// THEME_COLOR mirrors --color-bg-base from app/globals.css. Next.js viewport.themeColor requires a literal CSS color; CSS variables cannot be read in a Server Component.` 一行注释 + `const THEME_COLOR = '#0A0A0A' as const;`；(b) 在现有 `import type { Metadata } from "next";` 行下方加 `import type { Viewport } from "next";`；(c) 在现有 `export const metadata: Metadata = { ... };` 块内的 `description:` 之后加一行 `metadataBase: new URL('https://3t-tic-tac-toe.vercel.app/'),`；(d) 在 `metadata` export 之后、`RootLayout` 之前加 `export const viewport: Viewport = { themeColor: THEME_COLOR, colorScheme: 'dark' };`。不要加 `'use client'`；不要改 metadata 的 title / description 文案；不要把 `viewport` 放到 metadata 内部（Next.js 16 deprecation warning）；不要触碰 `<html>` / `<body>` 结构或 `body` className。
   并行度：Wave 1 | 阻塞：1 | 被阻塞于：5
   参考：node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-viewport.md（viewport 必须是独立 export；不接受 themeColor/viewport 在 metadata 内）；node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-metadata.md（`metadataBase` 字段说明，line ~391）；app/globals.css `--color-bg-base: #0A0A0A`
@@ -215,7 +215,7 @@
   证据：`pnpm typecheck` 输出 + 三个 grep 命令退出码
   提交：Y（在 commit 1 内）
 
-- [ ] 5. commit 1：feat(layout): 自有 favicon + Next.js 16 viewport/themeColor/metadataBase
+- [x] 5. commit 1：feat(layout): 自有 favicon + Next.js 16 viewport/themeColor/metadataBase
   怎么做 / 不要做：把 todo 2/3/4 的 dirty staged 改动一次性 commit。步骤：(a) `git add app/favicon.ico app/icon.svg app/layout.tsx`（注意 git rm 已 stage 删除，但 add 仍需列出来去重）；(b) 跑 `pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build` 全绿；(c) commit message 主题 `feat(layout): 自有 favicon + Next.js 16 viewport/themeColor/metadataBase`，正文用中文 WHAT/WHY/HOW，必带完整 lore trailer（Constraint: Next.js 16 把 viewport 从 metadata 拆出来，要求独立 export；Rejected: 把 themeColor 留在 metadata 内部 | 会触发 deprecation warning；Confidence: high；Scope-risk: narrow；Directive: 后续若加 openGraph / twitter，必须先 ensure 对应图片文件存在；Tested: pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build 四件 exit 0；Not-tested: 移动端浏览器真实色条渲染需后续生产部署人工验证 + Coverage/Mutation/Property-based 三层跳过：scope 不覆盖本次改动（app/ + tests/qa/），后续如需启用见 docs/verification-gauntlet.md §2 on-demand 规则）+ `Plan: .omo/plans/favicon-analytics-warnings.md` footer。不要把 dirty `package.json` / `pnpm-lock.yaml` 加进这次 commit（属于 commit 2）；不要用 `--no-verify`；commit-msg 钩子失败必须修到通过。
   并行度：Wave 1 | 阻塞：2, 3, 4 | 被阻塞于：6, 7, 8
   参考：AGENTS.md §提交约定 + §五步提交流程 + §中文提交；tests/qa/commit-audit.mjs（审计规则）；commitlint.config.cjs；.git/hooks/commit-msg
@@ -224,7 +224,7 @@
   证据：`git log -1` 输出 + commit-audit exit 0 + `pnpm build` 输出落 `.omx/evidence/favicon-analytics-warnings/task-5-commit-1-build.log`
   提交：Y
 
-- [ ] 6. layout.tsx：Analytics 挂载
+- [x] 6. layout.tsx：Analytics 挂载
   怎么做 / 不要做：编辑 `app/layout.tsx`，在文件顶部 import 区域新增 `import { Analytics } from "@vercel/analytics/next";`（与 next/font import 一起按字母序），在 `<body>` 内 `{children}` 之后、闭合 `</body>` 之前挂载 `<Analytics />`（独立一行）。不要传 `mode="production"`（默认 `auto` 在生产自动启用）；不要传任何 prop（最小化 surface）；不要包 `<Suspense>`（layout 不需要）；不要给 layout 加 `'use client'`。
   并行度：Wave 2 | 阻塞：5 | 被阻塞于：8
   参考：node_modules/@vercel/analytics/README.md（Quickstart + `<Analytics />` 文档）；node_modules/@vercel/analytics/dist/index.d.ts（AnalyticsProps.mode 默认 'auto'）
@@ -233,7 +233,7 @@
   证据：`pnpm typecheck` 输出 + 三个 grep 退出码
   提交：Y（在 commit 2 内）
 
-- [ ] 7. visual-qa.mjs：snapshot helper 扩展（iconHref/themeColor/analyticsScript）
+- [x] 7. visual-qa.mjs：snapshot helper 扩展（iconHref/themeColor/analyticsScript）
   怎么做 / 不要做：编辑 `tests/qa/visual-qa.mjs` 的 `snapshot(page)` 函数，在现有返回对象末尾追加三个字段：`iconHref: document.querySelector('link[rel="icon"]')?.getAttribute('href') ?? null`、`themeColor: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null`、`analyticsScript: (document.querySelector('script[src*="vercel"]') || document.querySelector('script[data-va]') || Array.from(document.querySelectorAll('script')).find(s => s.textContent?.includes('va('))) ? 'present' : 'absent'`（按 `@vercel/analytics` 实际产物形态调整 selector；先 `pnpm build && pnpm start` 后 curl localhost:3000 查 HTML 真实产物再写 selector）。不要改其它 probe；不要新建 probe 文件；不要把 `snapshot` 函数返回值改成异步；不要新增 `import` 包（Playwright 已经可用）。
   并行度：Wave 2 | 阻塞：5 | 被阻塞于：8
   参考：tests/qa/visual-qa.mjs（snapshot 函数当前定义）；node_modules/@vercel/analytics/dist/next/index.mjs（实际产物 script 标签形态，可在 `pnpm build && pnpm start` 后 curl 查看）
@@ -242,7 +242,7 @@
   证据：grep 输出 + 后续 todo 8 的 qa-log.json
   提交：Y（在 commit 2 内）
 
-- [ ] 8. build + visual-qa 真实 surface 验证 + cleanup
+- [x] 8. build + visual-qa 真实 surface 验证 + cleanup
   怎么做 / 不要做：`pnpm build 2>&1 | tee .omx/evidence/favicon-analytics-warnings/task-8-post-build.log`；`pnpm start &` 后台启动；`BASE_URL=http://localhost:3000 node tests/qa/visual-qa.mjs` 跑完 5 个 stage；`kill <pid> && kill -0 <pid>` 必须失败（cleanup receipt）。断言每个 stage 的 qa-log.json 里 `iconHref` 含 `/icon`、`themeColor === '#0A0A0A'`、`analyticsScript === 'present'`。然后跑 `BASE_URL=http://localhost:3000 node tests/qa/hydration-check.mjs`，确认 0 hydration warning。
   并行度：Wave 2 | 阻塞：6, 7 | 被阻塞于：9
   参考：tests/qa/visual-qa.mjs（5 stage 探针）；tests/qa/hydration-check.mjs（三路由 hydration 探针）；docs/operations.md §浏览器 QA（环境变量 BASE_URL / EVIDENCE_DIR）
@@ -251,7 +251,7 @@
   证据：`.omx/evidence/favicon-analytics-warnings/task-8-post-build.log` + `.omx/evidence/visual-qa/qa-log.json` + `.omx/evidence/hydration-check/qa-log.json` + cleanup receipt 一行
   提交：N
 
-- [ ] 9. commit 2：feat(analytics): 挂载 <Analytics /> from @vercel/analytics/next
+- [x] 9. commit 2：feat(analytics): 挂载 <Analytics /> from @vercel/analytics/next
   怎么做 / 不要做：`git add app/layout.tsx tests/qa/visual-qa.mjs package.json pnpm-lock.yaml`（dirty `package.json` + `pnpm-lock.yaml` 在此 commit 一并提交，不要分开提交也不要 stash）；commit message 主题 `feat(analytics): 挂载 <Analytics /> from @vercel/analytics/next`，正文中文 WHAT/WHY/HOW，lore trailer 必带：Constraint: `@vercel/analytics` 是用户明确要求且已在 dirty package.json 预备的依赖，本次提交一次性 absorb 该 diff；Rejected: 在 executor turn 内 `vercel --prod` 验证 dashboard 数据流 | 需要用户 Vercel 凭据，超出 agent 范围；Confidence: high；Scope-risk: narrow；Directive: Vercel Analytics 在 `mode='auto'` 下默认仅生产环境跟踪数据，本地 `pnpm dev` 不会触发网络请求，但 `pnpm build && pnpm start` 会在 HTML 中注入 script tag；Tested: pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build 四件 exit 0；visual-qa 5 stage 全部含 iconHref/themeColor/analyticsScript 三字段；hydration-check 0 hydration warning；Not-tested: Vercel Analytics dashboard 真实数据流入需要 production deploy + 用户在 dashboard 截图确认，本 executor turn 不操作 Vercel + Coverage/Mutation/Property-based 三层跳过：scope 不覆盖本次改动（app/ + tests/qa/），后续如需启用见 docs/verification-gauntlet.md §2 on-demand 规则）+ `Plan: .omo/plans/favicon-analytics-warnings.md`。不要 `--no-verify`。
   并行度：Wave 2 | 阻塞：8 | 被阻塞于：10, 11, 12
   参考：AGENTS.md §提交约定；tests/qa/commit-audit.mjs；.git/hooks/commit-msg
@@ -260,7 +260,7 @@
   证据：`git log -1` + commit-audit exit 0 + `git status --short` 输出
   提交：Y
 
-- [ ] 10. docs/operations.md：「已解决部署警告」+「Vercel Dashboard 人工清单」两节
+- [x] 10. docs/operations.md：「已解决部署警告」+「Vercel Dashboard 人工清单」两节
   怎么做 / 不要做：编辑 `docs/operations.md` §部署 末尾（**不要**新增 §验证门禁 节——该节内容由 todo 11 单独建 `docs/verification-gauntlet.md` 承载，避免双处真相）：(a) 新增 `### 已解决部署警告（代码侧）` 子小节 —— 表格列出本次 commit 1/2 的修复项（favicon / viewport+themeColor+metadataBase / Analytics mount），每行三列（项 | 文件 | 行为）；(b) `### 待人工操作（Vercel Dashboard）` —— 5 行 4 列表（项 | 决定 do/skip/out-of-scope | 一句话理由 | Dashboard 配置入口 URL），覆盖 Build Multiple Deployments Simultaneously / Prevent Frontend-Backend Mismatches / Secure Preview Deployments / Deployment Protection / Preview Deployment，每项给出 Dashboard 配置入口（Project Settings → Deployments → 各自开关 + 文档链接）。**不要**改其它小节；**不要**新增 Vercel CLI / 自动化命令；**不要**把「待人工操作」包装成 agent 能跑的命令。
 
   五项 Vercel 决策（每项给一刀切的 do / skip / out-of-scope + 一句话理由，docs 表格必须照抄）：
@@ -277,7 +277,7 @@
   证据：grep 输出 + `git diff --stat docs/operations.md`（应见 ≥ 20 行新增）
   提交：Y（在 commit 3 内，与 todo 11/12 合并提交）
 
-- [ ] 11. docs/verification-gauntlet.md（新文件，6 层 gauntlet + on-demand 规则的仓库 single source of truth）
+- [x] 11. docs/verification-gauntlet.md（新文件，6 层 gauntlet + on-demand 规则的仓库 single source of truth）
   怎么做 / 不要做：创建 `docs/verification-gauntlet.md`（**新文件**，路径前缀在 `docs/` 不在 `.omo/`——这是仓库根文档的一部分）。文件结构 5 节：(1) `# 验证门禁（6 层 Gauntlet + on-demand 规则）` 一级标题 + 顶部一段说明「这是仓库 single source of truth；AGENTS.md §验证门禁 仅做指针；commit 触及 gauntlet 配置时必须同步更新本文」；(2) `## 1. 6 层 Gauntlet 现状对照` —— 把本 plan §验证门禁 / Gauntlet 6 层 × 项目状态对照 表照搬过去（含 Tests / Types / Lint / Changed-line coverage / Mutation / Property-based 6 行 + 「项目状态 / 跑吗 / 在 AGENTS.md 门禁吗」 4 列），**未来 scope 变化时此表是唯一更新源**；(3) `## 2. On-demand 触发规则` —— 3 条触发条件（coverage：改 lib/db；mutation：改 4 个 scope 文件；property：新增 lib/X.ts 纯函数）+ 每条配「启用步骤 + Tested trailer 模板」；(4) `## 3. Gap 清单` —— 把本 plan §验证门禁 / Gap 清单 的 4 项（AGENTS.md 缺 coverage/mutation/property gate；coverage/mutation/property scope 不覆盖 app/；pnpm eslint . ≡ pnpm lint；pnpm test:property 是空跑脚本）照搬，明确每项的「本次不动 + follow-up anchor」状态；(5) `## 4. 与 docs/operations.md §部署 的边界` —— 一段说明两文分工：operations.md §部署 关注部署警告解决方案（favicon / viewport / analytics）+ Vercel Dashboard 5 项人工清单；verification-gauntlet.md 关注代码层验证规则；二者不重复，链接互指。**不要**写散文式介绍；**不要**复制本 plan 文件本身——只把已经成为合同的 6 层表 + on-demand 规则 + Gap + 边界四块搬过去；**不要**碰现有文件。
   并行度：Wave 3 | 阻塞：9 | 被阻塞于：13
   参考：本 plan §验证门禁 整节（line 62–93）；AGENTS.md §验证门禁（line 142–155）；docs/operations.md §部署；package.json scripts
@@ -286,7 +286,7 @@
   证据：`head -40 docs/verification-gauntlet.md` + `git status -s` 含 `?? docs/verification-gauntlet.md`
   提交：Y（在 commit 3 内，与 todo 10/12 合并提交）
 
-- [ ] 12. AGENTS.md §验证门禁：加指针 + on-demand 摘要
+- [x] 12. AGENTS.md §验证门禁：加指针 + on-demand 摘要
   怎么做 / 不要做：编辑 `AGENTS.md` **仅 §验证门禁 一节**（line 142–155）末尾追加一段（**不动其他节、不动其他项目贡献指南**）。追加内容固定模板：
   > 「**完整 6 层 Gauntlet 现状 + on-demand 触发规则**见 [docs/verification-gauntlet.md](docs/verification-gauntlet.md)。本节列出的 6 件是「每 commit 必跑」；coverage / mutation / property 三层在 `package.json` 已 wire 完脚本但**不在每 commit 闸门里**——其启用条件为：(a) coverage：commit 修改 `lib/**` 或 `db/**` 下任意文件；(b) mutation：commit 修改 `lib/game.ts` / `lib/db.ts` / `lib/store.ts` / `db/schema.ts` 任任任；(c) property：commit 新增 `lib/X.ts` 纯函数（必须配套 `lib/X.property.test.ts`）。触发后 lore trailer `Not-tested:` 改为 `Tested:` + 触发原因。」
   **不要**改 AGENTS.md 其他节；**不要**改「项目反模式」「代码地图」「约定」「命令」「备注」「贡献指南」「提交约定」「commit-msg hook」任何其他段落；**不要**加 emoji 或装饰性格式。
@@ -297,7 +297,7 @@
   证据：`git diff AGENTS.md` 输出（必须只动 §验证门禁 末尾）
   提交：Y（在 commit 3 内，与 todo 10/11 合并提交）
 
-- [ ] 13. commit 3 前全套验证 (build + tests + QA + commit-audit)
+- [x] 13. commit 3 前全套验证 (build + tests + QA + commit-audit)
   怎么做 / 不要做：跑 `pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build` 四件 exit 0；`pnpm start &` 后 `node tests/qa/visual-qa.mjs` + `node tests/qa/hydration-check.mjs`；`kill <pid>` cleanup；`node tests/qa/commit-audit.mjs --branch main` 0 violations。将所有 probe 输出落到 `.omx/evidence/favicon-analytics-warnings/task-13-final-ver.log`。
   并行度：Wave 3 | 阻塞：10, 11, 12 | 被阻塞于：14
   参考：AGENTS.md §验证门禁；docs/operations.md §浏览器 QA；tests/qa/commit-audit.mjs（--branch 模式审计所有 commit）
@@ -306,7 +306,7 @@
   证据：`.omx/evidence/favicon-analytics-warnings/task-13-final-ver.log` + commit-audit exit 0
   提交：N（这是 commit 3 提交前的验证步骤）
 
-- [ ] 14. commit 3：chore(docs): 同步部署警告解决方案 + gauntlet 文档化 + AGENTS.md 指针
+- [x] 14. commit 3：chore(docs): 同步部署警告解决方案 + gauntlet 文档化 + AGENTS.md 指针
   怎么做 / 不要做：`git add docs/operations.md docs/verification-gauntlet.md AGENTS.md`（3 个文档文件一次性提交，dirty `package.json` / `pnpm-lock.yaml` 必须为空——已在 commit 2 absorb）；commit message 主题 `chore(docs): 同步部署警告解决方案 + gauntlet 文档化 + AGENTS.md 指针`，正文中文 WHAT/WHY/HOW，lore trailer 必带：Constraint: 已解决项必须可被 commit 1/2 的文件路径交叉验证；Rejected: 把待人工操作包装成 agent 自动化脚本 | 需要用户凭据 + Vercel Dashboard 交互，超出 agent 范围；Confidence: high；Scope-risk: narrow；Directive: Vercel Dashboard 的 5 项开关在 docs 中保留稳定 anchor，下次有人跟进部署警告时可锚定查阅；docs/verification-gauntlet.md 是 6 层 gauntlet + on-demand 规则的仓库 single source of truth，后续任何 commit 触发 on-demand 规则时以此文件为准；Tested: docs diff 与 commit 1/2 文件列表交叉验证一致；Not-tested: 真实部署后 Dashboard 警告是否减少需用户人工确认 + Coverage/Mutation/Property-based 三层跳过：scope 不覆盖本次改动（docs/ + tests/qa/ 边缘），后续如需启用见 docs/verification-gauntlet.md §2 on-demand 规则）+ `Plan: .omo/plans/favicon-analytics-warnings.md`。不要 `--no-verify`。
   并行度：Wave 3 | 阻塞：13 | 被阻塞于：F1, F2, F3, F4
   参考：AGENTS.md §提交约定；tests/qa/commit-audit.mjs；本 plan §验证门禁 / 对本次执行的结论
@@ -318,10 +318,10 @@
 ## Final verification wave
 > 在所有 todo 完成后并行跑。所有项必须 APPROVE。把结果回报给用户并等显式确认才能宣告完成。
 
-- [ ] F1. 计划合规审计
-- [ ] F2. 代码质量审查
-- [ ] F3. 真实人工 QA
-- [ ] F4. 范围忠实性
+- [x] F1. 计划合规审计
+- [x] F2. 代码质量审查
+- [x] F3. 真实人工 QA
+- [x] F4. 范围忠实性
 
 ### F1 具体口径
 - 四份 commit 各自独立 `pnpm typecheck && pnpm lint && pnpm vitest run && pnpm build` 全绿

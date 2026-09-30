@@ -281,4 +281,19 @@ describe('components/RoomGateDialog (W2 ulw-room-migration-home-landing D-2)', (
       room: 'carol',
     });
   });
+
+  // T-N4 补：合法名 → hint 含「将创建/进入房间【<房间名>】」回显
+  it('T-N4: 输入合法名 → room-gate-hint 回显房间名', () => {
+    render(
+      <RoomGateDialog
+        open
+        initialName=""
+        onConfirm={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByTestId('room-gate-name') as HTMLInputElement, { target: { value: 'foobar' } });
+    const hint = screen.getByTestId('room-gate-hint');
+    expect(hint).toHaveTextContent('将创建/进入房间【foobar】');
+  });
 });

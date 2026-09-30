@@ -1,7 +1,7 @@
 ---
 title: Open-source readiness plan — ulw-demo
 slug: open-source-readiness
-status: proposed
+status: implemented（M1-M5 于 2026-09-09 当日落地：f62238c/1934f8e/d76745a/c36c49c/ba37a61；状态线 2026-09-26 按 git 实况修正）
 created: 2026-09-09
 authors: onepisYa
 references:

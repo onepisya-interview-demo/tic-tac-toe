@@ -13,8 +13,6 @@
 // and fail soft — private browsing mode and quota errors degrade to
 // "no name set" instead of throwing mid-render.
 
-import { emptyStats, type GameStats } from './game';
-
 /** localStorage key for the chosen room name. Versioned for future shape changes. */
 export const ROOM_NAME_KEY = 'ttt.room.name.v1';
 
@@ -145,11 +143,3 @@ export function cleanupLegacyPlayerNameKey(): void {
     // violation.
   }
 }
-
-/**
- * Sole shape known to lib/store.ts and lib/offline-stats.ts. Re-exported
- * here so consumers of room-name don't have to reach into game.ts when
- * they want to type a panel state.
- */
-export type { GameStats };
-export { emptyStats };

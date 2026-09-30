@@ -146,7 +146,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
 
-- [ ] 1. 修 Stryker mutation 阻断器（修 [tests/db/db.test.ts:226](tests/db/db.test.ts) `process.chdir` 在 Vitest worker 不支持）
+- [x] 1. 修 Stryker mutation 阻断器（修 [tests/db/db.test.ts:226](tests/db/db.test.ts) `process.chdir` 在 Vitest worker 不支持）
   What to do / Must NOT do:
     - 改 [tests/db/db.test.ts:226](tests/db/db.test.ts) 的 `process.chdir(freshDir)` 为 `vi.spyOn(process, 'cwd').mockReturnValue(freshDir)`。
     - 改 [tests/db/db.test.ts:243](tests/db/db.test.ts) 的 `process.chdir(prevCwd)` 为 `vi.mocked(process.cwd).mockRestore()`。
@@ -179,7 +179,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: 不改 `lib/db.ts` 单点真相; Rejected: 改 vitest pool 为 `forks`（其他测试可能更慢）; Rejected: 改 `DEFAULT_DB_PATH` 接受参数（churn > value）; Confidence: High; Scope-risk: Low（单文件 ~3 行替换）; Directive: 不动 stryker.config.mjs mutate scope; Tested: vitest tests/db + typecheck + lint + build + test:mutation dry-run 5 项全绿; Not-tested: Vercel 生产（无关）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 2. 修 SW fetch handler（修 B-1：PUT/DELETE 被发两次）
+- [x] 2. 修 SW fetch handler（修 B-1：PUT/DELETE 被发两次）
   What to do / Must NOT do:
     - 在 [public/sw.js:25](public/sw.js) 的 `self.addEventListener('fetch', (event) => { ... })` 顶部加 1 行守卫：`if (event.request.method !== 'GET') return;` 在 `event.respondWith(...)` 之前。
     - 不要改 SW 安装/激活逻辑（`skipWaiting + clients.claim` 保持）。
@@ -211,7 +211,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: AGENTS.md "Never introduce a new npm dependency"; Rejected: Workbox / 其他 SW 框架; Confidence: High（用户 web 研究 + MDN 官方文档双重证实）; Scope-risk: Low（单文件 1 行修改）; Directive: 不动 SW install/activate 生命周期; Tested: vitest + typecheck + lint + build + audio-confetti-qa + visual-qa + hydration-check 7 项全绿; Not-tested: Vercel 生产 PUT 真实计数（需部署后人工验证；covered by stats-race-qa step 2/10/12）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 3. RSC 页面加 `export const dynamic = 'force-dynamic'`（修 B-3a：DB 变了但页面永远是同一份 stats）
+- [x] 3. RSC 页面加 `export const dynamic = 'force-dynamic'`（修 B-3a：DB 变了但页面永远是同一份 stats）
   What to do / Must NOT do:
     - 在 [app/page.tsx](app/page.tsx) 第 9 行（function 声明**之前**的文件顶部）加一行：`export const dynamic = 'force-dynamic';`
     - 在 [app/result/page.tsx](app/result/page.tsx) 第 9 行（function 声明**之前**的文件顶部）加同样一行。
@@ -244,7 +244,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: AGENTS.md "改路由前读 node_modules/next/dist/docs/"; Rejected: ISR (`revalidate = 60`) 因 demo 优先选简单 + 演示场景差异远低于 1M 额度 + YAGNI; Confidence: High（官方文档 + 实证证据）; Scope-risk: Low（每文件 1 行）; Directive: 不动 next.config.ts / page 函数体 / 其他 RSC 路由; Tested: vitest + typecheck + lint + build + curl 响应头断言 + visual-qa + ux-qa 7 项全绿; Not-tested: Turso HTTP 真实延迟下的首屏时序（需部署后人工验证；covered by stats-race-qa step 4）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 4. store 改 async 返回 Promise + `resetAll` 内部简化（修 B-2 部分 + B-3b）
+- [x] 4. store 改 async 返回 Promise + `resetAll` 内部简化（修 B-2 部分 + B-3b）
   What to do / Must MUST NOT do:
     - 在 [lib/store.ts](lib/store.ts)：
       1. `makeMove` 改 `async`，返回 `Promise<void>`；移除 `void apiPutStats(newStats).catch(() => {})` 模式；改为 `await apiPutStats(newStats)`；末尾 `set({ lastWriteAt: Date.now() })`
@@ -284,7 +284,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: 已有 `__resetInternalForTests` 测试接缝保持; Rejected: `revalidatePath` 协调（force-dynamic 下冗余）; Confidence: High; Scope-risk: Medium（store 是 hot path，多个调用方）; Directive: 不动 PUT/DELETE Route Handler 形状; Tested: vitest + typecheck + lint + build + visual-qa + ux-qa + coverage（on-demand）7 项全绿; Not-tested: Vercel 生产 Turso HTTP 真实乱序（covered by stats-race-qa step 6）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 5. PlayController 改事件驱动，去 setTimeout（修 B-2 完整：700ms 竞态 + 资源释放）
+- [x] 5. PlayController 改事件驱动，去 setTimeout（修 B-2 完整：700ms 竞态 + 资源释放）
   What to do / Must NOT do:
     - 在 [components/PlayController.tsx](components/PlayController.tsx)：
       1. 移除 `setTimeout(router.replace('/result'), 700)`（[PlayController.tsx:18-23](components/PlayController.tsx)）
@@ -319,7 +319,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: cheer `setTimeout(360ms)` 在 makeMove 内部不在本 scope; Rejected: 缩短 setTimeout 窗口（仍是时间假设）; Confidence: High; Scope-risk: Low（单文件）; Directive: 不动 audio / confetti / 其他组件; Tested: vitest + typecheck + lint + build + audio-cheer + audio-confetti-qa + confetti-origin-qa + hydration-check 8 项全绿; Not-tested: Vercel 生产 Turso HTTP 真实 PUT 时序（covered by stats-race-qa step 4/6/9）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 6. 新增 `tests/qa/stats-race-qa.mjs`（消融 + 集成探针：14 step 全覆盖 3 bug + 资源生命周期）
+- [x] 6. 新增 `tests/qa/stats-race-qa.mjs`（消融 + 集成探针：14 step 全覆盖 3 bug + 资源生命周期）
   What to do / Must NOT do:
     - 新建 [tests/qa/stats-race-qa.mjs](tests/qa/stats-race-qa.mjs)，按 v7 §5.4 14 个 step 实现：
       1. reset via DELETE（pre-setup）
@@ -367,7 +367,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: AGENTS.md "Never introduce a new npm dependency"（用现有 Playwright）; Rejected: 拆 14 个文件（越界）; Rejected: 改 8 个现有脚本（Scope OUT）; Confidence: High; Scope-risk: Low（新增文件，不改现有）; Directive: 不改现有 qa 脚本; Tested: stats-race-qa 自测 + vitest + typecheck + lint + build + 4 个其他 qa 探针 10 项全绿; Not-tested: 真实 Vercel 生产环境（仍需人工验证；manual QA gate §8.1）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 7. AGENTS.md §本项目反模式 追加 3 条（沉淀团队经验）
+- [x] 7. AGENTS.md §本项目反模式 追加 3 条（沉淀团队经验）
   What to do / Must NOT do:
     - 在 [AGENTS.md](AGENTS.md) §本项目反模式 末尾追加 3 条（中文表述与现有条目一致）：
       1. **RSC 页面读取可变数据必须声明 `dynamic = 'force-dynamic'`** —— Next.js 16 默认静态优化可能烘焙 build-time 异步数据（如 Drizzle DB 调用）的结果到 HTML，runtime 返回脏数据直到下次 build。
@@ -397,7 +397,7 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
     - lore trailers: Constraint: 现有条目格式（中文 + 详细说明 + Bug 引用）; Rejected: 单独开 §新章节（破坏文档结构）; Confidence: High; Scope-risk: Low（仅追加）; Directive: 不触碰未提交工作区顶部一行; Tested: rg 命中 3 条 + typecheck 2 项绿; Not-tested: docs commit 不要求 build / vitest / qa（AGENTS.md 纯文档提交约定）
     - Plan: .omo/plans/pwa-rsc-stats-bug-fix.md
 
-- [ ] 8. docs/learnings.md 追加 #28 条目（反思 + 学习）
+- [x] 8. docs/learnings.md 追加 #28 条目（反思 + 学习）
   What to do / Must NOT do:
     - 在 [docs/learnings.md](docs/learnings.md) 末尾追加条目 #28：
       - 标题：数据流 + 资源生命周期双轴视角
@@ -426,10 +426,10 @@ Your next move: 跑 momus + independent Codex CLI 双高准确度审查 → 展�
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit
-- [ ] F2. Code quality review
-- [ ] F3. Real manual QA
-- [ ] F4. Scope fidelity
+- [x] F1. Plan compliance audit
+- [x] F2. Code quality review
+- [x] F3. Real manual QA
+- [x] F4. Scope fidelity
 
 ## Commit strategy
 

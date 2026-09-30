@@ -1,6 +1,7 @@
 # Plan: ulw-meta-brand-mark-20260914 · 1:1 brand mark 作 og fallback
 
 - 日期：2026-09-14
+- 状态：已实现（`6daefe3`，2026-09-15）
 - ulw-loop：`.omo/ulw-loop/ulw-meta-brand-mark-20260914/`
 - 前批：`c16e9e8` A+B+C 已 push-pending
 - 主公择：E（调研 §五）

@@ -6,6 +6,8 @@ import { StatsGrid } from '@/components/ui/StatsGrid';
 import { OutcomeErrorBanner } from '@/components/OutcomeErrorBanner';
 import { ResultCelebration } from '@/components/ResultCelebration';
 import { ResetRoomStatsButton } from '@/components/ResetRoomStatsButton';
+import { LeaveRoomButton } from '@/components/LeaveRoomButton';
+import { DeleteRoomButton } from '@/components/DeleteRoomButton';
 import { loadRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { type GameStats } from '@/lib/game';
@@ -147,8 +149,10 @@ export default async function ResultPage({
                   有账本的分支 3 — 分支 2 无可清之物不挂，loadError 与
                   fallback 不挂。room 由上方 normalizeRoom 结果传入，
                   SSR 零 localStorage 读。 */}
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
                 <ResetRoomStatsButton room={room} />
+                <LeaveRoomButton room={room} />
+                <DeleteRoomButton room={room} />
               </div>
             </div>
           </Card>

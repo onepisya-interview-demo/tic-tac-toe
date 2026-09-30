@@ -1,6 +1,7 @@
 # Plan: ulw · 交接后治理四件（ulw-handoff-governance-20260914）
 
 - 日期：2026-09-14
+- 状态：已实现（ba19ce5 / 575e212，2026-09-14）
 - ulw-loop：`.omo/ulw-loop/ulw-handoff-governance-20260914/`
 - 授权：交接文书 `.omx/handoff-20260914.md`（主公已裁队列）
 

@@ -1,7 +1,7 @@
 # ulw: 字体 preload 警告 + SW 网络错误噪音 修复计划
 
 - 日期: 2026-09-14
-- 状态: executing
+- 状态: 已实现（fa76a39 2026-09-14 fix(sw) Fix A/B 与 sw-console-hygiene 探针同票落地；状态线 2026-09-26 按 git 实况修正）
 - 分支: main（trunk-based，单修复者串行写入）
 - 来源: 主公线上报告（3t.onepis.net / 3t-tic-tac-toe.vercel.app 控制台警告）
 
