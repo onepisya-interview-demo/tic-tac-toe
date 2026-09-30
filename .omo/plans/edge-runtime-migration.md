@@ -1,5 +1,7 @@
 # Edge Runtime Migration — /api/stats
 
+> [ARCHIVED 2026-09-26 弃案：edge 迁移从未落库（Vercel 拒 + Next16 弃用），后继见 runtime-cleanup-* 两档]（27e32ec，2026-09-10）。以下为计划态原文存档。
+
 ## Context
 - User: "希望是 vercel 上线的时候是 边缘部署的" (production should deploy to Edge runtime)
 - Current: `app/api/stats/route.ts` declares `runtime = 'nodejs'` because `lib/db.ts` imports `node:path`, `node:fs`, `@libsql/client` (native) at module top
