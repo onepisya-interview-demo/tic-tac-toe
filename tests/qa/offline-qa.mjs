@@ -186,8 +186,14 @@ try {
     // automatically via HomeDialogMount when pendingSyncCount() >
     // declinedSentinel. StartGameButton's intercept is gone — "保留
     // 本地" is zero network writes + dialog close + manual nav.
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="start-online"]');
+    // BR-1 (2026-09-22 decree): the dialog opens ONLY on the「离线局 →
+    // 首页」soft-navigation transition — a hard goto("/") is inert by
+    // design (consume-on-read marker, NavPrevTracker). Drive the armed
+    // path: hard-enter /offline, then click「返回首页」for the in-app
+    // transition that writes the /offline previous-route marker.
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await page.click('a[href="/"] >> nth=0');
+    await page.waitForURL(`${BASE}/`, { timeout: 4000 });
     writeCalls.length = 0;
 
     // The dialog auto-opens because pending = local.totalGames (3) - 0 = 3.
@@ -248,10 +254,16 @@ try {
       JSON.stringify({ totalGames: 3, xWins: 3, oWins: 0, draws: 0, currentStreak: 3 }),
     ]);
 
-    // Reload so HomeDialogMount re-evaluates with pending=3, declined=0
-    // and opens the dialog automatically.
+    // Reload so the seeded localStorage takes effect.
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(300);
+
+    // BR-1: a hard reload of "/" never opens the dialog (consume-on-read
+    // marker). Drive the armed「离线局 → 首页」soft navigation instead —
+    // same path as A2a.
+    await page.goto(`${BASE}/offline`, { waitUntil: "networkidle" });
+    await page.click('a[href="/"] >> nth=0');
+    await page.waitForURL(`${BASE}/`, { timeout: 4000 });
 
     writeCalls.length = 0;
     // The dialog auto-opens because pending > declined (= 0).
