@@ -29,6 +29,11 @@ const eslintConfig = defineConfig([
     // them blocks the 0-warnings gate.
     ".omx/**",
     "reports/**",
+    // Dynamic-workflow run artifacts, gitignored (/.zcode at
+    // .gitignore:135). Same scratch family as .delta/.omx — the
+    // HomeDialog wave (19 findings) and the 10-01 re-verification
+    // (42 problems) all landed here, blocking the 0-warnings gate.
+    ".zcode/**",
     // Playwright QA scripts (plain JS, not part of app source):
     "tests/qa/**",
     // Archival run evidence (probe scripts incl. CommonJS; never shipped):
