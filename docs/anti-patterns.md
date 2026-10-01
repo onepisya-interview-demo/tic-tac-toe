@@ -211,3 +211,27 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 删除探针 / 模块时只删文件、不清理引用者，悬空引用在下次被触发时才爆——且常爆在最疼的场合（发版 PR 的 CI）。删除前的合格动作是 `rg '<被删文件名>' .github tests docs` 把引用方清一遍，而不是假定「没人引用」。
 
 实证（2026-09-23 发版 PR #14）：`d07fd07` 语义清退删除 `tests/qa/stats-race-qa.mjs`（被测对象 `/api/stats` 链已随 `7765b3f` 御裁退役），但 `.github/workflows/ci.yml` 的 `stats-race` job 未同步删除，悬空此后一直未暴露（dependabot PR 基于旧 main workflow），直到 dev→main 发版 PR 首次触发即 MODULE_NOT_FOUND 红。对策：退役任何被引用文件前先清引用方（CI job / docs / 脚本）；「ci.yml 被引探针存在性 × tests/qa 清单」可做机械对账测试——能探针化的约束不靠记忆（L1-29 同款哲学）。注意：被退役能力若确需等价覆盖（如 `/api/rooms` 链竞态），那是**新探针票**，把旧 job 硬指到别的探针只会造出假覆盖。
+
+### L1-32：探针 / CI 触发面盲区（CI workflow 变更不经 PR 实跑验证即沉默）
+
+任何探针 / CI workflow 变更，必须先回答「这段变更会在哪个触发面被实跑」——CI 仅 `pull_request` 触发时，凡不产生 PR 的改动面（如 dev 直推）对 CI 全部 job 静默；「改 CI 本身」也不例外，不能因为「只是改 CI」就免验。合格动作：变更 ci.yml 后构造一次真实触发亲见目标 job 实跑；暂无法触发时把盲区显式入档（verification-gauntlet §3 Gap 清单）待裁决，而不是当作「没问题」。
+
+实证（2026-09-30 验证波次，PR #18 首跑红）：rooms-race job 自进 CI 起 12 天从未绿过——探针 step 漏传 `BASE_URL`，单行修复 `a2a667d` 才现形；结构性成因是 CI 自 2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不触发任何 job，bug 沉默 12 天。主公亲令「不能让它就这样沉默的通过了」。血缘：L1-31 管「job 引用悬空」，本条管「job 活着但从未被实跑」；L1-18（探针 `BASE_URL` 不硬编码）是同族前置约定。
+
+对策：触发面当作验证契约审视——每段改动先答「会被哪些门禁实跑」；「ci.yml 触发器 × 分支 × job」矩阵机械对账已列为机械化候选 C6（未裁决不实施）；Gap 记录见 verification-gauntlet §3 第 6 条。
+
+### L1-33：rerun 绿混同首跑绿（收口判据漂移）
+
+PR 门禁的收口判据是 `run_attempt=1` 首跑全绿；rerun 转绿（可能掩盖 flaky / 时序性失败）与 admin bypass 混过（绕过 required checks）都不算收口，不得以「最终是绿的」汇报。合格动作：CI 结论必附 `run_attempt`；rerun 绿之前先定责首跑红因（本地复现定责法，见 L1-34 实证段）；bypass 合流必须在档案显式记 admin merge 及先例依据。
+
+实证（2026-09-30 验证波次，PR #18 流程）：首跑红暴露 rooms-race 漏 `BASE_URL`（`a2a667d`）与 offline 探针违 BR-1（`1b80a99`）两处真问题；修复后按「首跑全绿才收口」执行，run_attempt=1 全绿方 admin merge（`37326b9`）。同波 PR #17（Dependabot 6 包，`e31e8a9`）approve 后被 stale 门拦，按 #16 先例 admin 合入——bypass 本身是合法工具，但必须显式留痕，不得混同「绿」。
+
+对策：收口判据入 verification-gauntlet「2026-09-30 验证实践补充」；「CI 结论取 run_attempt=1 全绿」断言可机械化（候选 C6 邻接，未裁决不实施）。
+
+### L1-34：探针期待漂移于业务 decree（探针比规则旧）
+
+探针红有两种：业务回归、探针过时。业务 decree 变更后（如 BR-1 收窄弹框触发时机），旧探针的期待不会自动跟着改——拿旧期待跑新 decree 就是假红；反过来拿旧探针绿当「行为没变」的证据也是假绿。合格动作：改 decree 时同步排查 business-rules 表「探针」列引用该 BR 的探针 step；探针红先本地复现定责（`pnpm build` + hermetic server + 三犯复现），定责为探针过时则改探针触发方式对齐 decree，探针修复与 decree 对齐同波收口。
+
+实证（2026-09-30 验证波次，commit `1b80a99`）：offline 探针 A2a/A2b 期待停留在 W3 时代「硬 goto 首页也弹框」，违反 BR-1 decree（弹框只在软导航转场弹）——本地三犯复现定责为探针过时非业务回归，改合规软导航触发后本地 5/5 全绿。
+
+对策：「探针期待 ↔ business-rules 表」双向对账可机械化（C2 文档契约测试推广，候选 C9，未裁决不实施）；本波完整复盘见 [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。
