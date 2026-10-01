@@ -93,6 +93,14 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    engines.node 不一致，(c) 本地 vitest fork pool 退化为 `undici 8` 报错
    （`webidl.util.markAsUncloneable is not a function`）。历史决策链：commit
    `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
+6. **探针 / CI job 触发面覆盖的结构性盲区（2026-09-30 验证波新增）**：CI 自
+   2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不
+   触发任何一层——凡不产生 PR 的改动面，六层全部静默。实证：rooms-race 探针 job
+   漏传 `BASE_URL`，自进 CI 起 12 天从未绿过，直至 PR #18 首跑红才现形（单行修复
+   `a2a667d`）。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
+   实施）；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
+   [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
+   [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 
@@ -113,3 +121,8 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 > 2026-09-11 更新：`lib/store.ts` 在 RSC refactor C4 之后不再持有 `stats` 字段，mutation target 仍为 `lib/store.ts` 但内容已收缩（无 `hydrateStats`、无 stats set 分支）。如发现 mutation 得分变化，在本文件记录新基线。
 
 > 2026-09-14 基线：全量重跑 `pnpm test:mutation`（main @ 6778bd8，含九刀键控修复后首录）——总 68.55%（covered 70.78%）：game.ts 96.75 / db.ts 50.00 / store.ts 50.49 / schema.ts 58.33；killed 217 + timeout 1 + survived 90 + no-cov 10 + errors 7（store.ts 7 枚 RuntimeError：Test runner crashed 两次重启无果，沙箱已知噪声，非幸存者）。较 2026-09-11 记录（69.40 / store 53.40）微降：测试主体未退，系 store 键控修复后幸存者分布变化；break=null 不阻塞，仅为下一轮补测之坐标。
+
+> 2026-09-30 验证实践补充（验证信任沉淀波增补，六层框架不变，仅记三条实践要点）：
+> ① **首跑绿收口判据**——rerun 绿与 admin bypass 混过不算数，`run_attempt=1` 首跑全绿才算收口（PR #18 流程实证，anti-patterns L1-33）；
+> ② **本地复现定责法**——探针红先 `pnpm build` + 起 hermetic server（L0-8）本地三犯复现，区分「业务回归」与「探针过时」再动手（offline A2a/A2b → `1b80a99` 实证，anti-patterns L1-34）；
+> ③ **生产边界实证两阶段**——生产设施操作须主公明示授权且 secret 值不回显；「生效」以状态迁移链 + 两态对照亲见为准；cron 类定时任务两阶段验证（今天手动验删除逻辑、明天 cron 验定时器）并预埋「必过线」造数行作为次日日志证据锚点。生产部署操作细节归 [`docs/operations.md`](./operations.md) §部署辖域（本注不重复其事实）；13 条经验全录与机械化候选 C6-C9 见 [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。
