@@ -104,7 +104,7 @@
 **2026-09-30 进展**（主公亲测功能无恙 = 达标信号）：
 
 1. **验收结论 ✅**——四条已落地业务语义（清空/退出/删除三分术语、删除自愈、TTL 30 天口径、同步弹框身份锁定边界）经主公亲测通过；
-2. **CRON_SECRET ✅**——经 vercel CLI 注入 Vercel Production（主公授权直接操作）+ .env.local 同步；PR #18 合流部署（`37326b9`）后验证：裸请求 401、带 secret POST/GET 均 200 `{deletedCount:0,cutoffDays:30}`，`vercel crons ls` 注册确认（`0 3 * * *` → /api/maintenance/purge，生产域 **3t.onepis.net**）；首次自动触发待 2026-10-01 北京 11:00–11:59 窗口 Cron 日志验证；
+2. **CRON_SECRET ✅**——经 vercel CLI 注入 Vercel Production（主公授权直接操作）+ .env.local 同步；PR #18 合流部署（`37326b9`）后验证：裸请求 401、带 secret POST/GET 均 200 `{deletedCount:0,cutoffDays:30}`，`vercel crons ls` 注册确认（`0 3 * * *` → /api/maintenance/purge，生产域 **3t.onepis.net**）；首次自动触发待 2026-10-01 北京 11:00–11:59 窗口 Cron 日志验证；→ **10-04 核销**：10-01 窗口无信号系锚点口径错位（当日披露改口），10-02 SELECT 复测 **fired**（详 [research-verification-trust-20260930.md](research-verification-trust-20260930.md) §六）；
 3. **dev-stable tag ✅**——主公 2026-09-30 深夜判定「刚才验证过后说明了我们可以打这个标签了，因为验证了它确实生效了」，已打 **`dev-stable-20260930`** → `2bf1663`（本地 tag 不推远端，惯例同 0922/0923）；涵盖验证闭环：TTL 边界实证（删 5 留 3）+ Cron 上线两态 + CI 首跑全绿 + 主公亲测。次日自动触发（10-01 北京 11–12 点 Cron 日志）为观察项非打标前置。
 
 **历史冻结判语原文留档**（2026-09-27/09-28，已被上述进展取代）：「待定——质量未达验收标准，tag/cron 全线冻结」「这个先待定。」

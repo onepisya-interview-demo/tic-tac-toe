@@ -238,6 +238,12 @@ executor 不可触达，等用户登录 Dashboard 操作。本表是稳态锚点
 > Turso 免费额度现实 + 孤儿账本兜底：服务端每日凌晨 3 点（UTC）跑一次
 > `purgeStaleRooms(30)`，删除 `updated_at < now - 30 天` 的房间账本。
 > 30 天不活跃的账本视为孤儿，不复活、不迁移、不可导出——纯删。
+>
+> **闭环记录（2026-10-04 补）**：本节设施已于 2026-10-02 实证生效——cron 窗口自动
+> 删除到期探针（id15/id8 恰消、余 6 行零漂移），两阶段验证完结；判定梯子与 11-01
+> 终验判据见
+> [.omo/research-verification-trust-20260930.md](../.omo/research-verification-trust-20260930.md)
+> §六。Hobby plan 的 Cron Logs 仅保留 1 小时，生效断言走「DB 锚点行 SELECT」。
 
 ### Vercel Cron 配置（部署后人工操作）
 

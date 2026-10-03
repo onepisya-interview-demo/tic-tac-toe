@@ -4,7 +4,7 @@
 > 执行形态：`/workflow` 强制路径，run `dwfrun-3c4e787c`——herdr codex fresh 席（`$omo:ulw-plan` 首行触发 omo 流程，先写 ulw 计划再修复）× 3 席 + 脚本 world.run 机械门禁 + 换人独立终验 + 返工闭环两轮 + 调度者亲自终裁。
 > **批注回执（2026-09-26，主公文字批注）**：Q-A 已 push（现查 dev 与 origin/dev 齐平）；Q-F 同意开票修 → 转执行计划 [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md)；Q-B 待裁决（冲突机制解释见该计划 §三，与 [alignment-20260926-doc-governance.md](../alignment-20260926-doc-governance.md) 项 3 同口径）；Q-C / Q-D / Q-E 继续待定。
 > 批注落实补注（2026-09-27 补，git 现查）：Q-B 已裁决（a+b 并施）转执行票 T-B1 并交付——`f3ca573` 票入档 → `d9f8a36` audit 口径收窄本波面 + 历史豁免基线落地 → `2f11c36` 交付入档；Q-F 治理票已交付——`74e1a56` / `4ee9fa6`（见 [ulw-homedialog-flaky-fix-20260926.md](plans/ulw-homedialog-flaky-fix-20260926.md) 状态线）；Q-A 两笔 docs 亦已 push，dev 与 origin/dev 现全量齐平。
-> 【2026-09-30 补】**Q-C 已收口**——CRON_SECRET 经 vercel CLI 注入 Vercel Production（主公授权直接操作）+ .env.local 同步，PR #18 合流自动部署后验证：裸请求 401、带 secret POST/GET 均 200，`vercel crons ls` 注册确认 `0 3 * * *` → /api/maintenance/purge；**Q-D** 验收结论随主公 09-30 亲测通过解锁，dev-stable tag 按主公令等正式上线、测试内容齐后再打（首次自动触发待 10-01 北京 11–12 点窗口 Cron 日志）。
+> 【2026-09-30 补】**Q-C 已收口**——CRON_SECRET 经 vercel CLI 注入 Vercel Production（主公授权直接操作）+ .env.local 同步，PR #18 合流自动部署后验证：裸请求 401、带 secret POST/GET 均 200，`vercel crons ls` 注册确认 `0 3 * * *` → /api/maintenance/purge；**Q-D** 验收结论随主公 09-30 亲测通过解锁，dev-stable tag 按主公令等正式上线、测试内容齐后再打（首次自动触发待 10-01 北京 11–12 点窗口 Cron 日志）。→ **10-04 核销**：10-01 窗口无信号系锚点行「明日」口径错位（当日披露改口），10-02 SELECT 复测 **fired** 闭环（详 [research-verification-trust-20260930.md](research-verification-trust-20260930.md) §六）。
 
 ---
 

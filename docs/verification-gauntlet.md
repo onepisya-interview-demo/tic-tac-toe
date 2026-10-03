@@ -125,4 +125,4 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 > 2026-09-30 验证实践补充（验证信任沉淀波增补，六层框架不变，仅记三条实践要点）：
 > ① **首跑绿收口判据**——rerun 绿与 admin bypass 混过不算数，`run_attempt=1` 首跑全绿才算收口（PR #18 流程实证，anti-patterns L1-33）；
 > ② **本地复现定责法**——探针红先 `pnpm build` + 起 hermetic server（L0-8）本地三犯复现，区分「业务回归」与「探针过时」再动手（offline A2a/A2b → `1b80a99` 实证，anti-patterns L1-34）；
-> ③ **生产边界实证两阶段**——生产设施操作须主公明示授权且 secret 值不回显；「生效」以状态迁移链 + 两态对照亲见为准；cron 类定时任务两阶段验证（今天手动验删除逻辑、明天 cron 验定时器）并预埋「必过线」造数行作为次日日志证据锚点。生产部署操作细节归 [`docs/operations.md`](./operations.md) §部署辖域（本注不重复其事实）；13 条经验全录与机械化候选 C6-C9 见 [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。
+> ③ **生产边界实证两阶段**——生产设施操作须主公明示授权且 secret 值不回显；「生效」以状态迁移链 + 两态对照亲见为准；cron 类定时任务两阶段验证（今天手动验删除逻辑、明天 cron 验定时器）并预埋「必过线」造数行作为次日日志证据锚点。生产部署操作细节归 [`docs/operations.md`](./operations.md) §部署辖域（本注不重复其事实）；13 条经验全录与机械化候选 C6-C9 见 [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。两阶段验证已于 2026-10-02 fired 实证完结（cron 自动删除到期探针 id15/id8、余 6 行零漂移），判定梯子与 11-01 终验判据见同档 §六。
