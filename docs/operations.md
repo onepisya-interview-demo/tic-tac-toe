@@ -244,6 +244,10 @@ executor 不可触达，等用户登录 Dashboard 操作。本表是稳态锚点
 > 终验判据见
 > [.omo/research-verification-trust-20260930.md](../.omo/research-verification-trust-20260930.md)
 > §六。Hobby plan 的 Cron Logs 仅保留 1 小时，生效断言走「DB 锚点行 SELECT」。
+>
+> **终验关账（2026-10-04）**：cron 线终验关账完成、11-01 判据已兑现关闭——
+> zz-ttl-probe 前缀计数=0 系主公授权删除探针 id7/id14 所致、非 cron 自然清零，
+> cron 删除能力实证仍为 2026-10-02 fired；回执见同档 §六「终验关账回执」（本提交）。
 
 ### Vercel Cron 配置（部署后人工操作）
 

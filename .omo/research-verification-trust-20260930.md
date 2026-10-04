@@ -188,3 +188,34 @@
 - 勘误：09-30 终报「deletedCount=5 里另含生产库 2 条真实过期陈货」与硬账算术不符
   （探针 8→3 差 5 恰占满删除计数，且 09-30 早间基线 deletedCount=0、10-01 快照真实行
   均 09-22 之后），系叙述失实，2026-10-04 勘误。
+
+**2026-10-04 终验关账回执（cron 线就此收口）**
+
+> 裁决出处＝主公 2026-10-04「那两条数据都可以删除了，然后 直接终验关账」——11-01
+> 终验点提前收口，两探针行经授权删除、判据当日兑现关闭。删前/删后快照存 gitignored
+> 本地档 [evidence/d28-delete-before-20261004.json](evidence/d28-delete-before-20261004.json)
+> ／[evidence/d28-delete-after-20261004.json](evidence/d28-delete-after-20261004.json)，
+> 不入仓；本段与 [docs/operations.md](../docs/operations.md) TTL 节闭环记录随本提交入档。
+
+- 删前快照（2026-10-04T08:45Z）：game_stats 共 6 行，其中 zz-ttl-probe 探针恰 2 条——
+  id7 zz-ttl-probe-A-fresh（判定日 10-31）、id14 zz-ttl-probe-H-future（判定日 11-01），
+  与本档 §六判定梯子逐行一致；非探针 4 行（id1 v9-merge-518672／id3 onepisya-iphone／
+  id5 onepisya／id6 abc，判定日 10-22/10-25/10-26/10-26）同梯子吻合。
+- 授权删除（2026-10-04，主公原话授权）：执行 `DELETE FROM game_stats WHERE id IN (7,14)
+  AND room LIKE 'zz-ttl-probe%'`（id＋前缀双条件限定），affected=2；删后复盘（08:47Z）
+  zz-ttl-probe 计数=0、总行数 4、非探针 4 行逐字节未动，机械门核验通过。
+- 判据兑现说明（如实区分两个证明来源）：终验判据「zz-ttl-probe 前缀计数=0」于
+  2026-10-04 SELECT 亲证为 0，**系主公授权删除 id7/id14 所致，非 cron 自然清零**；
+  cron 删除能力的实证仍为 2026-10-02 fired（id15+id8 恰好双行消失、余行零漂移，
+  6a63887 入档本档 §六），在跑＝Vercel 平台保证（Hobby 日 cron 03:00Z／北京 11:00）。
+- **关账标准（按主公 2026-10-04 裁决收口）**：① cron 删除能力实证＝2026-10-02 fired
+  （id15+id8 恰好双行消失、余行零漂移）；② 在跑＝Vercel 平台保证（Hobby 日 cron
+  03:00Z／北京 11:00）；③ 终验判据兑现＝卡定「zz-ttl-probe 前缀计数=0」于 2026-10-04
+  SELECT 亲证为 0——系主公授权删除 id7/id14 所致，非 cron 自然清零；④ 判定梯子入账＝
+  删前快照 6 行判定日（10-22 id1 → 10-25 id3 → 10-26 id5/id6 → 10-31 id7 → 11-01
+  id14）逐行核对一致，余 4 条非探针行按梯子自然到期（10-22～10-26），属预期行为、
+  不再阻塞。
+- 联动核销：docs/verification-gauntlet.md:130 ③ 与
+  .omo/handover-20260926-ttl-channel-cleanup-wave.md:7、.omo/doc-status-map-20260927.md:107
+  两处 10-04 核销注所指的 11-01 判据，就此一并兑现关闭；cron 线终验关账完成，此后不再
+  逐日证明、不再逐日回报。
