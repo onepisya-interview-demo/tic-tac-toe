@@ -14,7 +14,9 @@
 
 **1. 文档治理三波（/workflow）**：11 张决策卡逐项批注落档——批注原文逐字转写 + 独立验收员逐字核对；273 个裸 hash 逐一 `git rev-parse` 批验；更新 47 份档案后抽验 44/44。匿名行决策卡前提被主公测试观察质疑，经代码取证三证裁定「主公的观察是对的，卡面前提被推翻」——anonymous 计划终裁 ARCHIVED；edge 项7 追认（`git log -S` 全分支零命中 + Next 本地 docs 逐行对照，两处措辞精确化如实留档）；「战报上传 404 会显示报错吗」由独立复核员抛开核实员结论自行读码 + vitest 48/48 钉 seam，并诚实标注「浏览器级时序系代码推断未实跑探针」。
 
-**2. CI 沉默三层**：PR #18 首跑红连揭三层（主公亲令「不能让它就这样沉默的通过了」）——job 层：rooms-race 探针漏传 `BASE_URL`，该 job 自进 CI 起 12 天从未绿过（单行修复 `a2a667d`）；期待层：offline 探针 A2a/A2b 停留 W3 时代期待、违反 BR-1 decree（弹框只在软导航转场弹），本地复现（`pnpm build` + 起 hermetic server + 跑探针三犯复现）定责为探针过时非业务回归，改合规软导航触发后本地 5/5 全绿（`1b80a99`）；触发面层：探针 job 仅 PR 触发、dev push 不触发 CI 的结构性盲区，bug 沉默 12 天（是否立项 dev push 触发待主公裁）。纪律确立：**rerun 绿不算数、admin bypass 混过不算数，run_attempt=1 首跑全绿才算收口**。
+**2. CI 沉默三层**：PR #18 首跑红连揭三层（主公亲令「不能让它就这样沉默的通过了」）——job 层：rooms-race 探针漏传 `BASE_URL`，该 job 自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 单行修复）；期待层：offline 探针 A2a/A2b 停留 W3 时代期待、违反 BR-1 decree（弹框只在软导航转场弹），本地复现（`pnpm build` + 起 hermetic server + 跑探针三犯复现）定责为探针过时非业务回归，改合规软导航触发后本地 5/5 全绿（`1b80a99`）；触发面层：探针 job 仅 PR 触发、dev push 不触发 CI 的结构性盲区，bug 沉默约 15.6 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30；是否立项 dev push 触发待主公裁）。纪律确立：**rerun 绿不算数、admin bypass 混过不算数，run_attempt=1 首跑全绿才算收口**。
+
+> 【2026-10-04 勘误补注】本报告旧记「沉默 12 天」失实，系两窗口错配（§一2、§二2 场景与 §三表 C6 行内已按锚点口径更正）——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.6 天。verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 
 **3. Cron 上线与 TTL 边界实证**：主公明示授权（「vercel cli 可以你直接操作吗」）后 CLI 直操生产设施——link / env add（值不回显不入对话）/ crons ls；发现 main 落后 dev 52 笔无 crons 字段 → PR #18 合流（首跑全绿后 admin merge `37326b9`）→ 自动部署 ~40s 上线（轮询亲见 404→401）→ 两态对照（裸请求 401、带 secret POST/GET 均 200）；PR #17（Dependabot 6 包）approve 后被 stale 门拦，按 #16 先例 admin 合入（`e31e8a9`）。TTL 侧（主公令「各种情况的都造一点，反正你想看的边界情况都放上去嘛，然后看一下实际情况跟你的预期是否符合」）：`game_stats.updated_at` 为 epoch 毫秒（drizzle `timestamp_ms`）；zz-ttl-probe 前缀造 9 条边界行（只碰测试前缀、真实数据零接触）；手动 purge `deletedCount=5`（含库内 2 条真实过期陈货）、留 3；「正好 30 天」的行也被删——深究为 purge 晚于造数 40 秒、cutoff 推进，行为正确、系预期表设计误差非 bug，如实向主公报告不粉饰；补造「明日必过线」行让次日 cron 日志必有 `deletedCount≥1` 证据；两阶段验证设计 = 今天手动验删除逻辑、明天 cron 验定时器。
 
@@ -35,7 +37,7 @@
 
 ### 2. CI 触发覆盖矩阵：无 PR 即全盲
 
-- **场景**：CI 自 2026-09-15 移除 push trigger 后仅 `pull_request` 触发（ci.yml 历史可查）；rooms-race job 漏传 `BASE_URL`，自进 CI 起 12 天从未绿过，bug 沉默 12 天。主公亲令「不能让它就这样沉默的通过了」。
+- **场景**：CI 自 2026-09-15 移除 push trigger 后仅 `pull_request` 触发（ci.yml 历史可查）；rooms-race job 漏传 `BASE_URL`，自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复），触发面盲区 bug 沉默约 15.6 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）。主公亲令「不能让它就这样沉默的通过了」。
 - **做法**：把「触发面」当作验证契约审视——每段改动先答「会被哪些门禁实跑」；不产生 PR 的改动面（dev 直推）= CI 全盲；结构性盲区如实入档（gauntlet Gap 6），是否立项 dev push 触发 CI 待主公裁，不擅自扩权。
 - **三条件映射**：长期效应=anti-patterns L1-32 + gauntlet §3 Gap 6 入档；信任=盲区显式声明而非事后解释，汇报可先答「这段改动会被哪层实跑」；免盯梢=「ci.yml 触发器 × 分支 × job」矩阵机械对账即候选 C6，盲区出现即红。
 - **落点**：报告§二 / anti-patterns L1-32 / gauntlet Gap 6 / 机械化 C6。
@@ -125,7 +127,7 @@
 
 | # | 候选 | 事实 | 形态 | 成本估计 |
 |---|---|---|---|---|
-| C6 | CI 触发面覆盖对账 | 探针/CI workflow 变更不经 PR 触发则 CI 全盲，bug 可沉默 12 天（rooms-race 漏 `BASE_URL` 实证，`a2a667d`） | vitest/脚本：断言 ci.yml 触发器矩阵覆盖全部长期分支（或显式豁免清单），另可断言 CI 结论取 `run_attempt=1` 全绿 | 小——纯配置文本/AST 断言，无生产触达 |
+| C6 | CI 触发面覆盖对账 | 探针/CI workflow 变更不经 PR 触发则 CI 全盲，bug 可沉默约 15.6 天（rooms-race 漏 `BASE_URL` 实证，`a2a667d`） | vitest/脚本：断言 ci.yml 触发器矩阵覆盖全部长期分支（或显式豁免清单），另可断言 CI 结论取 `run_attempt=1` 全绿 | 小——纯配置文本/AST 断言，无生产触达 |
 | C7 | cron 上线验证 runbook 脚本化 | 「验证生效」目前纯手工：两态 curl + crons ls + 次日 Cron Logs 流程已走通但人工执行 | scripts/ runbook：部署轮询（状态迁移链）+ 两态 curl 断言 + crons ls 输出判定；次日日志检查独立成步 | 中——生产 secret 注入与次日窗口调度需设计，授权边界须先裁 |
 | C8 | TTL 边界造数-触发-对照 harness | 「写库造边界行 + 手动触发 + 删留名单对照」模式本次为一次性临时脚本，可复用 | scripts/ 参数化 harness（zz-ttl-probe 类测试前缀造数 + purge 触发 + 删留名单对照断言） | 中——边界行参数表与断言需随 schema 维护 |
 | C9 | 文档契约测试扩展面评估（C2 推广） | 文档声明与实况漂移（operations.md 生产 URL 过时、探针期待漂移于 BR-1 decree）；C2 已有兑现先例（mech 报告落实补注 2026-09-27） | vitest 契约测试扩展：生产 URL 常量 ↔ operations.md、「文档断言 ↔ git 实况」、「探针期待 ↔ business-rules 表」逐项对账 | 中——漂移面盘点后逐条立断言，先评估再立项 |

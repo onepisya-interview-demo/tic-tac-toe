@@ -96,11 +96,13 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 6. **探针 / CI job 触发面覆盖的结构性盲区（2026-09-30 验证波新增）**：CI 自
    2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不
    触发任何一层——凡不产生 PR 的改动面，六层全部静默。实证：rooms-race 探针 job
-   漏传 `BASE_URL`，自进 CI 起 12 天从未绿过，直至 PR #18 首跑红才现形（单行修复
-   `a2a667d`）。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
+   漏传 `BASE_URL`，自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI →
+   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
    实施）；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
    [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
    [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。
+
+> 【2026-10-04 勘误补注】本条旧记「自进 CI 起 12 天从未绿过」系窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.6 天。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 
