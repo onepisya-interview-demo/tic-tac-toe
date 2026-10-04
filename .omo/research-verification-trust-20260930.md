@@ -192,10 +192,11 @@
 **2026-10-04 终验关账回执（cron 线就此收口）**
 
 > 裁决出处＝主公 2026-10-04「那两条数据都可以删除了，然后 直接终验关账」——11-01
-> 终验点提前收口，两探针行经授权删除、判据当日兑现关闭。删前/删后快照存 gitignored
-> 本地档 [evidence/d28-delete-before-20261004.json](evidence/d28-delete-before-20261004.json)
+> 终验点提前收口，两探针行经授权删除、判据当日兑现关闭。删前/删后快照件存
+> gitignored 的 [evidence/d28-delete-before-20261004.json](evidence/d28-delete-before-20261004.json)
 > ／[evidence/d28-delete-after-20261004.json](evidence/d28-delete-after-20261004.json)，
-> 不入仓；本段与 [docs/operations.md](../docs/operations.md) TTL 节闭环记录随本提交入档。
+> 不入仓；本段与 [docs/operations.md](../docs/operations.md) TTL 节闭环记录已随
+> 6c91b2a 入档。
 
 - 删前快照（2026-10-04T08:45Z）：game_stats 共 6 行，其中 zz-ttl-probe 探针恰 2 条——
   id7 zz-ttl-probe-A-fresh（判定日 10-31）、id14 zz-ttl-probe-H-future（判定日 11-01），
