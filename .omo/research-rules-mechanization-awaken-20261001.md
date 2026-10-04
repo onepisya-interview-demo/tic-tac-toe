@@ -43,7 +43,7 @@
 
 **② 机制选项与层级**：本候选本身就是**文档层台账**，是其余候选的记账入口。字段形态建议四值：`文档层 / 脚本层 / 门禁层 / 自动修层` + 一行「下一层触发条件」（样例见 §五）。不需要任何新工具——prose 字段即可；若要防字段腐化（写了不更新），可加一行「每个 ### 条目必含机械化状态行」的脚本断言（归 C9 对账测试族，票内定，非本卡前置）。
 
-**③ 成本与 precision**：成本小（纯文档批量补字段，48 条）；precision 风险为零（不产生误报）；唯一设计决策是编号策略（§七-Q6：L1-20~26 断档，续号还是补齐——L1-31 等编号已被 [probe-reconciliation.test.ts:1-18](../tests/qa/probe-reconciliation.test.ts) 头注释引用，重排会破仓内引用）。
+**③ 成本与 precision**：成本小（纯文档批量补字段，48 条）；precision 风险为零（不产生误报）；唯一设计决策是编号策略（§七-Q6：L1-20~26 断档〔系历史遗留、非 58cc978 追加节引入——2026-10-04 成因注〕，续号还是补齐——L1-31 等编号已被 [probe-reconciliation.test.ts:1-18](../tests/qa/probe-reconciliation.test.ts) 头注释引用，重排会破仓内引用）。
 
 **④ 正反例测试要求**：文档字段本身无正反例测试；若采纳「字段存在性断言」，正例=48 条全有字段、反例=临时删一行 → 红。
 
@@ -89,7 +89,7 @@
 
 ### C6｜CI 触发面覆盖对账
 
-**① 现状核实（事实成立，且盲区现役未闭合）**：本会话实读 [ci.yml:3-5](../.github/workflows/ci.yml)：`on:` 仅有 `pull_request: branches: [main]`，无 push trigger——**dev 直推对全部 job 盲，今天仍如此**。`git show a2a667d` 可查证：2026-10-01 00:33 +0800 单行修复 rooms-race 探针 `BASE_URL`（修复后形态在 ci.yml rooms-race step），commit 自述「该 job 自 e1ea4b1 进 CI 起从未绿过」。候选两断言均未实施：仓库无触发器矩阵对账测试（[probe-reconciliation.test.ts:1-18](../tests/qa/probe-reconciliation.test.ts) 只对账探针文件引用，不碰 `on:` 字段）；`git grep run_attempt` 命中全为文档，无脚本实现。**口径差异如实记录**：报告 C6 与 L1-32 写「沉默 12 天」（job 自进 CI 起），a2a667d 自述「错配沉默六天」（BASE_URL 缺失引入起），两口径并存于 [ulw-rooms-race-qa-ticket-20260924.md:4](plans/ulw-rooms-race-qa-ticket-20260924.md)。
+**① 现状核实（事实成立，且盲区现役未闭合）**：本会话实读 [ci.yml:3-5](../.github/workflows/ci.yml)：`on:` 仅有 `pull_request: branches: [main]`，无 push trigger——**dev 直推对全部 job 盲，今天仍如此**。`git show a2a667d` 可查证：2026-10-01 00:33 +0800 单行修复 rooms-race 探针 `BASE_URL`（修复后形态在 ci.yml rooms-race step），commit 自述「该 job 自 e1ea4b1 进 CI 起从未绿过」。候选两断言均未实施：仓库无触发器矩阵对账测试（[probe-reconciliation.test.ts:1-18](../tests/qa/probe-reconciliation.test.ts) 只对账探针文件引用，不碰 `on:` 字段）；`git grep run_attempt` 命中全为文档，无脚本实现。**口径差异如实记录**：报告 C6 与 L1-32 写「沉默 12 天」、a2a667d 自述「错配沉默六天」——票面 [ulw-rooms-race-qa-ticket-20260924.md:4](plans/ulw-rooms-race-qa-ticket-20260924.md) 与 a2a667d message 均写「自 e1ea4b1 进 CI 起」，实为**同锚数字矛盾**（2026-10-04 归因更正：原稿「（job 自进 CI 起）vs（BASE_URL 缺失引入起）」的两口径锚点归因有误），两口径并存于同票。
 
 **② 层级**：L1（纯配置文本/AST 断言，无生产触达）。三个可断言子项：(a) 触发器矩阵覆盖长期分支（或显式豁免清单）；(b) CI 结论取 `run_attempt=1` 首跑全绿（L1-33 收口判据的机械化）；(c) 探针必引 [tests/qa/lib/browser.mjs](../tests/qa/lib/browser.mjs) 的 BASE_URL 导出（L1-18 的机械化——a2a667d 重犯实证，现役 20/20 已引、新探针无拦截，见 §三映射 4）。
 
@@ -156,7 +156,7 @@
 | 候选 | 重犯实例 | 犯次证据 |
 |---|---|---|
 | **C9** | 探针期待漂移于业务 decree | **两犯在案（复审更正：初稿误计三犯）**：SW 断言假绿通道（`54045f7`，本会话 `git show` 核实在档）→ offline 探针 A2a/A2b 违 BR-1（`1b80a99`）；flaky 票头「CI 暴露第三处探针过时，已修 `1b80a99`」（[ulw-homedialog-flaky-fix-20260926.md:5](plans/ulw-homedialog-flaky-fix-20260926.md)，原文亲核）——**「第三处」即 `1b80a99` 修的 offline 探针同一事件，非独立犯次**；`git log -E` 按「探针过时 / 假绿 / 漂移 / 假绿通道」关键词亲核（本会话实跑），可独立点名者仅此两例。该族犯次 2/3 未达三犯线；L1-34（[:231-237](../docs/anti-patterns.md)）为反模式侧记 |
-| **C9** | 文档断言↔实况漂移多犯 | 匿名行决策卡前提被代码三证推翻、operations.md 生产 URL 过时、273 个裸 hash 需逐一批验（[research-verification-trust-20260930.md](research-verification-trust-20260930.md) §二.4/§二.10）——≥3 例独立可点，**C9 的三犯级信号由本族承载**（探针期待族见上行仅两犯） |
+| **C9** | 文档断言↔实况漂移多犯 | 匿名行决策卡前提被代码三证推翻、operations.md 生产 URL 过时、273 个裸 hash 需逐一批验（[research-verification-trust-20260930.md](research-verification-trust-20260930.md) §一.1/§二.4/§三 C9 行；2026-10-04 节号更正——原稿「§二.4/§二.10」归属偏移，273 实载 §一.1）——≥3 例独立可点，**C9 的三犯级信号由本族承载**（探针期待族见上行仅两犯） |
 | **C6** | CI 触发面盲区（recurred=true） | ci.yml:3-5 实测仅 PR 触发，dev 直推零 job，rooms-race 沉默 12 天（L1-32 [:215-221](../docs/anti-patterns.md) + [gauntlet Gap 6 :96-102](../docs/verification-gauntlet.md)）；主公亲令「不能让它就这样沉默的通过了」 |
 | **C6（子项 c）** | 探针 BASE_URL 约定重犯 | L1-18（[:111-113](../docs/anti-patterns.md)）立规后 rooms-race 仍漏传致 job 进 CI 起必红（`a2a667d`）；本会话实跑核验：现役 20 探针已引、未引 2 枚系 DISABLED（另 1 枚 commit-audit 非浏览器探针），新探针再犯无拦截 |
 | **C6（邻接）** | rerun 绿混同首跑绿（recurred=false，判据漂移单犯） | L1-33（[:223-229](../docs/anti-patterns.md)）判据仅入 gauntlet blockquote（[:126](../docs/verification-gauntlet.md)），CI 结论无 `run_attempt=1` 机械断言 |
@@ -176,7 +176,7 @@
 ### 3.3 对照组：已晋升先例（管道可行性的在库证据）
 
 - **文档→门禁**：commit 排版同日四五犯 → R7 进 commit-audit 策略真源（[commit-audit.mjs:25](../tests/qa/commit-audit.mjs)），立规后零重犯；
-- **文档→脚本**：退役文件引用悬空（发版 PR #14 红）→ probe-reconciliation 对账测试（`f327646`）+ knip 白名单 13→0（L1-31）；
+- **文档→脚本**：退役文件引用悬空（发版 PR #14 红）→ probe-reconciliation 对账测试（`f327646`）+ probe-reconciliation 自身 KNOWN_ORPHANS 白名单 13→0（L1-31；2026-10-04 术语更正——原稿「knip 白名单」系混称，knip.json 无该白名单）；
 - **文档→门禁**：467 全绿但合并弹框 decree 被破 → R6 `auditBrProbeBinding`（[commit-audit.mjs:253](../tests/qa/commit-audit.mjs)）双向机械绑定；
 - **文档→脚本**：TTL「改一处」承诺 → maintenance-purge 契约断言（C2，`2d7709b`）。
 
@@ -213,7 +213,7 @@
 
 ```markdown
 - 机械化状态：**脚本层（2026-09-24 晋升）**——守护测试 tests/qa/probe-reconciliation.test.ts
-  （ci.yml ↔ tests/qa 双向对账 + 注入对照）+ knip 孤儿探针白名单清零（13→0）。
+  （ci.yml ↔ tests/qa 双向对账 + 注入对照）+ probe-reconciliation 自身 KNOWN_ORPHANS 孤儿探针白名单清零（13→0；2026-10-04 术语更正，原稿「knip」系混称）。
 - 下一层触发：对账漏检新引用面（如 docs 之外引用方）复发 1 次 → 扩对账源清单；暂无自动修层需求。
 ```
 
@@ -277,9 +277,9 @@
 - **Q3｜C7 授权边界前置**——生产触达（部署轮询 / 两态 curl / 次日 Cron Logs 检查）允许脚本化到什么程度？a) 本地 dry-run 脚本化 + 生产步仍人工（仅模板化命令清单）；b) 生产步也脚本化，以「授权留痕字段（授权人/授权语/操作清单）」为执行前置；c) C7 整体继续挂起。另：次日 cron 验证开放环（§3.2-5）需要主公定谁去查 Cron Logs（调度者无控制台凭据）。
 - **Q4｜C8 处置**——a) 立最小票「补 09-30 一次性 TTL 边界脚本入档」（防流程失传）；b) 参数化 harness 正式立项；c) 挂候补池不动。
 - **Q5｜候补池新候选编号**——§3.2 五条无承接实例（时序/竞态断言 ≥5 犯、越权「已令/未令」门禁、批量删除绕 git、授权留痕模板、cron 开放环）是否立 C10 起候选入台账？其中时序/竞态一条犯次已远超三犯线，愚见优先。
-- **Q6｜L1 编号断档策略（C1 票内前置）**——anti-patterns L1 主线止于 19、追加节从 27 起，L1-20~26 空缺（[:115→183](../docs/anti-patterns.md)）。a) 续号（新条目从 L1-35 起，断档保留——愚见：L1-31 等编号已被 [probe-reconciliation.test.ts](../tests/qa/probe-reconciliation.test.ts) 头注释等仓内引用，重排破引用）；b) 补齐断档重排（需同步改全部引用方）。
+- **Q6｜L1 编号断档策略（C1 票内前置）**——anti-patterns L1 主线止于 19、追加节从 27 起，L1-20~26 空缺（[:115→183](../docs/anti-patterns.md)；断档系历史遗留、非 58cc978 追加节引入——2026-10-04 成因注）。a) 续号（新条目从 L1-35 起，断档保留——愚见：L1-31 等编号已被 [probe-reconciliation.test.ts](../tests/qa/probe-reconciliation.test.ts) 头注释等仓内引用，重排破引用）；b) 补齐断档重排（需同步改全部引用方）。
 - **Q7附列｜资产盘点整理项（不属 C1–C9，本文不擅动，逐项请裁）**——
-  - a) [alignment-20260926-doc-governance.md:14](alignment-20260926-doc-governance.md) 「文档状态真源 = doc-status-map-20260926」指针已过期（真源接替为 20260927 主图 + ledger，主图头注明文）——加注或修订；
+  - a) [alignment-20260926-doc-governance.md:14](alignment-20260926-doc-governance.md) 「文档状态真源 = doc-status-map-20260926」指针已过期（真源接替为 20260927 主图 + ledger——主图头注系结构性体现接替，无「真源」明文，明文仅见修订记录〔2026-10-04 措辞精确化〕）——加注或修订；
   - b) [docs/diff-dev-main-20260922.md](../docs/diff-dev-main-20260922.md) 快照全过期（今日实测 `git rev-list` main..dev=2、dev..main=3，与快照 121 领先完全不同）——加过期注还是归档；
   - c) [docs/branching.md:1-20](../docs/branching.md) 2026-09-13 定案「Trunk-Based、无 dev 长命枝」与实况矛盾（工作分支即 dev、dev-stable tag 三枚、CI 仅 PR 触发、dev→main 发版 PR 先例）——改文档还是改分支实践，方向需主公定；机械对账断言属 C9 面；
   - d) [docs/agents-md-sync-suggestions-wrf.md](../docs/agents-md-sync-suggestions-wrf.md) 自述草案已消费进 AGENTS.md/requirement-intake 但未标档（同类：lsp-setup-retrospective、evals-mcp-practice-map 冬眠件）——已消费/冬眠件不标档会污染 C1 台账的「活契约」分拣，是否补 ARCHIVED/CONSUMED 标注；

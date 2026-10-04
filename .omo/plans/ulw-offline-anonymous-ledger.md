@@ -3,7 +3,7 @@
 - **日期**：2026-09-20
 - **分支**：dev
 - **状态**：维护者 2026-09-20 拍板（语义变更决议）——已实现（W4 记账语义修复 `67e0ab6`，2026-09-20），终验 V9 入档收官（ACCEPT-WITH-NOTES，`a8abea9`，2026-09-20）；D-4/F8 卡片文案反转路线被 ulw-offline-ledger-direct「删态直显」取代（`d24757f` 入档、`a68f5be` 落地，2026-09-20）
-- **前置阅读**：.omo/plans/ulw-room-migration-home-landing.md（正在进行的大迁移，本计划是其增补波 W4）
+- **前置阅读**：.omo/plans/ulw-room-migration-home-landing.md（room-migration 大迁移已收官——随本计划 V9 终验收官（`a8abea9`，2026-09-20）闭合，非「正在进行」；本计划系其增补波 W4。2026-10-04 D25 卫生票更新）
 
 ---
 

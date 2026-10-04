@@ -5,7 +5,7 @@
 
 ---
 
-## 甲、47 份更新清单（全部 done，零未完成）
+## 甲、47+1 份更新清单（48 号系 2026-10-04 D25 卫生票补列——判定日漏列；全部 done，零未完成）
 
 1. `audit-transitively-calls-commitlint.md` — 补「已实现（0ffde83，2026-09-12）」状态线；git 反查实现提交属实，TL;DR 计划态原文保留
 2. `edge-runtime-migration.md` — 按 项7 选项a 补 ARCHIVED 弃案标注（27e32ec 自述 Vercel 拒 + Next16 弃用）+ 后继指向 runtime-cleanup-\* 两档 【09-28 更新】项7 已追认结档（主图 §二③）
@@ -54,6 +54,7 @@
 45. `research-rooms-race-probe-20260924.md` — 改已裁决兑现措辞 + 补状态行（c102fcd 地图入档 / 87e7c7a 七票收口 / 71ad38d 事务修复 / e1ea4b1 探针进 CI）；§六原文未动
 46. `research-rules-mechanization-20260926.md` — §五表格后补落实注 + §六唤醒条件③后补触发与评估记录（C2 已兑现，维持不立项不开坑）
 47. `research-session-orthogonality-20260924.md` — 改已裁决措辞 + 补状态行（c102fcd 调研入档 / ed25cb0 正交性矩阵落库 / 87e7c7a wayfinder 复盘）
+48. `ulw-readme-shots-bilingual-20260913.md` — 补「已交付（C1 `fe7fef9` + C2 `e61cea2`，2026-09-14）」状态线（2026-10-04 D25 卫生票补列——原 47 清单判定日漏列，主图 §三.1 记录在案）
 
 ---
 
@@ -135,7 +136,7 @@
 - `ulw-p3-hygiene-20260923.md` — e24e615 计划与 4 项卫生改动同票，e3bd3c5 整改跟进 【09-27 更新】已补状态线（§甲#20）
 - `ulw-qa-02c-anchor-20260923.md` — 0451656 计划与重锚实现同票，4be54dc 整改跟进 【09-27 更新】已补状态线（§甲#21）
 - `ulw-quality-hardening-opt-20260922.md` — 85965a7 入档→1cec0a8 翻转→工单链→3fdc921 V13 终验→6aaab5e 收口
-- `ulw-readme-shots-bilingual-20260913.md` — fe7fef9 + e61cea2 两件落地，e1e7e85/cb3ce79 跟进
+- `ulw-readme-shots-bilingual-20260913.md` — fe7fef9 + e61cea2 两件落地，e1e7e85/cb3ce79 跟进 【2026-10-04 更新】状态线已补（§甲#48）
 - `ulw-reset-store-helper-20260923.md` — 47ad7d7 同票 【09-27 更新】已补状态线（§甲#22）
 - `ulw-reset-store-outcome-error.md` — f68e328 同票，3068b22 触档跟进 【09-27 更新】已补状态线（§甲#23）
 - `ulw-result-play-again-loop.md` — 已实现并终验：6b53402 fix(nav) 落地，7af475b V8 ACCEPT 入档

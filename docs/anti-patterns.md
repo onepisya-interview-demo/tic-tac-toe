@@ -216,11 +216,11 @@ W3 迁移：4 个 RESTful 端点全部 import `normalizeRoom` 作为 service-sid
 
 任何探针 / CI workflow 变更，必须先回答「这段变更会在哪个触发面被实跑」——CI 仅 `pull_request` 触发时，凡不产生 PR 的改动面（如 dev 直推）对 CI 全部 job 静默；「改 CI 本身」也不例外，不能因为「只是改 CI」就免验。合格动作：变更 ci.yml 后构造一次真实触发亲见目标 job 实跑；暂无法触发时把盲区显式入档（verification-gauntlet §3 Gap 清单）待裁决，而不是当作「没问题」。
 
-实证（2026-09-30 验证波次，PR #18 首跑红）：rooms-race job 自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 2026-09-24 进 CI → `a2a667d` 2026-10-01 单行修复）——探针 step 漏传 `BASE_URL`；结构性成因是 CI 自 2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不触发任何 job，bug 沉默约 15.6 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）。主公亲令「不能让它就这样沉默的通过了」。血缘：L1-31 管「job 引用悬空」，本条管「job 活着但从未被实跑」；L1-18（探针 `BASE_URL` 不硬编码）是同族前置约定。
+实证（2026-09-30 验证波次，PR #18 首跑红）：rooms-race job 自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 2026-09-24 进 CI → `a2a667d` 2026-10-01 单行修复）——探针 step 漏传 `BASE_URL`；结构性成因是 CI 自 2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不触发任何 job，bug 沉默约 15.9 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）。主公亲令「不能让它就这样沉默的通过了」。血缘：L1-31 管「job 引用悬空」，本条管「job 活着但从未被实跑」；L1-18（探针 `BASE_URL` 不硬编码）是同族前置约定。
 
 对策：触发面当作验证契约审视——每段改动先答「会被哪些门禁实跑」；「ci.yml 触发器 × 分支 × job」矩阵机械对账已列为机械化候选 C6（未裁决不实施）；Gap 记录见 verification-gauntlet §3 第 6 条。
 
-> 【2026-10-04 勘误补注】本条实证段旧记「沉默 12 天」系两窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.6 天。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
+> 【2026-10-04 勘误补注】本条实证段旧记「沉默 12 天」系两窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化）。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 
 ### L1-33：rerun 绿混同首跑绿（收口判据漂移）
 

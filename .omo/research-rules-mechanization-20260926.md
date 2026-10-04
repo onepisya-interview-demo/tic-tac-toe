@@ -82,7 +82,7 @@
 | C3 | ast-grep 进 CI | BR-11 部分断言可下沉为结构规则 | 新 CI job + rules/ 目录 + 正反例 fixture | 中 |
 | C4 | eslint --fix / format 自动化 | lint script 无 --fix，无 format 层 | script 改造 + 一次性全仓 format commit（diff 噪声需主公裁决） | 小，但噪声取舍需裁决 |
 | C5 | 派发红线断言模板化 | t-n4 型漂移靠司机人工拦截 | .omo/ 或 scripts/ 沉淀 workflow 脚本模板（diff 文件面 vs brief 白名单集合断言） | 小 |
-| C6 | CI 触发面覆盖对账 | 探针/CI workflow 变更不经 PR 触发则 CI 全盲，bug 可沉默约 15.6 天（rooms-race 漏 `BASE_URL` 实证，`a2a667d`） | vitest/脚本：断言 ci.yml 触发器矩阵覆盖全部长期分支（或显式豁免清单），另可断言 CI 结论取 run_attempt=1 全绿 | 小——纯配置文本/AST 断言，无生产触达 |
+| C6 | CI 触发面覆盖对账 | 探针/CI workflow 变更不经 PR 触发则 CI 全盲，bug 可沉默约 15.9 天（rooms-race 漏 `BASE_URL` 实证，`a2a667d`） | vitest/脚本：断言 ci.yml 触发器矩阵覆盖全部长期分支（或显式豁免清单），另可断言 CI 结论取 run_attempt=1 全绿 | 小——纯配置文本/AST 断言，无生产触达 |
 | C7 | cron 上线验证 runbook 脚本化 | 「验证生效」目前纯手工：两态 curl + crons ls + 次日 Cron Logs 流程已走通但人工执行 | scripts/ runbook：部署轮询（状态迁移链）+ 两态 curl 断言 + crons ls 输出判定；次日日志检查独立成步 | 中——生产 secret 注入与次日窗口调度需设计，授权边界须先裁 |
 | C8 | TTL 边界造数-触发-对照 harness | 「写库造边界行 + 手动触发 + 删留名单对照」模式（2026-09-30 验证波）为一次性临时脚本，可复用 | scripts/ 参数化 harness（zz-ttl-probe 类测试前缀造数 + purge 触发 + 删留名单对照断言） | 中——边界行参数表与断言需随 schema 维护 |
 | C9 | 文档契约测试扩展面评估（C2 推广） | 文档声明与实况漂移（operations.md 生产 URL 过时、探针期待漂移于 BR-1 decree）；C2 已有兑现先例 | vitest 契约测试扩展：生产 URL 常量 ↔ operations.md、「文档断言 ↔ git 实况」、「探针期待 ↔ business-rules 表」逐项对账 | 中——漂移面盘点后逐条立断言，先评估再立项 |
@@ -91,7 +91,7 @@
 
 > 增补（2026-10-01）：C6-C9 四行由验证信任沉淀波（[research-verification-trust-20260930.md](research-verification-trust-20260930.md) §三）追加于本表末尾——**待机械化唤醒统一裁决，未裁决不实施**；唤醒条件仍以 §六为准，C2 兑现先例是 C9 的直接参照。
 
-> 【2026-10-04 勘误补注】§五表 C6 行旧记「bug 可沉默 12 天」失实——触发面盲区实为 ≈15.6 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）；job 层窗口（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天。正文已按锚点口径更正，verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
+> 【2026-10-04 勘误补注】§五表 C6 行旧记「bug 可沉默 12 天」失实——触发面盲区实为 ≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化；`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）；job 层窗口（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天。正文已按锚点口径更正，verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 
 ## 六、唤醒条件与检索路径
 

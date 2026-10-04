@@ -1,7 +1,7 @@
 # 计划：房间生命周期管理——删除 / 退出 / TTL 自动回收 / 预防强化（ulw）
 
 > 性质：执行计划，已实现——四段 2026-09-25 全部落地（T-N1 服务端 DELETE 销户 `0817519` / T-N3 TTL 自动回收 + Vercel Cron `c5aac38` / T-N2 退出与删除双入口 `86202f9` / T-N4 提交确认文案 `f756129`），探针 step 9 + BR-12 补条 `80c21cf`。裁决来源：主公 2026-09-24——「A 退出 + B 销户删除 + C TTL 自动回收 + D 预防强化全做；退出/删除时本地战绩清零」。裁决动机：Turso demo 库免费额度有限，数据本来就要定时清（C 不是锦上添花是运维必需）。
-> 关联：T-M1（合并弹框身份锁定 + 首次回写，[ulw-sync-dialog-identity-lock-20260924.md](ulw-sync-dialog-identity-lock-20260924.md)）已批待派，本计划与其串行衔接。基线：dev @ b980b39。
+> 关联：T-M1（合并弹框身份锁定 + 首次回写，[ulw-sync-dialog-identity-lock-20260924.md](ulw-sync-dialog-identity-lock-20260924.md)）已落地（`d685cf6`，2026-09-25；状态 2026-10-04 D25 卫生票更新），本计划与其串行衔接。基线：dev @ b980b39。
 > 【2026-09-30 补】T-N3 的 Vercel Cron 已正式配置上线——CRON_SECRET 注入 Vercel Production + .env.local 同步、PR #18 合流自动部署（`37326b9`）、裸请求 401 / 带 secret POST+GET 均 200 `{deletedCount:0,cutoffDays:30}`、`vercel crons ls` 注册确认；首次自动触发待 2026-10-01 北京 11:00–11:59 窗口 Cron 日志验证。生产正式域名 = `3t.onepis.net`。
 
 ---

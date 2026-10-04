@@ -1,6 +1,7 @@
 # Plan: ulw · 分支策略入档 + README 截图双语（ulw-readme-shots-bilingual-20260913）
 
 - 日期：2026-09-13
+- **状态**：已交付——C1 `fe7fef9`（docs/branching.md 分支策略入档）+ C2 `e61cea2`（README 三帧截图 + README.en.md 双语，e1e7e85/cb3ce79 跟进；后续 02c654d/31d56f6 截图重制迭代），2026-09-14 落地（状态线 2026-10-04 D25 卫生票补记）
 - ulw-loop：`.omo/ulw-loop/ulw-readme-shots-bilingual-20260913/`
 - 覆盖两枚原子 commit（docs 系）：
 
