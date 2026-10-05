@@ -114,6 +114,8 @@ ELIFECYCLE  Command failed with exit code 1.
 6. **「vitest 48/48 钉 seam」「vitest 55/55 钉行为」**（trust §二4/§二5/§二13/§五1）——会话时点运行结果无仓内落档、未注明测试范围，口径无法复原；本会话全量实跑为 551 tests（540 passed + 11 skipped），任何可跑口径均非 48/55。
 7. **主公亲令「不能让它就这样沉默的通过了」**（anti-patterns L1-32 引）——唯一载体是同会话产出的 trust 报告转录（[.omo/research-verification-trust-20260930.md:17](.omo/research-verification-trust-20260930.md)〔实测亲见〕），无独立仓内证据可证原话逐字性。
 
+**〔2026-10-04 处置注·自治卡 D5〕**：上列第 4-7 条会话侧事实已按主公 2026-10-04 自治指令（解放 CEO）移入 `.omo/evidence/session-side-facts-20261004.md`（gitignored，不入 tracked）存档；其中「273 个裸 hash」数量断言按事实收口——273 实为 commit-audit 通过计数、原载体在 gitignored 会话档（见第 5 条），非裸 hash 批验数量；tracked 正文今后按 [docs/conventions.md](docs/conventions.md) 新增口径执行（会话侧数字不入正文；vitest 结果必须注明运行范围）。
+
 ### ⑤-2 confirmed 抽样复证（本会话实测，非全量重跑）
 
 上游 confirmed 67 条未全量重跑；本会话对关键锚点抽样复证，**全部命中**：
@@ -165,6 +167,8 @@ ELIFECYCLE  Command failed with exit code 1.
    - 58cc978 ↔ 6c64261：`15bce4cf7367044b9de3a99cc3562da98e018de2`
    - b5a3299 ↔ 6c64261：`2ace5a6f22b379ed07a76f1701eb7976f94771eb`
    - fff969b ↔ 6c64261：`6cde4e57c53f570fa41e5316b2634050ad1f8f30`
+
+   **〔2026-10-04 存疑注·自治卡 D4〕**：检查脚本系会话侧一次性工具未入仓（grep tests/qa scripts 无命中、git log -S patch-id 仅命中本档入册提交 00ddf95），passed=false 标注无法原地复核，patch-id 四对 MATCH 仍为等价主证。
 3. **原提交 6c64261 numstat**〔实测〕：4 文件 6+0 / 149+0 / 24+0 / 13+0，与四笔拆分按文件完全吻合；第 5 笔 87ec30f（awaken 新档 291 行）不在 6c64261 内、系拆分时独立入册的原波第五内容块。
 
 结论：**「纯追加零删改」在 git 层面成立**；上游 ⓪ 层 passed=false 标记与该事实的矛盾原样保留至第⑦节裁决项。
@@ -186,7 +190,7 @@ ELIFECYCLE  Command failed with exit code 1.
 | 1 | 「12 天」失实数字（实为 ≈6.3 天）扩散 [docs/anti-patterns.md:219](docs/anti-patterns.md)、[docs/verification-gauntlet.md:99](docs/verification-gauntlet.md)、[trust:17/:38/:128](.omo/research-verification-trust-20260930.md)、[mech:85](.omo/research-rules-mechanization-20260926.md) 共 6 处 | **high，需裁决**：更正即破坏「纯追加」，须新提交；是原地改还是勘误叠注（本项目 anti-patterns 有勘误补注先例，见 [docs/operations.md:194-196](docs/operations.md)）、措辞改「约 6 天」还是改锚点为「触发面盲区自 09-15 移除 push trigger 起 ≈15.6 天」，均待裁 | 裁决后以一笔更正提交处理，并为 L1-32/Gap 6/C6 行各加归因更正注 |
 | 2 | 上游 ⓪ 层检查器 passed=false 与 git 实证（全 0 删）矛盾 | 需澄清 | 检查脚本解析口径核查；若为脚本 bug 应修脚本而非改数据 |
 | 3 | 层③ lint FAIL 源在 [.zcode/](.zcode)（工作流产物 + 复验工作流自身草稿），与业务变更面零交集；复验行为本身会持续往里添文件 | 需裁决 | 是否将 `.zcode/**` 纳入 eslint globalIgnores（现 [docs/verification-gauntlet.md:14](docs/verification-gauntlet.md) 载 lint targets 由 eslint.config.mjs + globalIgnores 决定），或门禁口径明文豁免该目录 |
-| 4 | 4 条 not-in-repo 会话侧事实（主公点名唤醒、「273」数量、vitest 48/48 与 55/55、主公亲令原话） | 需裁决 | 是否补落档（如 vitest 口径今后注明运行范围；会话侧数字不入正文，与其自身「事实忠实抽查」方法声明对齐） |
+| 4 | 4 条 not-in-repo 会话侧事实（主公点名唤醒、「273」数量、vitest 48/48 与 55/55、主公亲令原话） | **已处置（2026-10-04 自治卡 D5）** | 4 条移入 `.omo/evidence/session-side-facts-20261004.md`（gitignored）存档、tracked 不补落档；vitest 口径与「会话侧数字不入正文」已立规（[docs/conventions.md](docs/conventions.md)） |
 | 5 | 任务描述「六个 markdown」与 git 实证 5 个的出入 | 仅记录 | 不影响任何裁决，无需动作 |
 | 6 | low ×10（knip 措辞、节号偏移、「真源」明文、两表措辞差、vitest 口径、stale 门措辞、L1 历史断档、互链单向、Gap 6 笼统表述、awaken 归因误） | 随 #1 更正波顺带处理与否待裁 | 均内容可证、仅精度问题，不阻塞本波 |
 | 7 | 五笔 push（保留主公亲手，见 [trust:149](.omo/research-verification-trust-20260930.md)） | 待主公 | 建议 #1 裁决后与更正提交一并推 |

@@ -14,6 +14,7 @@
 - 提交主题和正文可以中文；Conventional 前缀与 lore trailer 键名保持英文。
 - 路由命名遵循 W1 御定：`/online` (实时上服) + `/offline` (纯本地) + `/result` (RSC 成绩单)；不引入 `solo` / `ranked` / `singleplayer` / `multiplayer` 词汇（schema.org 词汇表对齐理由见 README「词汇语义说明」节）。
 - 领域概念命名以 `CONTEXT.md` 为准：一切产出物（代码、commit 正文、plan、review、探针）使用表内术语、禁用其 `_Avoid_` 别名；概念不在表中勿造新词——先判断是否真缺口，是则按 `.omo/plans/glossary-context-md.md` D3 门槛入 Pending 区，复用后晋升。
+- 会话侧数字不入正文：会话内产生、无仓内落档锚点的计数不写入 tracked 文档正文，移 `.omo/evidence/`（gitignored）会话侧证据档存档；vitest 结果引用必须注明运行范围（全量/单文件、passed/skipped 口径）。
 
 ## 库与依赖
 
