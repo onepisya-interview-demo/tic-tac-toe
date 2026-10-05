@@ -146,6 +146,7 @@ ELIFECYCLE  Command failed with exit code 1.
 **low ×10**
 1. awaken 档「knip 白名单 13→0」术语混称（实为 probe-reconciliation 自身 KNOWN_ORPHANS；[knip.json](knip.json) 实证无该白名单）。
 2. awaken 档「273 裸 hash…（trust §二.4/§二.10）」节号归属偏移（实载 §二.1；内容均可证）。
+   **〔2026-10-04 更正注·验收残留〕**：本条「实载 §二.1」有误——本席实测 trust 档 §一始于 :11、273 唯一命中在 :15（§一.1），awaken 档 :159 节号更正注「实载 §一.1」正确；本行原文错误，特此更正。
 3. awaken 档「主图头注明文真源接替」——20260927 主图头注系结构性体现接替，无「真源」明文（grep 仅命中修订记录）。
 4. trust §三表与 mech §五表 C6-C9 非逐字同步（C8/C9 时点标注措辞差，语义等价；后继机械对账会报差异）。
 5. 「vitest 48/48」「55/55」未注明范围、无仓内落档。

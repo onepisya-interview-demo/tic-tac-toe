@@ -14,6 +14,8 @@
 
 **1. 文档治理三波（/workflow）**：11 张决策卡逐项批注落档——批注原文逐字转写 + 独立验收员逐字核对；273 个裸 hash 逐一 `git rev-parse` 批验；更新 47 份档案后抽验 44/44。匿名行决策卡前提被主公测试观察质疑，经代码取证三证裁定「主公的观察是对的，卡面前提被推翻」——anonymous 计划终裁 ARCHIVED；edge 项7 追认（`git log -S` 全分支零命中 + Next 本地 docs 逐行对照，两处措辞精确化如实留档）；「战报上传 404 会显示报错吗」由独立复核员抛开核实员结论自行读码 + vitest 48/48 钉 seam（运行范围未注明，会话侧时点结果；锚 .omo/verify-20261001-docs-wave.md:114），并诚实标注「浏览器级时序系代码推断未实跑探针」。
 
+> 【2026-10-04 勘误补注·自治卡 D5 验收残留】上段「273 个裸 hash 逐一 `git rev-parse` 批验」的数量断言失实：tracked 档无数量锚点（[doc-status-map-20260927.md:203](doc-status-map-20260927.md) 只记「图内全部裸 hash 逐一 `git rev-parse --verify` 批验在档」，无数量），唯一含 273 的记录在 gitignored `.omo/sessions.local.md:291`（「commit-audit.mjs --branch dev 279 / 273-6-0」），其 273 系 commit-audit 通过计数、语义不同。273 事实锚本节 §一.1 即本行；收口详锚 .omo/verify-20261001-docs-wave.md:113/:117。
+
 **2. CI 沉默三层**：PR #18 首跑红连揭三层（主公亲令「不能让它就这样沉默的通过了」）——job 层：rooms-race 探针漏传 `BASE_URL`，该 job 自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 单行修复）；期待层：offline 探针 A2a/A2b 停留 W3 时代期待、违反 BR-1 decree（弹框只在软导航转场弹），本地复现（`pnpm build` + 起 hermetic server + 跑探针三犯复现）定责为探针过时非业务回归，改合规软导航触发后本地 5/5 全绿（`1b80a99`）；触发面层：探针 job 仅 PR 触发、dev push 不触发 CI 的结构性盲区，bug 沉默约 15.9 天（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30；是否立项 dev push 触发待主公裁）。纪律确立：**rerun 绿不算数、admin bypass 混过不算数，run_attempt=1 首跑全绿才算收口**。
 
 > 【2026-10-04 勘误补注】本报告旧记「沉默 12 天」失实，系两窗口错配（§一2、§二2 场景与 §三表 C6 行内已按锚点口径更正）——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化）。verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
