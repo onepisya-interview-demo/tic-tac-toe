@@ -11,11 +11,110 @@
 import { chromium } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 export const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 
 const RECORDING_ROOT =
   process.env.ULW_EVIDENCE_ROOT ?? '.omo/evidence/ulw/ulw-ux-refresh-pass';
+
+// Unified console/pageerror capture (console-bootstrap, roadmap ticket 5).
+//
+// Every page launched through launchQA() gets a console + pageerror tap
+// here so "silent console error" evidence exists for ALL probes without
+// touching any probe's assertion surface. Captures accumulate in-process
+// and are flushed to a JSON evidence artifact on process exit — the flush
+// is best-effort and must never change a probe's exit code.
+//
+// Artifact location, in priority order:
+//   1. $QA_CONSOLE_CAPTURE_DIR/<probe>-<timestamp>.json (explicit override)
+//   2. $EVIDENCE_DIR/console-capture-<probe>.json (CI sets EVIDENCE_DIR
+//      per probe job — ci.yml pattern)
+//   3. .omo/evidence/console-captures/<probe>-<timestamp>.json (local
+//      default; .omo/evidence/ is gitignored)
+const DEFAULT_CAPTURE_ROOT = '.omo/evidence/console-captures';
+
+// Derive the probe name from the running probe script (process.argv[1])
+// so capture artifacts are self-describing without any per-probe opt-in.
+function defaultProbeName() {
+  return (process.argv[1] && path.basename(process.argv[1], '.mjs')) || 'qa';
+}
+
+const consoleCapture = {
+  probeName: defaultProbeName(),
+  entries: [],
+  flushRegistered: false,
+};
+
+function attachConsoleCapture(page, probeName) {
+  if (probeName) consoleCapture.probeName = probeName;
+  // Channel 1 — page.on('console'): every console message the page emits.
+  page.on('console', (message) => {
+    consoleCapture.entries.push({
+      kind: 'console',
+      type: message.type(),
+      text: message.text(),
+      at: new Date().toISOString(),
+    });
+  });
+  // Channel 2 — page.on('pageerror'): uncaught page-side exceptions.
+  page.on('pageerror', (error) => {
+    consoleCapture.entries.push({
+      kind: 'pageerror',
+      type: 'error',
+      text: error?.message ?? String(error),
+      stack: error?.stack ?? null,
+      at: new Date().toISOString(),
+    });
+  });
+}
+
+function registerConsoleCaptureFlush() {
+  if (consoleCapture.flushRegistered) return;
+  consoleCapture.flushRegistered = true;
+  process.on('exit', (code) => {
+    try {
+      const counts = { console: 0, pageerror: 0 };
+      for (const entry of consoleCapture.entries) counts[entry.kind] += 1;
+      const payload = {
+        probe: consoleCapture.probeName,
+        baseUrl: BASE_URL,
+        exitCode: code,
+        capturedAt: new Date().toISOString(),
+        summary: {
+          totalEntries: consoleCapture.entries.length,
+          consoleMessages: counts.console,
+          pageErrors: counts.pageerror,
+        },
+        entries: consoleCapture.entries,
+      };
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      let file;
+      if (process.env.QA_CONSOLE_CAPTURE_DIR) {
+        const dir = process.env.QA_CONSOLE_CAPTURE_DIR;
+        file = path.join(dir, `${consoleCapture.probeName}-${stamp}.json`);
+      } else if (process.env.EVIDENCE_DIR) {
+        file = path.join(
+          process.env.EVIDENCE_DIR,
+          `console-capture-${consoleCapture.probeName}.json`,
+        );
+      } else {
+        file = path.join(
+          DEFAULT_CAPTURE_ROOT,
+          `${consoleCapture.probeName}-${stamp}.json`,
+        );
+      }
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, JSON.stringify(payload, null, 2));
+      // One-line trail on stdout so the probe log points at the artifact.
+      process.stdout.write(
+        `[console-capture] ${consoleCapture.entries.length} entries -> ${file}\n`,
+      );
+    } catch {
+      // Best-effort: capture must never break or fail a probe.
+    }
+  });
+}
 
 export async function launchBrowser({ autoplay = false } = {}) {
   return chromium.launch({
@@ -34,7 +133,7 @@ async function ensureDir(dir) {
 
 export async function launchQA(options = {}) {
   const recording = options.recording ?? isRecordingEnabled();
-  const probeName = options.probeName ?? (options.label ?? 'qa');
+  const probeName = options.probeName ?? options.label ?? defaultProbeName();
   const recordingDir = recording
     ? path.join(
         process.env.EVIDENCE_DIR ?? path.join(RECORDING_ROOT, probeName),
@@ -54,6 +153,8 @@ export async function launchQA(options = {}) {
   }
   const ctx = await browser.newContext(contextOptions);
   const page = await ctx.newPage();
+  attachConsoleCapture(page, probeName);
+  registerConsoleCaptureFlush();
   return {
     browser,
     ctx,
