@@ -101,6 +101,22 @@ const { browser, ctx, page } = await launchQA({ probeName: "prod-smoke" });
 page.on("request", (req) => {
   observedMethods.push({ method: req.method(), url: req.url() });
 });
+// 观测面补全（评审问题⑤）：page.on("request") 只覆盖 page 级请求；本探针
+// 另经 ctx.request（Playwright APIRequestContext）发出的请求——manifest/
+// sw.js/icon/API-stats 四处——不触发任何 page 级事件，原观测面对其为零，
+// 「防未来改动悄悄破界」的宣称与实际防护面不符。Playwright 的全部动词
+// 方法（get/post/put/patch/delete/head）都委托 ctx.request.fetch 单一收口
+// （本仓 playwright 实测六动词各恰记 1 条），故只包 fetch 一层：既有四个
+// get 调用点与未来任何写调用一律进入末步只读断言的观测面。
+{
+  const api = ctx.request;
+  const origFetch = api.fetch.bind(api);
+  api.fetch = (...args) => {
+    const method = String(args[1]?.method ?? "GET").toUpperCase();
+    observedMethods.push({ method, url: String(args[0]), via: "ctx.request" });
+    return origFetch(...args);
+  };
+}
 
 // step() 失败即 rethrow 中止后续步骤（首屏失败后续步骤无从谈起），但异常在
 // 主流程 catch 捕获、不再穿透顶层——保证失败路径走到底部的 writeQaLog
@@ -223,8 +239,9 @@ try {
     assert.equal(problem.status, 404, `problem.status=404；got ${problem.status}`);
   });
 
-  // 只读自卫断言：全程观测到的请求方法必须全为 GET（本探针零写路径的
-  // 机械化证明——未来任何人往这里加写调用，这一步立即红）。
+  // 只读自卫断言：全程观测到的请求方法必须全为 GET（观测面＝page 级
+  // page.on("request") ＋ ctx.request 级包装记录，双面合计——本探针零写
+  // 路径的机械化证明：未来任何人往这里加写调用，这一步立即红）。
   await step("read-only guard: 全程观测请求全为 GET", async () => {
     assert.ok(observedMethods.length > 0, "至少观测到一条请求（探针确实发了流量）");
     const nonGet = observedMethods.filter((r) => r.method !== "GET");
