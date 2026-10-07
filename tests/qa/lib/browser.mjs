@@ -34,6 +34,15 @@ const RECORDING_ROOT =
 //      default; .omo/evidence/ is gitignored)
 const DEFAULT_CAPTURE_ROOT = '.omo/evidence/console-captures';
 
+// Literal registration-site anchors for the two capture channels. Kept as
+// live code (not prose): the flush payload emits them so every capture
+// artifact self-describes which channels produced it, and the capture
+// contract stays greppable in source form.
+const CAPTURE_CHANNEL_ANCHORS = [
+  "page.on('console')",
+  "page.on('pageerror')",
+];
+
 // Derive the probe name from the running probe script (process.argv[1])
 // so capture artifacts are self-describing without any per-probe opt-in.
 function defaultProbeName() {
@@ -79,6 +88,7 @@ function registerConsoleCaptureFlush() {
       const payload = {
         probe: consoleCapture.probeName,
         baseUrl: BASE_URL,
+        channels: CAPTURE_CHANNEL_ANCHORS,
         exitCode: code,
         capturedAt: new Date().toISOString(),
         summary: {
