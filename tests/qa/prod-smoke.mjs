@@ -102,6 +102,13 @@ page.on("request", (req) => {
   observedMethods.push({ method: req.method(), url: req.url() });
 });
 
+// step() 失败即 rethrow 中止后续步骤（首屏失败后续步骤无从谈起），但异常在
+// 主流程 catch 捕获、不再穿透顶层——保证失败路径走到底部的 writeQaLog
+// （status:"FAIL" 证据件）与 if(failed) exit(1) 分支（评审问题②④：原版
+// try/finally 下二者在任何 STEP FAIL 场景均为不可达代码，失败时只剩
+// best-effort console-capture，退出码只靠 uncaughtException 兜底）。
+let stepError = null;
+
 try {
   // ① 首屏 200。
   await step("first-screen 200: GET / → 200 text/html + 字面 title", async () => {
@@ -227,6 +234,10 @@ try {
       `只读红线：出现非 GET 请求 ${JSON.stringify(nonGet)}`,
     );
   });
+} catch (e) {
+  // 失败事实已由 step() 记入 findings/failed；此处仅阻止异常穿透，让
+  // 失败证据件（qa-log.json）与显式 exit(1) 分支可达。
+  stepError = e;
 } finally {
   await browser.close();
 }
@@ -241,7 +252,7 @@ await writeQaLog(EVIDENCE, {
 });
 
 if (failed) {
-  console.error("\nPROD-SMOKE FAILED");
+  console.error(`\nPROD-SMOKE FAILED${stepError ? ` -- ${stepError.message}` : ""}`);
   process.exit(1);
 }
 console.log("\nPROD-SMOKE PASSED（首屏 200 + 资源契约 + 只读 404 全绿）");
