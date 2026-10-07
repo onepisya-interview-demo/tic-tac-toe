@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { normalizeRoom } from '@/lib/room-name';
 import { registerOrLoginRoom } from '@/lib/db';
 import { problemResponse } from '@/lib/api-problem';
+import { withRouteTiming } from '@/lib/api-timing';
 import type { GameStats } from '@/lib/game';
 
 // W1 (ulw-room-migration-home-landing) thin transport wrapper.
@@ -43,7 +44,7 @@ interface RoomResponse {
   existed: boolean;
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function postRooms(request: Request): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
@@ -71,4 +72,10 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return problemResponse(500, 'db-unavailable');
   }
+}
+
+// Timing wrapper (trace-minimal, roadmap ticket 8): one JSON line per
+// request with route/duration; response semantics untouched.
+export async function POST(request: Request): Promise<Response> {
+  return withRouteTiming('/api/rooms', postRooms)(request);
 }

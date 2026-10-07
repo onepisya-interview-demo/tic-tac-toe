@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { loadRecordByRoom, mergeRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
+import { withRouteTiming } from '@/lib/api-timing';
 import { isGameStats, type GameStats } from '@/lib/game';
 
 // W1 (ulw-room-migration-home-landing) thin transport wrapper.
@@ -37,7 +38,7 @@ function isMergeBody(v: unknown): v is { stats: GameStats } {
   return true;
 }
 
-export async function POST(
+async function postMerge(
   request: Request,
   { params }: { params: Promise<{ room: string }> },
 ): Promise<Response> {
@@ -70,4 +71,13 @@ export async function POST(
   } catch {
     return problemResponse(500, 'db-unavailable');
   }
+}
+
+// Timing wrapper (trace-minimal, roadmap ticket 8): one JSON line per
+// request with route/duration; response semantics untouched.
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ room: string }> },
+): Promise<Response> {
+  return withRouteTiming('/api/rooms/[room]/stats/merge', postMerge)(request, context);
 }

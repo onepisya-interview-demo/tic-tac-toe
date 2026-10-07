@@ -43,6 +43,84 @@ const CAPTURE_CHANNEL_ANCHORS = [
   "page.on('pageerror')",
 ];
 
+// Probe-side performance timing capture (trace-minimal, roadmap ticket 8).
+//
+// Rides the ticket-5 unified evidence channel: every main-frame navigation
+// stamps a `qa-nav-<n>` performance.mark inside the page (probe-side timing
+// points), and right before the probe closes its context/browser we derive
+// measures between consecutive marks and read the mark/measure/navigation/
+// paint timelines back into the SAME capture artifact's `performance`
+// section. Zero per-probe changes — launchQA() wires it for everyone.
+// Harvest is best-effort: a page that is already gone simply yields no
+// snapshot, and capture must never fail a probe (same rule as console).
+const PERF_MARK_PREFIX = 'qa-nav';
+
+const perfCapture = {
+  contexts: new Set(),
+  snapshots: [],
+  markSeq: 0,
+};
+
+function attachPerformanceCapture(ctx, page) {
+  perfCapture.contexts.add(ctx);
+  page.on('framenavigated', (frame) => {
+    if (frame !== page.mainFrame()) return;
+    const n = (perfCapture.markSeq += 1);
+    // Best-effort timing point: a navigation racing us just means one mark
+    // fewer, never a probe failure.
+    frame
+      .evaluate((name) => performance.mark(name), `${PERF_MARK_PREFIX}-${n}`)
+      .catch(() => {});
+  });
+}
+
+// Derive qa measures + read back the page's timing entries. Runs inside the
+// page so `performance.mark/measure` are exercised exactly as the ticket
+// describes (real marks, real measures, then collected).
+async function harvestPerformanceTiming() {
+  for (const ctx of perfCapture.contexts) {
+    let pages = [];
+    try {
+      pages = ctx.pages();
+    } catch {
+      continue; // context already destroyed
+    }
+    for (const page of pages) {
+      try {
+        const snapshot = await page.evaluate((prefix) => {
+          const pick = (entry) => ({
+            name: entry.name,
+            startTime: entry.startTime,
+            duration: entry.duration,
+          });
+          const qaMarks = performance
+            .getEntriesByType('mark')
+            .filter((entry) => entry.name.startsWith(prefix))
+            .sort((a, b) => a.startTime - b.startTime);
+          for (let i = 1; i < qaMarks.length; i += 1) {
+            performance.measure(
+              `${qaMarks[i - 1].name} -> ${qaMarks[i].name}`,
+              qaMarks[i - 1].name,
+              qaMarks[i].name,
+            );
+          }
+          return {
+            url: location.href,
+            marks: performance.getEntriesByType('mark').map(pick),
+            measures: performance.getEntriesByType('measure').map(pick),
+            navigation: performance.getEntriesByType('navigation').map(pick),
+            paint: performance.getEntriesByType('paint').map(pick),
+          };
+        }, PERF_MARK_PREFIX);
+        perfCapture.snapshots.push(snapshot);
+      } catch {
+        // Page already navigated away or closed — no snapshot for it.
+      }
+    }
+    perfCapture.contexts.delete(ctx);
+  }
+}
+
 // Derive the probe name from the running probe script (process.argv[1])
 // so capture artifacts are self-describing without any per-probe opt-in.
 function defaultProbeName() {
@@ -95,6 +173,14 @@ function registerConsoleCaptureFlush() {
           totalEntries: consoleCapture.entries.length,
           consoleMessages: counts.console,
           pageErrors: counts.pageerror,
+          performanceSnapshots: perfCapture.snapshots.length,
+        },
+        // Probe-side performance timing section (trace-minimal, ticket 8):
+        // one snapshot per still-open page at close time, each carrying the
+        // page's mark/measure/navigation/paint entries as plain JSON.
+        performance: {
+          markPrefix: PERF_MARK_PREFIX,
+          timingSnapshots: perfCapture.snapshots,
         },
         entries: consoleCapture.entries,
       };
@@ -165,6 +251,17 @@ export async function launchQA(options = {}) {
   const page = await ctx.newPage();
   attachConsoleCapture(page, probeName);
   registerConsoleCaptureFlush();
+  attachPerformanceCapture(ctx, page);
+  // Wrap both close paths so the timing harvest runs while pages are still
+  // alive — probes call either `ctx.close()` (mid-session contexts) or
+  // `browser.close()` (final teardown); both harvest-then-close. Idempotent:
+  // harvested contexts leave the live set, so double close is a no-op pass.
+  const originalCtxClose = ctx.close.bind(ctx);
+  ctx.close = (...args) =>
+    harvestPerformanceTiming().then(() => originalCtxClose(...args));
+  const originalBrowserClose = browser.close.bind(browser);
+  browser.close = (...args) =>
+    harvestPerformanceTiming().then(() => originalBrowserClose(...args));
   return {
     browser,
     ctx,
