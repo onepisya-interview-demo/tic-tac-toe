@@ -54,6 +54,8 @@ node tests/qa/result-celebration-qa.mjs      # W-A F1-F5 confetti 触发与不�
 node tests/qa/result-fresh-qa.mjs            # W-F W-F1/W-F2 胜局/平局首帧战绩新鲜度
 node tests/qa/confetti-origin-qa.mjs         # 桌面内聚起点 ≥1280px / 较小视口边缘起点
 node tests/qa/pwa-sw-cache-qa.mjs            # P3 SW dual-layer：manifest 二次 fetch 经 SW 命中
+# 票 17（2026-10-08）生产冒烟——不需要本地 server，直连生产只读实跑：
+node tests/qa/prod-smoke.mjs                  # 首屏 200 + 关键资源契约 + 只读 404（PROD_BASE_URL 可覆写）
 ```
 
 可选 env：BASE_URL（默认 http://localhost:3000）、EVIDENCE_DIR（默认 .omx/evidence/<script>）、

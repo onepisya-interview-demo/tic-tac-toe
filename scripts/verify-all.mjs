@@ -8,9 +8,11 @@
 // 探针走 hermetic :3101 范式（docs/commands.md「浏览器探针启动范式」）：
 //   临时 sqlite 库 + 生产构建 server，逐探针实跑。
 //
-// 20 探针清单 = tests/qa/*.mjs 全集减 3：
+// 20 探针清单 = tests/qa/*.mjs 全集减 4：
 //   - commit-audit.mjs（⑤层门禁工具，非浏览器探针）
 //   - merge-sync-qa.mjs / sync-qa.mjs（头注 DISABLED，ulw-name-login-one-truth W2/W3 退役面）
+//   - prod-smoke.mjs（票 17 生产冒烟——目标为生产 3t.onepis.net 只读，
+//     绝不进本 hermetic 循环；生产面复跑另行随验证波起算）
 // 新增探针或解 DISABLED 时须同步本清单；清单项缺文件立即报错，防静默漂移。
 //
 // KNOWN_STALE_PROBES（存量过时基线，2026-10-08 票 2 走查首录）：
