@@ -12,7 +12,7 @@
 | 离线对局（纯本地） | BR-4 | /offline 100% 纯本地，断网可玩可记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
 | 在线对局与战绩账本 | BR-6, BR-10, BR-12 | 服务端权威精确累加，不静默建档，删除销户＋TTL 兜底 | `tests/qa/rooms-race-qa.mjs` |
 | 战绩重置 | BR-7 | 重置清零战绩，房间身份保留 | `tests/qa/room-reset-qa.mjs` |
-| 离线战绩合并（弹框） | BR-1, BR-5, BR-9, BR-11 | 仅「离线局→首页」导航转换弹框，确认才合并，初焦落主 CTA | `tests/qa/home-return-qa.mjs` + `components/HomeDialogMount.test.tsx` |
+| 离线战绩合并（弹框） | BR-1, BR-5, BR-9, BR-11 | 仅「离线局→首页」导航转换弹框，确认才合并（BR-9 初焦无机械验证入口，见逐条行） | `tests/qa/home-return-qa.mjs` + `components/HomeDialogMount.test.tsx`（二者均不验 BR-9） |
 | 身份一致性（本机唯一） | BR-11 | 弹框投递目标＝本机身份，合并不改既有身份 | `tests/qa/one-identity-qa.mjs` + `tests/qa/home-return-qa.mjs` |
 
 ## 逐条 BR 功能行
@@ -43,7 +43,7 @@
 
 - **BR-1 合并战绩弹框仅在「离线局 → 首页」导航转换时出现**——/offline 玩完局软导航回 `/` 且 pending > declined 才弹（`afterViewTransition` 推迟 showModal）；直接打开/硬刷新首页、从 /online /result 回首页、同会话无增量均不弹。验证：`tests/qa/home-return-qa.mjs` + `components/HomeDialogMount.test.tsx`。
 - **BR-5 POST /merge 仅用户主动确认**——弹框点「合并并清空」才发 merge；确认前零调用；409 防静默建档；拒绝＝零网络写。验证：`tests/qa/home-return-qa.mjs` step04/05。（历史探针 `tests/qa/merge-sync-qa.mjs` 头注 DISABLED——ulw-name-login-one-truth W2/W3 退役面，不在走查清单，见 `scripts/verify-all.mjs` 探针清单。）
-- **BR-9 弹框初焦落主 CTA**——合并弹框打开后初焦点落「合并并清空」（rAF），不落「保留本地」/输入框。验证：`components/HomeDialogMount.test.tsx`（组件测试，无浏览器探针）。
+- **BR-9 弹框初焦落主 CTA**——合并弹框打开后初焦点落「合并并清空」（rAF），不落「保留本地」/输入框。验证：**无机械验证入口**——`components/HomeDialogMount.test.tsx` 11 个用例全为 BR-1 触发/确认/拒绝逻辑，零 focus/activeElement 断言（2026-10-08 评审 grep 亲证；头注释 `// BR: BR-1, BR-9` 所标 BR-9 覆盖与实际用例脱节）；全仓亦无其他 BR-9 断言面，机制状态见 [docs/anti-patterns.md](./anti-patterns.md) L1-17「无机制」。注：真源 `docs/business-rules.md` BR-9 探针列同引该文件、同为失实引用，待随 L1-17 重修（测试段位探针补 focus 断言）一并修正——届时本行同步回填。
 
 ### 身份一致性（本机唯一）
 
