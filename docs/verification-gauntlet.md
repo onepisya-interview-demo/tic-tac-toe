@@ -104,6 +104,49 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
    [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)；反模式侧记 L1-32 见
    [`docs/anti-patterns.md`](./anti-patterns.md)（同源互链，2026-10-04 补回指——b5a3299 互链实为单向）。
+   触发面豁免显式清单见 §5.1（票 4 · ✅D14 对本盲区的显式化收口——豁免不翻案，
+   C6 悬置口径不变）。
+
+## 5. CI 触发面豁免清单与「五必绿 ↔ 11 job」对账（票 4 · ✅D14 · 2026-10-08）
+
+> 真源：`.omo/decisions-20261001.md` ✅D14 卡；验证基建路线图队列票 4（Plan: `.omo/plans/ulw-verification-infra-roadmap-20261007.md` §七）。机械断言载体：`tests/qa/ci-contract.test.ts`（BASE_URL 契约／豁免条目在档／对账表↔ci.yml job 集合双向一致／run_attempt=1 首跑绿口径在档，挂层①vitest）。
+
+### 5.1 CI 触发面豁免清单（显式化）
+
+| 豁免对象 | 现状（实测口径） | 纪律替代（本地侧） | 教训锚 | 解豁免通道 |
+| --- | --- | --- | --- | --- |
+| dev push | ci.yml `on:` 仅 `pull_request → main`，dev 直推零 CI——凡不产生 PR 的改动面，CI 侧全静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6——主公裁决档，未裁决不翻案；本清单只显式化现状，不立项亦不驳回 |
+
+### 5.2 「五 CI 必绿」↔ 11 job 对账表
+
+「五 CI 必绿」系 [docs/branching.md](./branching.md) main-gate 措辞的历史口径（五门＝lint／typecheck／test／build／visual-qa）；main-gate ruleset 实测（2026-10-08 `gh api` rulesets，B 档外取通道）`required_status_checks` 已列 **11 contexts**＝ci.yml 全部 11 job（2026-09-25 T-L2 五 BR 探针 job 入 CI 时同步扩列，见 `tests/qa/probe-reconciliation.test.ts` 注记）。对账以本表为准；branching.md 措辞修订不属票 4 范围（记档不代改）。
+
+| # | ci.yml job id | CI 实报 check 名（job `name:`） | ruleset required context（gh 实测） | 必绿档位 | 六层对应 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | lint | Lint (ESLint) | Lint (ESLint) ✅ | 五必绿 | ③ |
+| 2 | typecheck | Typecheck (tsc) | Typecheck (tsc) ✅ | 五必绿 | ② |
+| 3 | test | Test (Vitest) | Test (Vitest) ✅ | 五必绿 | ① |
+| 4 | build | Build (Next.js) | Build (Next.js) ✅ | 五必绿 | ④ |
+| 5 | visual-qa | Visual QA (Playwright probe) | Visual QA (Playwright probe) ✅ | 五必绿 | ⑥ |
+| 6 | rooms-race | Rooms-race QA (Playwright probe) | rooms-race ⚠️ | 追加 BR 探针 | ⑥ |
+| 7 | home-return-qa | Home-return QA (Playwright probe) — BR-1/2/3/5 | home-return-qa ⚠️ | 追加 BR 探针 | ⑥ |
+| 8 | offline-mode-qa | Offline-mode QA (Playwright probe) — BR-4 | offline-mode-qa ⚠️ | 追加 BR 探针 | ⑥ |
+| 9 | offline-qa | Offline QA / pure-local (Playwright probe) — BR-4 | offline-qa ⚠️ | 追加 BR 探针 | ⑥ |
+| 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | online-direct-qa ⚠️ | 追加 BR 探针 | ⑥ |
+| 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | room-reset-qa ⚠️ | 追加 BR 探针 | ⑥ |
+
+对账发现（2026-10-08，票 4 实测）：
+
+- **命名错位**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设；修复（ruleset 改列显示名、或 ci.yml 六 job 去 `name:` 改用 id 报名）触 GitHub 侧配置与 ci.yml 票 4 五项外文件面，均不属本票——记档呈报，随下次发版 PR 波处置。
+- **行数对账**：本表 11 行＝`grep -cE "^  [a-z0-9-]+:$" .github/workflows/ci.yml`＝11；`tests/qa/ci-contract.test.ts` 持续断言表行 job id 集合与 ci.yml job id 集合双向相等，防 job 增删后本表漂移。
+
+### 5.3 BASE_URL 契约（动作③）
+
+每个探针 job 的探针 step 必须显式携带 `BASE_URL=http://localhost:<port>`，且端口与本 job 起 server 的 `PORT`（或裸 `pnpm start` 的 Next.js 默认 3000）一致——教训：rooms-race job 漏传 `BASE_URL`（server :3101／探针默认 :3000）自进 CI 起约 6.3 天未绿（`a2a667d` 修复，L1-32）。本票将 visual-qa step 补齐显式 `BASE_URL=http://localhost:3000`（与其探针默认值同值，行为零变），契约对全部 7 个探针 job 统一、无「默认端口例外」分支——默认值耦合正是 a2a667d 事故类。
+
+### 5.4 EVIDENCE_DIR 三态核验——unproven（D-1 挂账）
+
+ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（疑点：探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用；`upload-artifact` 的 `path:` 同形字面量或恰好同指工作区相对路径而「意外能跑」）。三态判定＝展开／不展开／疑（判「疑」＝fail）。**本波无 PR/CI 日志可查，按计划 D-1 降级路径以 unproven 注记收口——实跑判定搭下次发版 PR 波**（届时取 CI 日志中 EVIDENCE_DIR 实际值两态取一；若判不展开→在票 4 范围内修为 env 上下文正确写法 `${{ runner.temp }}`）。期间 EVIDENCE_DIR 断言无法定版，不入 `tests/qa/ci-contract.test.ts`。证据件：`.omo/evidence/20261008-ticket4-d14-ci-contract.md`。
 
 > 【2026-10-04 勘误补注】本条旧记「自进 CI 起 12 天从未绿过」系窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化）。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 

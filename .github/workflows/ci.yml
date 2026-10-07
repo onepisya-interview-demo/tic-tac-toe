@@ -114,7 +114,7 @@ jobs:
           kill "$SERVER_PID" || true
           exit 1
       - name: Run visual-qa probe
-        run: pnpm exec node tests/qa/visual-qa.mjs
+        run: BASE_URL=http://localhost:3000 pnpm exec node tests/qa/visual-qa.mjs
       - name: Stop production server
         if: always()
         run: |
