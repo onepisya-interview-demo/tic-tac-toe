@@ -89,6 +89,52 @@ A 档依据＝书稿《第20章》判据：错误判断成本＜停下成本；�
 - **派发 brief 正文一律中文**（dispatcher-author prose default 中文）。技能触发行（`@lark-...` 等以 `@skill:` 开头的触发指令）与外部 prompt 模板原文豁免——只对调度者自写的「做什么 / 验收 / 不做」段钉中文。brief 漂移实证：history plan 中文占比 1%–60% 不等（`ulw-reset-store-outcome-error.md` 几乎全英文、`ulw-modal-collision-and-error-alerts-20260923.md` 英文骨架 + 中文正文）。R7 是 commit 端的中文硬门禁；brief 端的中文要求与 R7 配套，闭环。
 - **优化类工单「0 win（书面证明）」与「N win」同等合法**。
 
+## 派发红线断言模板（✅D13 · 2026-10-08 入档）
+
+> 真源：`.omo/decisions-20261001.md` ✅D13 卡（t-n4 型「diff 文件面 vs brief 白名单」断言曾只在历史会话内联、人工拦截成功系其机械化信号）；验证基建路线图队列票 3 落地（Plan: `.omo/plans/ulw-verification-infra-roadmap-20261007.md` §七）。用途：**波收口前调度者独立验收**——断言执行波实际改动面 ⊆ brief 白名单、硬红线零触碰、未 push、提交纪律经 commit-audit。断言跑在与执行席不同的会话（见本手册「验证性工作默认隔离」）；结论只报 clean／changed／blocked 三值，任一断言 FAIL 即整波 blocked 退回执行席，禁「看起来对了」。
+
+### 可复制断言块（bash，仓根执行）
+
+```sh
+# —— 派发红线断言（波收口前实跑；全过输出 PASS）——
+# 输入三件（调度者按 brief 填；WHITELIST 逐文件列，禁通配、禁目录级豁免）：
+RANGE="<波 commit 区间>"                # 例：origin/main..HEAD 或 <sha>^..<sha>
+WHITELIST="<文件面白名单 空格分隔>"      # = brief「只动」清单＋票面明说搭车件（回执记载）
+WAVE_HEAD=$(git rev-parse HEAD)         # 波尾 commit（先核 RANGE 右端即 HEAD）
+
+# ① 正向：diff 文件面 ⊆ 白名单（越界清单非空 = FAIL）
+LEAK=$(comm -23 \
+  <(git diff --name-only "$RANGE" | sort -u) \
+  <(printf '%s\n' $WHITELIST | tr ' ' '\n' | sed '/^$/d' | sort -u))
+[ -z "$LEAK" ] || { echo "FAIL① 越界文件：$LEAK"; exit 1; }
+
+# ② 硬红线零触碰（与白名单无关、白名单不可豁免——vercel.json 死边界／决策文件／证据目录）
+git diff --name-only "$RANGE" | grep -qE '^(vercel\.json|\.omo/decisions-|\.omo/evidence/)' \
+  && { echo "FAIL② 硬红线文件被改（vercel.json／decisions／evidence）"; exit 1; }
+
+# ③ 决策文件与证据目录未随任一 commit 入仓（含中间提交后回退的；range 内逐笔扫）
+git log --name-only --pretty=format: "$RANGE" | grep -qE '^\.omo/(decisions-|evidence/)' \
+  && { echo "FAIL③ 决策／证据文件曾入 range 内 commit"; exit 1; }
+
+# ④ 未 push：波尾 commit 不在任何远端枝（push 归主公，C 档白名单 2）
+[ -z "$(git branch -r --contains "$WAVE_HEAD")" ] \
+  || { echo "FAIL④ 波尾已抵达远端：$(git branch -r --contains "$WAVE_HEAD")"; exit 1; }
+
+# ⑤ 提交纪律代证：range 内逐笔过 commit-audit（R1-R7 含 Plan footer／中文正文／trailer；
+#    「未 --no-verify」不可静态证，以 hook 同源规则全绿代证）
+node tests/qa/commit-audit.mjs --range "$RANGE" \
+  || { echo "FAIL⑤ commit-audit range 红"; exit 1; }
+
+echo "PASS——红线断言①-⑤全过"
+```
+
+### 使用注记
+
+- **WHITELIST 惟一合法来源**＝brief「本任务只动」段＋票面明说搭车件（回执已记载）；事后追加白名单＝漂移信号，须在回执认领（先例：票 1 波 `probe-reconciliation.test.ts` 头注去行号化系回执记载的搭车件，断言跑前并入白名单即 PASS）。
+- ①的语义是 **⊆ 不是 ＝**：白名单文件未必全被改（票面允许「改 A 或 B」）；漏改属完成度问题，归 Scenario 验收，不归本断言。
+- `.github/workflows/` 触碰不受 ② 拦，受 ① 拦——workflows 文件不在白名单即 FAIL①；在白名单即必须有票面明说触点背书（路线图纪律：明说触点仅两处）。vercel.json 则任何白名单都拦（② 与 ① 双保险）。
+- 断言脚本只读（除 echo 外零副作用），可在任意会话重放；历史波回放演练即直接换 RANGE 重跑（先例证据件：`.omo/evidence/20261008-ticket3-d13-redline-replay.md`，gitignored）。
+
 ## 意图锚定与防漂移（2026-09-22 新增）
 
 > 依据：主公反复实测「AI 意图理解漂移是最大问题」+ llm-wiki 漂移科学蒸馏（`agent-rule-decay` / `goal-register` / `attention-dilution-vs-context-poisoning` / `agentic-pipeline-contract-integrity`）。核心事实：**规则不是被违反而是被后续 token out-voted——约 15 次 tool call 后 system prompt 规则可靠失效，全程无报错（green-dashboard failures）**。派发时绑定意图只是起点，防漂移是全程协议。
