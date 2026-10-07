@@ -45,7 +45,7 @@ const THEME_COLOR = "#0A0A0A" as const;
 // Sources: docs/social-card-{home,play,result,brandmark}.png.
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://3t-tic-tac-toe.vercel.app/"),
+  metadataBase: new URL("https://3t.onepis.net/"),
   title: "井字棋 · 同设备 pass-and-play",
   description: "两人同设备轮流下的井字棋，自动记录战绩。",
   // PWA install metadata — Next.js auto-injects the <link rel="manifest">
@@ -63,9 +63,12 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "井字棋",
     // Canonical: explicit absolute so crawlers see the public onepis.net
-    // domain (metadataBase stays at the vercel.app host so Vercel edge
-    // follows the cname automatically). All three routes share this
-    // canonical — the share-card is intentionally a single product URL.
+    // domain. metadataBase points at the same 3t.onepis.net host (D16
+    // single-source decision, 2026-10-04 自治裁决 a) so relative OG /
+    // Twitter image URLs resolve against the one public production domain
+    // — the earlier vercel.app metadataBase kept a second domain alive in
+    // SEO surfaces. All three routes share this canonical — the share-card
+    // is intentionally a single product URL.
     url: "https://3t.onepis.net/",
     title: "井字棋 · 同设备 pass-and-play",
     description: "两人同设备轮流下的井字棋，自动记录战绩。",

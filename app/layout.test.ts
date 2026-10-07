@@ -43,11 +43,13 @@ describe("app/layout metadata — share preview contract", () => {
     expect(LAYOUT_SRC).toMatch(/site\s*:\s*"@onepisya"/);
   });
 
-  it("keeps metadataBase pointing at the Vercel canonical host", () => {
-    // metadataBase stays at the vercel.app host so Vercel edge follows
-    // the onepis.net cname automatically without altering SEO.
+  it("keeps metadataBase aligned with the 3t.onepis.net canonical host", () => {
+    // D16 single-source decision (2026-10-04 自治裁决 a): the production
+    // URL 正源 is 3t.onepis.net — metadataBase, openGraph.url and the
+    // secureUrl mirrors must agree on one public domain. The vercel.app
+    // host assertion was retired with the dual-domain state.
     expect(LAYOUT_SRC).toMatch(
-      /metadataBase\s*:\s*new URL\("https:\/\/3t-tic-tac-toe\.vercel\.app\/"\)/,
+      /metadataBase\s*:\s*new URL\("https:\/\/3t\.onepis\.net\/"\)/,
     );
   });
 
