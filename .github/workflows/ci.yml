@@ -53,6 +53,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - run: pnpm test:property
 
   build:
     name: Build (Next.js)
