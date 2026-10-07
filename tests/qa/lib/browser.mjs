@@ -34,14 +34,17 @@ const RECORDING_ROOT =
 //      default; .omo/evidence/ is gitignored)
 const DEFAULT_CAPTURE_ROOT = '.omo/evidence/console-captures';
 
-// Literal registration-site anchors for the two capture channels. Kept as
-// live code (not prose): the flush payload emits them so every capture
-// artifact self-describes which channels produced it, and the capture
-// contract stays greppable in source form.
-const CAPTURE_CHANNEL_ANCHORS = [
-  "page.on('console')",
-  "page.on('pageerror')",
-];
+// Capture-channel contract note (2026-10-08 review-fix wave): the earlier
+// string-literal anchor array (CAPTURE_CHANNEL_ANCHORS) was removed — it
+// existed only to satisfy a strict grep criterion whose pattern can never
+// match a real registration call (registrations always carry a listener
+// argument), i.e. the criterion was satisfied by source text rather than
+// by measuring behavior. The roadmap ticket-5 criterion is now the loose
+// form (see plan §七 票 5 勘误) which matches exactly the two registration
+// calls below, and the flush payload's `channels` field is recorded at
+// registration time — behavior-derived, emitted only for channels that
+// actually got attached (value form drops the inner quotes so it can never
+// re-trigger the grepped literal).
 
 // Probe-side performance timing capture (trace-minimal, roadmap ticket 8).
 //
@@ -130,12 +133,13 @@ function defaultProbeName() {
 const consoleCapture = {
   probeName: defaultProbeName(),
   entries: [],
+  channels: [], // 注册时实记的通道名（行为自描述：未注册即不发射）
   flushRegistered: false,
 };
 
 function attachConsoleCapture(page, probeName) {
   if (probeName) consoleCapture.probeName = probeName;
-  // Channel 1 — page.on('console'): every console message the page emits.
+  // Channel 1 — every console message the page emits.
   page.on('console', (message) => {
     consoleCapture.entries.push({
       kind: 'console',
@@ -144,7 +148,10 @@ function attachConsoleCapture(page, probeName) {
       at: new Date().toISOString(),
     });
   });
-  // Channel 2 — page.on('pageerror'): uncaught page-side exceptions.
+  if (!consoleCapture.channels.includes('page.on(console)')) {
+    consoleCapture.channels.push('page.on(console)');
+  }
+  // Channel 2 — uncaught page-side exceptions.
   page.on('pageerror', (error) => {
     consoleCapture.entries.push({
       kind: 'pageerror',
@@ -154,6 +161,9 @@ function attachConsoleCapture(page, probeName) {
       at: new Date().toISOString(),
     });
   });
+  if (!consoleCapture.channels.includes('page.on(pageerror)')) {
+    consoleCapture.channels.push('page.on(pageerror)');
+  }
 }
 
 function registerConsoleCaptureFlush() {
@@ -166,7 +176,7 @@ function registerConsoleCaptureFlush() {
       const payload = {
         probe: consoleCapture.probeName,
         baseUrl: BASE_URL,
-        channels: CAPTURE_CHANNEL_ANCHORS,
+        channels: consoleCapture.channels,
         exitCode: code,
         capturedAt: new Date().toISOString(),
         summary: {
