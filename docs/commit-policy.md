@@ -87,6 +87,15 @@ R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7�
 
 一个提交一个主题。每个提交都必须独立构建、测试为绿；不提交 WIP 或 omnibus。next-env.d.ts 和 Next 自动生成区块的变化单独作为 chore 提交，方便未来 bisect。
 
+## 提交序列规范（失败测试在前，2026-10-08 票 16 入档）
+
+fix 类提交采用「失败测试在前」序列——修复的验收证据是**先红后绿**，不是「事后绿」：
+
+- **两段式（首选）**：先提交 `test(<scope>): 复现 <缺陷>`（该提交单独跑层①必须红——红测试在无修复时必须失败），再提交 `fix(<scope>): …`（层①回绿）。bisect 时红测试提交即缺陷的机械定义。
+- **一段式（次选，小修）**：fix 与测试同 commit，但提交前须在工作区验证过「只留测试改动时层①为红」。
+- **无测试证据的 fix**：配置面／探针脚本面修复（如 ci.yml env、探针触发方式）允许，但正文须写明验证方式（探针实跑记录、hermetic 复现输出归 .omo/evidence/）；纯业务行为面 fix 无测试证据视为违反本节。
+- **轻量启发检查（非门禁）**：`node scripts/fix-commit-heuristics.mjs [--range <git-ref>] [--strict]` 对 fix 提交对账测试证据——三值 `PASS(test-in-commit)`／`PASS(test-in-parent)`／`NOTE(no-test-evidence)`；默认提示模式 exit 0，`--strict` 下 NOTE 变 exit 1。判定测试文件＝`*.test.{ts,tsx,mjs}` 与 `tests/qa/*.mjs`。本检查**不进 commit-msg hook**（轻量启发，票 16 范围内不新增门禁面；R1-R7 语义零变化）。
+
 ## 设计记录
 
 非平凡工作先在 .omo/plans/<slug>.md 写设计记录，记录选项取舍、禁止事项和提交约定。实现提交通过 Plan: footer 引用它。
