@@ -116,8 +116,13 @@ function tail(text) {
   return `…（前文截断）…\n${text.slice(-TAIL_LIMIT)}`;
 }
 
-// 跑一条 shell 命令：输出实时透传，退出码即判据；超时杀进程记 FAIL。
+// 跑一条 shell 命令：输出实时透传，退出码即判据；超时杀进程组记 FAIL。
 // countAsFailure=false 供 known-stale 基线探针用：照报 FAIL 但不翻 exit 码。
+// 超时纪律（评审问题③修复）：spawn detached 让 sh 成为进程组组长，超时
+// 杀整组（pnpm/vitest fork 出的孙进程一并清）；另设 5s 兜底——即使管道
+// 仍被组外进程持有、'close' 迟迟不来，也到点强制记 FAIL resolve，头注
+// 「超时 → exit 1」永不挂死（原版只杀直接子进程：孤儿孙进程持有 stdout
+// 管道写端时 'close' 永不触发、promise 永久 pending，评审实验钉死）。
 function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd, countAsFailure = true } = {}) {
   return new Promise((resolve) => {
     const stepStart = Date.now();
@@ -126,6 +131,7 @@ function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd, countAsFailure =
       cwd: REPO_ROOT,
       env: { ...process.env, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     });
     let out = '';
     child.stdout.on('data', (d) => {
@@ -136,20 +142,35 @@ function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd, countAsFailure =
       out += d;
       process.stderr.write(d);
     });
+    let settled = false;
+    let killFallback = null;
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      // 杀整个进程组（直接子＋全部后代）；组已消失则退回单杀直接子。
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      // 兜底：组外进程仍持有管道、'close' 不来时，到点强制记 FAIL resolve。
+      killFallback = setTimeout(() => settle(null, 'SIGKILL', true), 5_000);
     }, timeoutMs);
-    child.on('close', (code, signal) => {
+    function settle(code, signal, timedOut = false) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      const ok = code === 0;
+      if (killFallback) clearTimeout(killFallback);
+      const ok = code === 0 && !timedOut;
       const dur = secs(Date.now() - stepStart);
-      console.log(`[${ok ? 'PASS' : 'FAIL'}] ${label} (${dur}${signal ? `, ${signal}` : ''})`);
+      console.log(
+        `[${ok ? 'PASS' : 'FAIL'}] ${label} (${dur}${signal ? `, ${signal}` : ''}${timedOut ? ', timeout' : ''})`,
+      );
       if (!ok) {
         if (countAsFailure) hadFailure = true;
         console.log(`--- ${label} 输出尾部 ---\n${tail(out)}--- 尾部完 ---`);
       }
       resolve(ok);
-    });
+    }
+    child.on('close', (code, signal) => settle(code, signal));
   });
 }
 
