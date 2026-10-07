@@ -272,7 +272,8 @@ describe('components/RoomGateDialog (W2 ulw-room-migration-home-landing D-2)', (
     fireEvent.change(input, { target: { value: '   carol   ' } });
     fireEvent.click(screen.getByTestId('room-gate-confirm'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
-    expect(onConfirm).toHaveBeenCalledWith('carol', expect.any(Boolean));
+    // 票 15：existed 由 fetchSpy 固定回包决定（mock 恒 existed:false），钉字面
+    expect(onConfirm).toHaveBeenCalledWith('carol', false);
     const posts = fetchSpy.mock.calls.filter((c) => {
       const init = (c[1] ?? {}) as RequestInit;
       return (init.method ?? 'GET').toUpperCase() === 'POST';

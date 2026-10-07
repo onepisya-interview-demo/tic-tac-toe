@@ -93,6 +93,8 @@ describe('lib/offline-stats sync sentinel', () => {
       throw new Error('QuotaExceeded');
     });
     expect(() => persistSyncedServerTotal(99)).not.toThrow();
+    // 票 15：no-throw 不再是唯一断言——写失败后读回必须仍是默认 0
+    expect(loadSyncedServerTotal()).toBe(0);
     setItemSpy.mockRestore();
   });
 
@@ -133,6 +135,8 @@ describe('lib/offline-stats sync sentinel', () => {
       throw new Error('QuotaExceeded');
     });
     expect(() => persistLastMergedLocal(99)).not.toThrow();
+    // 票 15：no-throw 不再是唯一断言——写失败后读回必须仍是默认 0
+    expect(loadLastMergedLocal()).toBe(0);
     setItemSpy.mockRestore();
   });
 

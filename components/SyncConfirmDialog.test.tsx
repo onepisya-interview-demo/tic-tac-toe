@@ -571,22 +571,30 @@ describe('components/SyncConfirmDialog — W-T blind spots', () => {
     });
 
     it('loadDeclinedPending: sessionStorage throws → 0 (privacy mode degrade)', () => {
+      // 票 15：实例级 spyOn(window.sessionStorage, …) 在本 vitest 环境不拦截
+      //（探针实测 spy.mock.calls=0）——改 Storage.prototype 生效形态
       const getItemSpy = vi
-        .spyOn(window.sessionStorage, 'getItem')
+        .spyOn(Storage.prototype, 'getItem')
         .mockImplementation(() => {
           throw new Error('SecurityError');
         });
       expect(loadDeclinedPending()).toBe(0);
+      expect(getItemSpy.mock.calls.length).toBeGreaterThan(0); // 异常路径确被触发（票 15）
       getItemSpy.mockRestore();
     });
 
     it('writeDeclinedPending: sessionStorage throws → no crash (privacy mode)', () => {
+      // 票 15：实例级 spy 不拦截（探针实测）——改 Storage.prototype 生效形态
       const setItemSpy = vi
-        .spyOn(window.sessionStorage, 'setItem')
+        .spyOn(Storage.prototype, 'setItem')
         .mockImplementation(() => {
           throw new Error('QuotaExceededError');
         });
+      window.sessionStorage.removeItem(SYNC_DECLINED_KEY);
       expect(() => writeDeclinedPending(3)).not.toThrow();
+      // no-throw 不再是唯一断言——写失败后哨兵必须未落盘、异常路径确被触发
+      expect(window.sessionStorage.getItem(SYNC_DECLINED_KEY)).toBeNull();
+      expect(setItemSpy.mock.calls.length).toBeGreaterThan(0);
       setItemSpy.mockRestore();
     });
 
@@ -598,12 +606,17 @@ describe('components/SyncConfirmDialog — W-T blind spots', () => {
     });
 
     it('clearDeclinedPending: sessionStorage throws → no crash', () => {
+      // 票 15：实例级 spy 不拦截（探针实测）——改 Storage.prototype 生效形态
       const removeSpy = vi
-        .spyOn(window.sessionStorage, 'removeItem')
+        .spyOn(Storage.prototype, 'removeItem')
         .mockImplementation(() => {
           throw new Error('SecurityError');
         });
+      window.sessionStorage.setItem(SYNC_DECLINED_KEY, '9');
       expect(() => clearDeclinedPending()).not.toThrow();
+      // no-throw 不再是唯一断言——removeItem 失败后哨兵必须原样保留、异常路径确被触发
+      expect(window.sessionStorage.getItem(SYNC_DECLINED_KEY)).toBe('9');
+      expect(removeSpy.mock.calls.length).toBeGreaterThan(0);
       removeSpy.mockRestore();
     });
   });

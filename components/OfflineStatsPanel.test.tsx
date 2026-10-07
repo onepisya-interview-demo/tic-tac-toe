@@ -66,8 +66,8 @@ describe('components/OfflineStatsPanel (W5 账本直显——匿名态退役)', 
     render(<OfflineStatsPanel />);
     // F1：无名挂载 → StatsGrid 在 + offline-stats-anonymous 0 命中
     expect(screen.queryByTestId('offline-stats-anonymous')).toBeNull();
-    // screen 查询 stat-value（在 panel 内）断言 StatsGrid 已渲染
-    expect(screen.queryAllByTestId('stat-value').length).toBeGreaterThan(0);
+    // screen 查询 stat-value（在 panel 内）断言 StatsGrid 已渲染（票 15：计数钉字面 5 格）
+    expect(screen.queryAllByTestId('stat-value').length).toBe(5);
     // 数字 = 本机账本（emptyStats 默认零）
     expect(panelValues()).toEqual(['0', '0', '0', '0', '—']);
   });
@@ -139,7 +139,8 @@ describe('components/OfflineStatsPanel (W5 账本直显——匿名态退役)', 
     // 新面板结构：标题「单机战绩」 + StatsGrid 直显
     expect(screen.getByTestId('offline-stats-heading')).toHaveTextContent('单机战绩');
     expect(screen.queryByTestId('offline-stats-anonymous')).toBeNull();
-    expect(screen.queryAllByTestId('stat-value').length).toBeGreaterThan(0);
+    // 票 15：计数钉字面 5 格（不再 >0 弱断言）
+    expect(screen.queryAllByTestId('stat-value').length).toBe(5);
   });
 });
 

@@ -82,7 +82,9 @@ describe('lib/api-timing (JSON-line route timing, trace-minimal 票 8)', () => {
       expect(parsed.route).toBe('/api/rooms');
       expect(parsed.method).toBe('POST');
       expect(parsed.status).toBe(200);
-      expect(typeof parsed.duration).toBe('number');
+      // 票 15：typeof 对 NaN/Infinity 放行——改钉非负有限数值
+      expect(parsed.duration as number).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(parsed.duration as number)).toBe(true);
     });
 
     it('forwards extra args (dynamic-route { params } context) untouched', async () => {
@@ -132,7 +134,9 @@ describe('lib/api-timing (JSON-line route timing, trace-minimal 票 8)', () => {
       expect(parsed.route).toBe('/api/rooms');
       expect(parsed.status).toBe(500);
       expect(parsed.error).toBe(true);
-      expect(typeof parsed.duration).toBe('number');
+      // 票 15：同款改钉非负有限数值
+      expect(parsed.duration as number).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(parsed.duration as number)).toBe(true);
     });
 
     it('records unknown method when the first arg is not a Request', async () => {
