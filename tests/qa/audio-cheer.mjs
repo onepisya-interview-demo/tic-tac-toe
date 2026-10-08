@@ -8,22 +8,27 @@ import assert from 'node:assert/strict';
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
+import { passRoomGate } from './lib/enter-online.mjs';
 
 const BASE = BASE_URL;
+// Unique room per run (probe-repair ticket 18): /api/stats was retired
+// by the room migration, so the old `DELETE /api/stats` clean-up is a
+// no-op 404. A fresh hermetic DB + a unique room name gives the same
+// zero-history starting point through the current /api/rooms surface.
+const ROOM = `ac-${Date.now() % 1000000}`;
 const { browser, ctx, page } = await launchQA({ autoplay: true });
 
-await page.request.delete(`${BASE}/api/stats`);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 
-// 1. Unmute on /, then navigate to /online (page reload wipes the probe but
-//    localStorage carries the unmuted preference across).
+// 1. Unmute on /, then enter /online through the RoomGateDialog
+//    (c75cfdf/c9ef27f gated the start-online CTA — passRoomGate fills
+//    the room name, confirms, and lands on the board). The navigation
+//    wipes the probe but localStorage carries the unmuted preference.
 await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0');
 
-await page.click('[data-testid="start-online"]');
-await page.waitForURL('**/online');
-await page.waitForSelector('[data-testid="board"]');
+await passRoomGate(page, ROOM);
 await page.waitForTimeout(200);
 
 // 2. Install the AudioContext probe with frequency + timestamp capture.
@@ -61,7 +66,11 @@ const firstPlayer = firstStatus?.match(/轮到 ([XO])/)?.[1];
 await driveTopRowWin(page, { clickGapMs: 60 });
 
 // 4. Wait long enough for the setTimeout to fire and the cheer to schedule.
-await page.waitForURL('**/result', { timeout: 4000 });
+// Regex + 8s (was glob + 4s): the win push goes to `/result?room=<room>`
+// (end-anchored globs miss query strings) and the push now waits for
+// the in-flight outcome POST (W-F) — same shape the green result
+// probes use.
+await page.waitForURL(/\/result/, { timeout: 8000 });
 await page.waitForTimeout(1500);
 
 const probe = await page.evaluate(() => window.__probe);

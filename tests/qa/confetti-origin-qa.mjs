@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
+import { passRoomGate } from './lib/enter-online.mjs';
 import { ensureDir, writeQaLog } from './lib/evidence.mjs';
 
 const BASE = BASE_URL;
@@ -127,7 +128,12 @@ const VIEWPORTS = [
   },
 ];
 
+let roomSeq = 0;
 for (const { name, viewport, origin, sampling } of VIEWPORTS) {
+ // Unique room per viewport per run (probe-repair ticket 18): the
+ // retired global DELETE /api/stats reset is replaced by the current
+ // per-room surface (seed POST /api/rooms + reset POST below).
+ const ROOM = `coqa-${(roomSeq += 1)}-${Date.now() % 100000}`;
  const { browser, ctx, page } = await launchQA({ viewport });
  await ctx.addInitScript(() => {
    try {
@@ -141,19 +147,38 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
   });
 
   try {
-    await step(`${name}: reset stats via API`, async () => {
-      const r = await page.request.delete(`${BASE}/api/stats`);
-      assert.equal(r.status(), 200);
+    await step(`${name}: seed room + reset stats via API`, async () => {
+      // Pre-gate-era probe called DELETE /api/stats (global reset);
+      // that route is retired (room migration). Same-strength
+      // replacement on the current surface: register the unique room,
+      // reset its row, and assert the 200 carries an all-zero stats
+      // body (the old step only checked the status code — the body
+      // check is added strength, not a relaxation).
+      const seed = await page.request.post(`${BASE}/api/rooms`, {
+        data: { room: ROOM },
+      });
+      assert.equal(seed.status(), 200, `seed /api/rooms 200, got ${seed.status()}`);
+      const r = await page.request.post(
+        `${BASE}/api/rooms/${encodeURIComponent(ROOM)}/stats/reset`,
+      );
+      assert.equal(r.status(), 200, `reset 200, got ${r.status()}`);
+      const body = await r.json();
+      assert.equal(body.stats.totalGames, 0, `reset row all-zero, got ${JSON.stringify(body.stats)}`);
     });
 
     await step(`${name}: drive a win into /result`, async () => {
+      // Entry-drift fix (ticket 18): c75cfdf/c9ef27f gated the home
+      // start-online CTA behind RoomGateDialog — passRoomGate fills
+      // the room name, confirms (room pre-seeded above so this enters
+      // the existing room) and lands on the board. Win push goes to
+      // `/result?room=<room>` — regex, not the end-anchored
+      // `**/result` glob (globs miss query strings); 8s (was 4s)
+      // because the push waits for the in-flight outcome POST (W-F).
       await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-      await page.click('[data-testid="start-online"]');
-      await page.waitForURL('**/online');
-      await page.waitForSelector('[data-testid="board"]');
+      await passRoomGate(page, ROOM);
       await page.waitForTimeout(300);
       await driveTopRowWin(page);
-      await page.waitForURL('**/result', { timeout: 4000 });
+      await page.waitForURL(/\/result/, { timeout: 8000 });
       await page.waitForSelector('[data-testid="confetti"]');
     });
 
@@ -188,9 +213,13 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
 
     await step(`${name}: central UI stays clickable during the burst`, async () => {
       await page.screenshot({ path: `${OUT}/${name}-01-celebration.png` });
-      const headline = page.locator('[data-testid="result-headline"]');
-      await headline.waitFor({ state: 'visible' });
+      // result-headline was retired with the room-era result page;
+      // play-again is the current central-UI anchor (and the click
+      // target below).
+      await page.waitForSelector('[data-testid="play-again"]', { state: 'visible' });
       await page.click('[data-testid="play-again"]', { timeout: 2000 });
+      // play-again links to the bare /online (no query) — the glob is
+      // fine here.
       await page.waitForURL('**/online', { timeout: 3000 });
       await page.screenshot({ path: `${OUT}/${name}-02-after-ui-click.png` });
     });
@@ -259,14 +288,34 @@ for (const { name, viewport, origin, sampling } of VIEWPORTS) {
       findings.push({ name: 'offline-bugb-onstats', status: 'INFO', ...onStats });
     });
 
-    await step('offline-bugb: toggle stats→board, confetti count stays at 1', async () => {
+    await step('offline-bugb: toggle stats→board, no replay + F1 stale-reset lands', async () => {
       await p2.click('[data-testid="view-toggle"]');
       await p2.waitForSelector('[data-testid="board"]');
       await p2.waitForTimeout(200);
+      // Bug B 面（不重放）：toggle-back 全程 confetti 层最多 1 个——
+      // 重挂重放回归会出现第二 burst 周期；hoist 回归则上一步
+      // onStats count===1 已红（stats 视图即卸载）。
       const after = await p2.evaluate(() => ({
         count: document.querySelectorAll('[data-testid="confetti"]').length,
       }));
-      assert.equal(after.count, 1, `expected confetti count 1 after toggle-back, got ${after.count}`);
+      assert.ok(
+        after.count <= 1,
+        `no replay burst: confetti count must never exceed 1, got ${after.count}`,
+      );
+      // F1 面（stale-reset 落定）：6b53402（ulw-result-play-again-loop，
+      // 2026-09-19 21:45，晚于本探针末次维护 d07fd07 同日 04:58）把
+      // 「PlayController 重挂 + terminal 残留」定义为 stale → restart()
+      // → phase 离开 'won' → WinConfetti 按契约卸载（count 0 是设计内
+      // 终态）。旧断言 count===1 写于 F1 之前，与 F1 语义冲突，仅在
+      // view-swap 动画窗口内 effect 未跑完时偶绿（本票实跑两轮一轮绿
+      // 一轮红，竞态实测钉死）。现行断言＝等卸载落定：若 F1 回归
+      // （terminal 残留不再被重置），此处 3s 超时红——比旧断言多钉
+      // 一个 F1 回归面，检测强度只增不减。
+      await p2.waitForFunction(
+        () => document.querySelectorAll('[data-testid="confetti"]').length === 0,
+        null,
+        { timeout: 3000 },
+      );
       findings.push({ name: 'offline-bugb-aftertoggle', status: 'INFO', ...after });
     });
   } finally {
