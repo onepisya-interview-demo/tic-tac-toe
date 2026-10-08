@@ -42,7 +42,7 @@ lsof -i :3101 -sTCP:LISTEN || echo port-free   # 端口占用（被占→先清�
 
 分诊路径（按序）：
 
-1. **探针红 ≠ 一定是你改红的**：先对照 `scripts/verify-all.mjs` 的 `KNOWN_STALE_PROBES`（存量过时基线，2026-10-08 首录 7 支：audio-probe / audio-cheer / audio-confetti-qa / confetti-origin-qa / hydration-check / pwa-sw-cache-qa / ux-qa，成因逐条 git 钉死在基线注释）。命中基线＝存量红，照报 FAIL 但不算新增红；基线内探针转 PASS 是漂移信号，须移除条目。
+1. **探针红 ≠ 一定是你改红的**：KNOWN_STALE 存量基线已随 2026-10-09 票 18 清账归零（七支存量红全修复、零退役，豁免机制随之移除——探针任一 FAIL 即 exit 1）——今日之红无存量豁免可对照，直接进下条共库污染排查，分清「环境红」还是「改红」。
 2. **共库污染排查**：换全新临时库＋全新 server 独立复跑一次——仍红＝与本波无关的确定性红；转绿＝库/状态污染，回 Launch 用干净库。
 3. **抖动排查**：同环境跑两轮，逐条对比结果集——两轮同集＝确定性红；结果集漂移＝抖动，查时序断言（[tests/qa/AGENTS.md](../tests/qa/AGENTS.md) 时序敏感断言节）。
 4. **六层单层红**：看该层命令 stderr 首个报错定位；层① vitest 失败文件即最小复跑单元：`pnpm vitest run <文件>`。
@@ -62,7 +62,7 @@ BASE_URL=http://localhost:3101 node tests/qa/home-return-qa.mjs
 DATABASE_URL="file:$DB_DIR/hermetic.db" BASE_URL=http://localhost:3101 node tests/qa/rooms-race-qa.mjs
 ```
 
-- 探针清单＝`tests/qa/*.mjs` 全集减 3：`commit-audit.mjs`（层⑤工具非探针）＋`merge-sync-qa.mjs`/`sync-qa.mjs`（头注 DISABLED 退役面）；清单真源在 `scripts/verify-all.mjs` 的 `PROBES` 数组，新增探针须同步。
+- 探针清单＝`tests/qa/*.mjs` 全集减 4：`commit-audit.mjs`（层⑤工具非探针）＋`merge-sync-qa.mjs`/`sync-qa.mjs`（头注 DISABLED 退役面）＋`prod-smoke.mjs`（生产专用只读冒烟，直连 3t.onepis.net，不进本地 hermetic 循环）；清单真源在 `scripts/verify-all.mjs` 的 `PROBES` 数组，新增探针须同步。
 - 功能面验证入口速查：离线局 `offline-qa`/`offline-mode-qa`；身份与首页 `home-return-qa`/`online-direct-qa`/`one-identity-qa`；账本竞态与销户 `rooms-race-qa`；重置 `room-reset-qa`；路由全流程 `visual-qa`——BR 对照见 features.md。
 
 ## Evidence

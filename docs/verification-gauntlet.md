@@ -170,6 +170,8 @@ ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格�
 
 > 2026-09-14 基线：全量重跑 `pnpm test:mutation`（main @ 6778bd8，含九刀键控修复后首录）——总 68.55%（covered 70.78%）：game.ts 96.75 / db.ts 50.00 / store.ts 50.49 / schema.ts 58.33；killed 217 + timeout 1 + survived 90 + no-cov 10 + errors 7（store.ts 7 枚 RuntimeError：Test runner crashed 两次重启无果，沙箱已知噪声，非幸存者）。较 2026-09-11 记录（69.40 / store 53.40）微降：测试主体未退，系 store 键控修复后幸存者分布变化；break=null 不阻塞，仅为下一轮补测之坐标。
 
+> 2026-10-09 层⑥验收语义记档（票 18 探针修复票清账）：⑥ 浏览器探针曾于 2026-10-08 票 2 走查首录 7 支存量过时红（入口漂移族 5 支、pwa 缓存名版本化、ux-qa dialog 相位）入 `scripts/verify-all.mjs` 的 KNOWN_STALE 基线——照跑照报 FAIL 不计 exit，语义对齐 ⑤ 层 commit-audit 的「历史豁免基线」；该豁免随票 18（2026-10-09，七支全修复、零退役）清账归零、机制随之移除，层⑥验收语义自此回到**「探针全绿」**：verify-all ⑥ 20/20 全 PASS，任一 FAIL 即 exit 1，新红零容忍。
+
 > 2026-09-30 验证实践补充（验证信任沉淀波增补，六层框架不变，仅记三条实践要点）：
 > ① **首跑绿收口判据**——rerun 绿与 admin bypass 混过不算数，`run_attempt=1` 首跑全绿才算收口（PR #18 流程实证，anti-patterns L1-33）；
 > ② **本地复现定责法**——探针红先 `pnpm build` + 起 hermetic server（L0-8）本地三犯复现，区分「业务回归」与「探针过时」再动手（offline A2a/A2b → `1b80a99` 实证，anti-patterns L1-34）；

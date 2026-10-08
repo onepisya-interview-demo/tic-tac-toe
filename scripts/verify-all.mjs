@@ -15,11 +15,14 @@
 //     绝不进本 hermetic 循环；生产面复跑另行随验证波起算）
 // 新增探针或解 DISABLED 时须同步本清单；清单项缺文件立即报错，防静默漂移。
 //
-// KNOWN_STALE_PROBES（存量过时基线，2026-10-08 票 2 走查首录）：
-//   语义对齐 ⑤ 层 commit-audit 的「历史豁免基线」（docs/commands.md 验证六层段）
-//   ——吸收与本波改动无关的存量红，让门禁对「新增红」保持敏感。
-//   基线内探针每轮照跑照报 FAIL（不静默跳过）；若转 PASS 视为漂移信号，须移除条目。
-//   烧退纪律：对应探针修复票落地时必须删除条目（新红零容忍，存量红限期清账）。
+// KNOWN_STALE 基线记档（票 18 清账，2026-10-09）：
+//   2026-10-08 票 2 走查曾录 7 支存量过时红（入口漂移族 5 支＋pwa-sw-cache-qa
+//   缓存名＋ux-qa dialog 相位）入 KNOWN_STALE_PROBES 基线——照跑照报 FAIL 不计
+//   exit，语义对齐 ⑤ 层 commit-audit 的「历史豁免基线」。2026-10-09 票 18 探针
+//   修复票落地（70789de 五支入口对齐／c27b4e7 pwa＋ux／a0bcaaf offline 检测面），
+//   七支全修复、零退役（PROBES 清单 20 支不变），按烧退纪律删除全部条目、豁免
+//   机制随之移除：层⑥验收语义回到「探针全绿」（docs/verification-gauntlet.md
+//   层⑥记档）——任一探针 FAIL 即 exit 1，新红零容忍。
 //
 // 用法：
 //   node scripts/verify-all.mjs                  # 全链（默认）
@@ -27,8 +30,7 @@
 //   node scripts/verify-all.mjs --skip-probes    # 跳过浏览器探针（不起 server）
 //
 // 环境变量：VERIFY_ALL_PORT（默认 3101）。构建/serve 自动置 NEXT_TELEMETRY_DISABLED=1。
-// 退出码：0 = 六层＋on-demand 三层全绿，且探针无新增红（KNOWN_STALE 基线内 FAIL 不计，
-//   语义同 ⑤ 层 commit-audit 的历史豁免基线）；任一新增 FAIL / 超时 → 1。
+// 退出码：0 = 六层＋on-demand 三层全绿＋⑥ 20 探针全 PASS；任一 FAIL / 超时 → 1。
 // 前提：pnpm install 已跑；Playwright Chromium 已装（pnpm exec playwright install chromium）。
 
 import { spawn } from 'node:child_process';
@@ -68,44 +70,10 @@ const PROBES = [
 
 const TAIL_LIMIT = 40 * 1024; // 失败时回显的输出尾部上限（字节）
 
-// 存量过时基线（2026-10-08 票 2 cold-start-walkthrough 首录，逐条 git 钉死成因；
-// 全部 7 条在全新 hermetic server＋全新库下独立复跑均红＝共库无关、与本波改动无关，
-// 且两轮全链实跑结果逐条一致＝确定性红、非抖动）：
-const KNOWN_STALE_PROBES = new Map([
-  [
-    'audio-probe',
-    '末次维护 d07fd07（09-19）；同日后 c75cfdf/c9ef27f 上线 RoomGateDialog＋online 入口拦截，start-online 不再直达 /online（waitForURL **/online 超时），探针未跟进',
-  ],
-  [
-    'audio-cheer',
-    '同 audio-probe：room-gate 入口漂移（d07fd07 后未跟进 c75cfdf/c9ef27f）',
-  ],
-  [
-    'audio-confetti-qa',
-    '同 audio-probe：room-gate 入口漂移（d07fd07 后未跟进 c75cfdf/c9ef27f）',
-  ],
-  [
-    'confetti-origin-qa',
-    '同 audio-probe：room-gate 入口漂移（d07fd07 后未跟进 c75cfdf/c9ef27f）',
-  ],
-  [
-    'hydration-check',
-    '同 audio-probe：room-gate 入口漂移（d07fd07 后未跟进 c75cfdf/c9ef27f）',
-  ],
-  [
-    'pwa-sw-cache-qa',
-    '探针 2a49b4d（09-11）硬编码缓存名 tic-tac-toe-v1；sw 缓存版本化 a380404（09-22）后 CACHE_NAME=tic-tac-toe-v<app 版本>（现 v0.1.0），探针未跟进',
-  ],
-  [
-    'ux-qa',
-    'RoomGateDialog（c75cfdf，09-19）拦截首页点击，ux-qa before/after 两相位均被 dialog 挡住（末次维护 d07fd07），探针未跟进',
-  ],
-]);
-
 const startedAt = Date.now();
 const stepResults = [];
 let hadFailure = false;
-let probeCounts = null; // 探针阶段账目：{ total, pass, staleFail, newFail }
+let probeCounts = null; // 探针阶段账目：{ total, pass, newFail, notRun }
 
 function secs(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
@@ -117,13 +85,14 @@ function tail(text) {
 }
 
 // 跑一条 shell 命令：输出实时透传，退出码即判据；超时杀进程组记 FAIL。
-// countAsFailure=false 供 known-stale 基线探针用：照报 FAIL 但不翻 exit 码。
+// （曾设 countAsFailure=false 供 known-stale 基线探针照报 FAIL 不翻 exit——
+//   票 18 清账后基线移除，任一 FAIL 即计败，参数随之退役。）
 // 超时纪律（评审问题③修复）：spawn detached 让 sh 成为进程组组长，超时
 // 杀整组（pnpm/vitest fork 出的孙进程一并清）；另设 5s 兜底——即使管道
 // 仍被组外进程持有、'close' 迟迟不来，也到点强制记 FAIL resolve，头注
 // 「超时 → exit 1」永不挂死（原版只杀直接子进程：孤儿孙进程持有 stdout
 // 管道写端时 'close' 永不触发、promise 永久 pending，评审实验钉死）。
-function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd, countAsFailure = true } = {}) {
+function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd } = {}) {
   return new Promise((resolve) => {
     const stepStart = Date.now();
     const child = spawn(cmd, {
@@ -165,7 +134,7 @@ function run(cmd, { timeoutMs = 600_000, env = {}, label = cmd, countAsFailure =
         `[${ok ? 'PASS' : 'FAIL'}] ${label} (${dur}${signal ? `, ${signal}` : ''}${timedOut ? ', timeout' : ''})`,
       );
       if (!ok) {
-        if (countAsFailure) hadFailure = true;
+        hadFailure = true;
         console.log(`--- ${label} 输出尾部 ---\n${tail(out)}--- 尾部完 ---`);
       }
       resolve(ok);
@@ -234,9 +203,9 @@ async function probeStage() {
   server.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
 
   let probeFailures = 0;
-  let staleFails = 0;
-  let staleTurnedPass = 0;
-  probeCounts = { total: PROBES.length, pass: 0, staleFail: 0, newFail: 0 };
+  // notRun 初始＝全量：server 未就绪提前 return 时汇总如实报「未执行 N」，
+  // 不把 0 执行误算为任何一种结果（票 18 勘误：原「基线转绿 20」减法推导误报）。
+  probeCounts = { total: PROBES.length, pass: 0, newFail: 0, notRun: PROBES.length };
   try {
     const readyAt = await waitServerReady();
     if (readyAt === null) {
@@ -247,11 +216,9 @@ async function probeStage() {
     console.log(`hermetic server 就绪（${BASE_URL}）`);
 
     for (const p of PROBES) {
-      const stale = KNOWN_STALE_PROBES.has(p);
       const ok = await run(`node tests/qa/${p}.mjs`, {
         label: p,
         timeoutMs: 180_000,
-        countAsFailure: !stale,
         env: {
           BASE_URL,
           DATABASE_URL, // rooms-race-qa 由此派生 RR_DB_PATH 直连清房
@@ -259,26 +226,13 @@ async function probeStage() {
         },
       });
       console.log(`${p}: ${ok ? 'PASS' : 'FAIL'}`);
+      probeCounts.notRun -= 1;
       if (ok) {
-        if (stale) {
-          staleTurnedPass += 1;
-          console.log(`  ↳ 基线漂移：${p} 为 known-stale 却转 PASS——请核因并移除基线条目`);
-        } else {
-          probeCounts.pass += 1;
-        }
-      } else if (stale) {
-        staleFails += 1;
-        probeCounts.staleFail += 1;
-        console.log(`  ↳ known-stale 基线（不计入 exit 判据）：${KNOWN_STALE_PROBES.get(p)}`);
+        probeCounts.pass += 1;
       } else {
         probeFailures += 1;
         probeCounts.newFail += 1;
       }
-    }
-    if (staleFails > 0 || staleTurnedPass > 0) {
-      console.log(
-        `\n探针基线小计：known-stale FAIL ${staleFails} 条（存量过时，理由见上）、known-stale 转 PASS ${staleTurnedPass} 条（漂移信号）`,
-      );
     }
   } finally {
     try {
@@ -341,11 +295,12 @@ for (const { label, ok } of stepResults) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
 }
 if (probeCounts) {
-  const { total, pass, staleFail, newFail } = probeCounts;
-  const turned = total - pass - staleFail - newFail;
-  console.log(`⑥ 探针 ${total} 条：PASS ${pass} + FAIL(known-stale 基线) ${staleFail} + 新红 ${newFail}${turned > 0 ? ` + 基线转绿 ${turned}` : ''}`);
+  const { total, pass, newFail, notRun } = probeCounts;
+  console.log(
+    `⑥ 探针 ${total} 条：PASS ${pass} + FAIL ${newFail}${notRun > 0 ? ` + 未执行 ${notRun}（server 未就绪，走查中止）` : ''}`,
+  );
 }
 console.log(
-  `总计 ${stepResults.length} 步${probeCounts ? `＋探针 ${probeCounts.total} 条` : ''}，${hadFailure ? '存在新增 FAIL' : '全绿（存量基线除外）'}，耗时 ${secs(Date.now() - startedAt)}`,
+  `总计 ${stepResults.length} 步${probeCounts ? `＋探针 ${probeCounts.total} 条` : ''}，${hadFailure ? '存在 FAIL' : '全绿'}，耗时 ${secs(Date.now() - startedAt)}`,
 );
 process.exit(hadFailure ? 1 : 0);
