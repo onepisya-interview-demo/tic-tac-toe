@@ -182,7 +182,7 @@ await step("step 02 offline game → home return → dialog with room copy (A3 f
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst, "未取到 X-first offline");
+    assert.equal(xFirst, true, "未取到 X-first offline");
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
@@ -276,7 +276,7 @@ await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst, "未取到 X-first offline");
+    assert.equal(xFirst, true, "未取到 X-first offline");
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
@@ -494,7 +494,7 @@ await step("step 04 reject: zero /api/* writes + sessionStorage sentinel", async
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst, "未取到 X-first");
+    assert.equal(xFirst, true, "未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
@@ -564,7 +564,7 @@ await step("step 05 same-session pending stale: no re-dialog", async () => {
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst, "未取到 X-first");
+    assert.equal(xFirst, true, "未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForFunction(
       () => {
@@ -617,7 +617,7 @@ await step("step 06 pending > declined sentinel → re-dialog with N=2 copy", as
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst, "未取到 X-first");
+    assert.equal(xFirst, true, "未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForTimeout(1400);
     // 第 1 次保留本地 → 哨兵 = 1（BR-1 软导航回首页）
@@ -639,7 +639,7 @@ await step("step 06 pending > declined sentinel → re-dialog with N=2 copy", as
       }
       await page.reload({ waitUntil: "networkidle" });
     }
-    assert.ok(xFirst2, "第 2 局未取到 X-first");
+    assert.equal(xFirst2, true, "第 2 局未取到 X-first");
     await driveTopRowWin(page);
     await page.waitForTimeout(1400);
     // pending = 2 > declined = 1 → 重弹（BR-1 软导航回首页）

@@ -83,10 +83,11 @@ try {
     await page.waitForTimeout(300);
 
     // Determine which player goes first by inspecting the status bar.
+    const FIRST_PLAYER_RE = /轮到 ([XO])/;
     const firstStatus = await page.locator('[data-testid="status-text"]').textContent();
-    const m = firstStatus?.match(/轮到 ([XO])/);
-    assert.ok(m, `unexpected status: ${firstStatus}`);
-    const firstPlayer = m[1];
+    const m = FIRST_PLAYER_RE.exec(firstStatus ?? "");
+    assert.match(firstStatus ?? "", FIRST_PLAYER_RE, `unexpected status: ${firstStatus}`);
+    const firstPlayer = m?.[1] ?? "";
     winningPlayer = firstPlayer; // X tops row at 0/1/2, O tops row at 0/1/2 too.
 
     // First player always wins the top row (see driveTopRowWin).
@@ -125,7 +126,7 @@ try {
     });
     assert.ok(canvases.length >= 1, `expected ≥1 canvas, got ${canvases.length}`);
     const fixed = canvases.find((c) => c.position === 'fixed' && c.pointerEvents === 'none');
-    assert.ok(fixed, `expected fixed-position canvas, got ${JSON.stringify(canvases)}`);
+    assert.notEqual(fixed, undefined, `expected fixed-position canvas, got ${JSON.stringify(canvases)}`);
     assert.ok(fixed.width > 800 && fixed.height > 500, `canvas too small: ${fixed.width}x${fixed.height}`);
     findings.push({ name: 'canvas-info', status: 'INFO', canvases });
     await page.screenshot({ path: `${OUT}/04-result-celebration.png` });

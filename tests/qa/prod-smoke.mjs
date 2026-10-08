@@ -132,7 +132,7 @@ try {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
-    assert.ok(resp, "homepage navigation response 存在");
+    assert.notEqual(resp, null, "homepage navigation response 存在");
     assert.equal(resp.status(), 200, `首屏 status；got ${resp.status()}`);
     const contentType = resp.headers()["content-type"] ?? "";
     assert.ok(
@@ -212,7 +212,7 @@ try {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
-    assert.ok(page404, "404 page navigation response 存在");
+    assert.notEqual(page404, null, "404 page navigation response 存在");
     assert.equal(
       page404.status(),
       404,

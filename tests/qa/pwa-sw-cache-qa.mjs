@@ -87,7 +87,7 @@ try {
         controller: !!navigator.serviceWorker.controller,
       };
     });
-    assert.ok(reg.active, `SW not active: ${JSON.stringify(reg)}`);
+    assert.equal(reg.active, true, `SW not active: ${JSON.stringify(reg)}`);
     assert.equal(
       reg.controller,
       true,
@@ -116,15 +116,17 @@ try {
     const swResp = await ctx.request.fetch(`${BASE}/sw.js`);
     assert.equal(swResp.status(), 200, `expected 200 from /sw.js, got ${swResp.status()}`);
     const swText = await swResp.text();
-    const versionDecl = swText.match(/^const APP_VERSION = "(v[^"]+)";/m);
-    assert.ok(
-      versionDecl,
+    const APP_VERSION_DECL_RE = /^const APP_VERSION = "(v[^"]+)";/m;
+    const versionDecl = APP_VERSION_DECL_RE.exec(swText);
+    assert.match(
+      swText,
+      APP_VERSION_DECL_RE,
       `served /sw.js must declare APP_VERSION (sw-bust prebuild output); got head: ${swText.slice(0, 400)}`,
     );
     assert.equal(
-      versionDecl[1],
+      versionDecl?.[1],
       `v${pkg.version}`,
-      `served /sw.js APP_VERSION ${versionDecl[1]} must match package.json version ${pkg.version} (stale build? rerun pnpm build)`,
+      `served /sw.js APP_VERSION ${versionDecl?.[1]} must match package.json version ${pkg.version} (stale build? rerun pnpm build)`,
     );
     const caches = await page.evaluate(async () => {
       const names = await caches.keys();
@@ -137,8 +139,9 @@ try {
       return out;
     });
     cacheDump = caches;
-    assert.ok(
+    assert.equal(
       EXPECTED_CACHE in caches,
+      true,
       `expected ${EXPECTED_CACHE} cache after first fetch (package.json v${pkg.version}), got ${JSON.stringify(Object.keys(caches))}`,
     );
     assert.ok(

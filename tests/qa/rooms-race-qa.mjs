@@ -552,8 +552,9 @@ await step("step 6 (S7) SW non-GET pass-through + 激活竞争", async () => {
     // d-F5 修复（T-D 交叉审）：记录缺失即 FAIL，不许静默跳过——
     // page.on('request') 注册先于 goto，POST /api/rooms 必然被记录；
     // SW 注册与 CACHE_NAME 由 (d) 独立验证，两者缺一不可。
-    assert.ok(
+    assert.notEqual(
       postRoomReq,
+      undefined,
       "POST /api/rooms 请求未被 request 监听捕获（page.on 注册先于 goto，不应漏记）",
     );
     assert.equal(
