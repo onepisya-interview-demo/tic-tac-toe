@@ -17,7 +17,44 @@ if (phase !== 'before' && phase !== 'after') {
   process.exit(2);
 }
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
-const EVIDENCE_DIR = `.omx/evidence/ux-${phase}`;
+const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? `.omx/evidence/ux-${phase}`;
+
+// Entry follow-up (probe-repair ticket, 2026-10-09): since c75cfdf a
+// fresh context landing on /online anonymously gets the RoomGateDialog
+// opened in place by OnlineGateMount — native showModal() keeps the
+// board inert, so every play-* scenario stalled on the modal and cell
+// clicks timed out (the KNOWN_STALE red). Register a room the way a user
+// does — the same sequence as the green online-direct-qa F8 probe —
+// after which the gate closes and the board is fresh and playable.
+// Returns the room name so callers can assert the ?room= result URL.
+const RUN_SUFFIX = String(Date.now() % 1000000).padStart(6, '0');
+const ROOM = `uxqa-${RUN_SUFFIX}`;
+
+async function passRoomGate(page, room = ROOM) {
+  await page.waitForSelector('[data-testid="room-gate-dialog"][open]', {
+    timeout: 6000,
+  });
+  await page.fill('[data-testid="room-gate-name"]', room);
+  await page.waitForFunction(
+    () =>
+      !document
+        .querySelector('[data-testid="room-gate-confirm"]')
+        ?.hasAttribute('disabled'),
+    { timeout: 4000 },
+  );
+  await page.click('[data-testid="room-gate-confirm"]');
+  await page.waitForFunction(
+    () =>
+      !document
+        .querySelector('[data-testid="room-gate-dialog"]')
+        ?.hasAttribute('open'),
+    { timeout: 8000 },
+  );
+  // Gate closed → startGame('online') ran a fresh board; the status bar
+  // mounting is the board-ready signal (same contract as online-direct-qa).
+  await page.waitForSelector('[data-testid="status-bar"]', { timeout: 6000 });
+  return room;
+}
 
 // Each scenario: name, viewport, then a setup action sequence.
 const SCENARIOS = [
@@ -54,6 +91,7 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
+      await passRoomGate(page);
       await page.waitForTimeout(400);
     },
   },
@@ -62,7 +100,7 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(400);
+      await passRoomGate(page);
       // X plays 0, O plays 3
       await page.click('[data-testid="cell-0"]');
       await page.waitForTimeout(120);
@@ -76,7 +114,7 @@ const SCENARIOS = [
     setup: async (page) => {
       // Drive a clean top-row win: first player takes 0, 1, 2.
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(400);
+      await passRoomGate(page);
       // MINOR-F1 (reports/review/V3.md): the strict win-glow snapshot is
       // invalid the instant PlayController's router.replace('/result')
       // unmounts the board. Install a DOM MutationObserver BEFORE the
@@ -119,9 +157,15 @@ const SCENARIOS = [
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(400);
+      const room = await passRoomGate(page);
       await driveTopRowWin(page, { clickGapMs: 100 });
-      await page.waitForURL(`${BASE}/result`, { timeout: 3000 });
+      // Result URL has carried ?room= since the room migration
+      // (ResultNavigator pushes /result?room=<name>); matching the same
+      // glob as online-direct-qa's assertArrivedAtResult, with its 10s
+      // budget (the push waits for the outcome write to settle first).
+      await page.waitForURL(`**/result?room=${encodeURIComponent(room)}`, {
+        timeout: 10000,
+      });
       await page.waitForTimeout(400);
     },
   },
@@ -130,7 +174,7 @@ const SCENARIOS = [
     viewport: { width: 375, height: 667 }, // iPhone SE
     setup: async (page) => {
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(400);
+      await passRoomGate(page);
     },
   },
   {
@@ -148,7 +192,7 @@ const SCENARIOS = [
     setup: async (page) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(400);
+      await passRoomGate(page);
       await page.click('[data-testid="cell-0"]');
       await page.waitForTimeout(200);
     },

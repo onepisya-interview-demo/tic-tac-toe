@@ -5,8 +5,18 @@
 // passes for /manifest.webmanifest and assert the second one is served
 // from the SW cache ('service-worker' source via Playwright
 // response.fromServiceWorker). Also inspects Cache Storage via
-// window.caches and confirms the 'tic-tac-toe-v1' cache name carries
-// the manifest entry.
+// window.caches and confirms the versioned cache name carries the
+// manifest entry.
+//
+// Cache-name contract (a380404, W-RV P2 #2): CACHE_NAME is versioned off
+// package.json — `tic-tac-toe-v<version>` — substituted at prebuild by
+// scripts/sw-bust.mjs. The probe therefore derives the expected name from
+// package.json at runtime (the same source sw-bust reads) instead of
+// hardcoding a literal; the pre-2a49b4d literal 'tic-tac-toe-v1' went
+// stale the day the app shipped 0.1.0. The probe additionally parses the
+// SERVED /sw.js so a stale build (prebuild skipped / version bumped
+// without rebuild → SW still declaring an old APP_VERSION) fails loudly
+// at the version assertion instead of as a confusing "cache not found".
 //
 // Note: headless Chromium does not eagerly fetch the manifest link
 // (no install prompt yet, no PWA criteria met), so the probe drives
@@ -21,11 +31,21 @@
 //   node tests/qa/pwa-sw-cache-qa.mjs
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { launchQA, BASE_URL } from "./lib/browser.mjs";
 
 const BASE = BASE_URL;
 const findings = [];
+
+// Expected runtime cache name = tic-tac-toe-v<package.json version>.
+// package.json is the single source of truth sw-bust.mjs substitutes
+// from at prebuild time, so this tracks the deployed version with zero
+// probe-side hardcoding.
+const pkg = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+);
+const EXPECTED_CACHE = `tic-tac-toe-v${pkg.version}`;
 
 async function step(name, fn) {
   process.stdout.write(`STEP: ${name} ... `);
@@ -89,6 +109,23 @@ try {
     assert.equal(status, 200, `expected 200 from /manifest.webmanifest, got ${status}`);
     // Give cache.put a microtask to flush before we assert.
     await page.waitForTimeout(200);
+    // Cross-check the served build artifact BEFORE looking at Cache
+    // Storage: the served /sw.js must declare APP_VERSION = v<package
+    // version> (sw-bust prebuild contract). A stale SW script would
+    // otherwise fail below with an opaque missing-cache-name error.
+    const swResp = await ctx.request.fetch(`${BASE}/sw.js`);
+    assert.equal(swResp.status(), 200, `expected 200 from /sw.js, got ${swResp.status()}`);
+    const swText = await swResp.text();
+    const versionDecl = swText.match(/^const APP_VERSION = "(v[^"]+)";/m);
+    assert.ok(
+      versionDecl,
+      `served /sw.js must declare APP_VERSION (sw-bust prebuild output); got head: ${swText.slice(0, 400)}`,
+    );
+    assert.equal(
+      versionDecl[1],
+      `v${pkg.version}`,
+      `served /sw.js APP_VERSION ${versionDecl[1]} must match package.json version ${pkg.version} (stale build? rerun pnpm build)`,
+    );
     const caches = await page.evaluate(async () => {
       const names = await caches.keys();
       const out = {};
@@ -101,12 +138,12 @@ try {
     });
     cacheDump = caches;
     assert.ok(
-      "tic-tac-toe-v1" in caches,
-      `expected tic-tac-toe-v1 cache after first fetch, got ${JSON.stringify(Object.keys(caches))}`,
+      EXPECTED_CACHE in caches,
+      `expected ${EXPECTED_CACHE} cache after first fetch (package.json v${pkg.version}), got ${JSON.stringify(Object.keys(caches))}`,
     );
     assert.ok(
-      caches["tic-tac-toe-v1"].some((u) => u.endsWith("/manifest.webmanifest")),
-      `expected manifest in tic-tac-toe-v1, got ${JSON.stringify(caches["tic-tac-toe-v1"])}`,
+      caches[EXPECTED_CACHE].some((u) => u.endsWith("/manifest.webmanifest")),
+      `expected manifest in ${EXPECTED_CACHE}, got ${JSON.stringify(caches[EXPECTED_CACHE])}`,
     );
   });
 
