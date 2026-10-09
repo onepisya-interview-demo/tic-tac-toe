@@ -189,7 +189,7 @@
 ### 调研 parked research-parked（1 份 plan + 1 份根级 = 2 份）
 
 - `evals-mcp-practice-map.md` — 调研入档已交付完结（df69f84），后续 P1–P5 未启动 【09-27 更新】Q8 已裁：后置——文档梳理好后才考虑（→主图 §三③）
-- `research-rules-mechanization-20260926.md`（根级）— 待唤醒 parked（C1/C3/C4/C5 未立票） 【09-27 更新】已补 C2 兑现注与 §六触发评估记录（§甲#46）；唤醒是下一件事→主图 §三② 【2026-10-09 叠注】唤醒已于 10-01 发生（87ec30f），档案不再「待唤醒」；候选终态 C1 兑现 887591c／C5 兑现 b31139a／C4 部分兑现 22af9e1／C2 早已兑现 2d7709b／C3 未动；最新路线态见 plans/ulw-verification-infra-roadmap-20261007.md（17 票全 pass）。台账其余行系 09-27 快照，维持不动。
+- `research-rules-mechanization-20260926.md`（根级）— 待唤醒 parked（C1/C3/C4/C5 未立票） 【09-27 更新】已补 C2 兑现注与 §六触发评估记录（§甲#46）；唤醒是下一件事→主图 §三② 【2026-10-09 叠注】唤醒已于 10-01 发生（87ec30f），档案不再「待唤醒」；候选终态 C1 兑现 887591c／C5 兑现 b31139a／C4 部分兑现 22af9e1／C2 早已兑现 2d7709b／C3 未动；C6 主面兑现 fce7af1／C8 部分兑现 a6bc793（全映射见调研档 §五兑现补注）；最新路线态见 plans/ulw-verification-infra-roadmap-20261007.md（17 票全 pass）。台账其余行系 09-27 快照，维持不动。
 
 ### 弃案 filed-only（1 份）
 
