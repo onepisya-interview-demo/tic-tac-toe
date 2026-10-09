@@ -40,6 +40,7 @@ async function passRoomGate(page, room = ROOM) {
       !document
         .querySelector('[data-testid="room-gate-confirm"]')
         ?.hasAttribute('disabled'),
+    null,
     { timeout: 4000 },
   );
   await page.click('[data-testid="room-gate-confirm"]');
@@ -48,6 +49,7 @@ async function passRoomGate(page, room = ROOM) {
       !document
         .querySelector('[data-testid="room-gate-dialog"]')
         ?.hasAttribute('open'),
+    null,
     { timeout: 8000 },
   );
   // Gate closed → startGame('online') ran a fresh board; the status bar

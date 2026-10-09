@@ -277,6 +277,7 @@ try {
     }
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      null,
       { timeout: 4000 },
     );
 
@@ -291,6 +292,7 @@ try {
     });
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);

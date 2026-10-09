@@ -193,6 +193,7 @@ await step("step 02 offline game → home return → dialog with room copy (A3 f
           return false;
         }
       },
+      null,
       { timeout: 5000 },
     );
     const localBefore = await captureLocalStorage(page);
@@ -287,6 +288,7 @@ await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [
           return false;
         }
       },
+      null,
       { timeout: 5000 },
     );
     // 重锚：错峰开启判定时刻锚定到真实点击时刻，禁依赖 softNavHome 后的
@@ -505,6 +507,7 @@ await step("step 04 reject: zero /api/* writes + sessionStorage sentinel", async
           return false;
         }
       },
+      null,
       { timeout: 5000 },
     );
     // 网络写监听（从此点起）
@@ -523,6 +526,7 @@ await step("step 04 reject: zero /api/* writes + sessionStorage sentinel", async
     await page.click('[data-testid="sync-confirm-reject"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 4000 },
     );
     const apiWrites = writesAfter.filter((w) => w.url.includes("/api/"));
@@ -575,6 +579,7 @@ await step("step 05 same-session pending stale: no re-dialog", async () => {
           return false;
         }
       },
+      null,
       { timeout: 5000 },
     );
     await softNavHome(page);
@@ -774,12 +779,14 @@ await step("step 08 merge + clear full path (postRoomSession + postMerge + local
     }
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      null,
       { timeout: 4000 },
     );
     // 合并并清空
     await page.click('[data-testid="sync-confirm-confirm"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);
@@ -894,11 +901,13 @@ await step("step 10 BR-11: 有身份 → 弹框 input readOnly + 合并后身份
     writes.length = 0;
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      null,
       { timeout: 4000 },
     );
     await page.click('[data-testid="sync-confirm-confirm"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);
@@ -962,12 +971,14 @@ await step("step 11 BR-11: 无身份 → 可输入 + 合并后 ttt.room.name.v1 
     // 等主 CTA 解锁
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      null,
       { timeout: 4000 },
     );
     // 点确认 → 合并 + 首次回写
     await page.click('[data-testid="sync-confirm-confirm"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);

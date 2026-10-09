@@ -182,6 +182,7 @@ try {
     await page.click('[data-testid="room-gate-cancel"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="room-gate-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 4000 },
     );
     const roomAfter = await page.evaluate((k) => window.localStorage.getItem(k), ROOM_KEY);
