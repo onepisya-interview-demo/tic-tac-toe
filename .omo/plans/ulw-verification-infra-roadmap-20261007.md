@@ -1,7 +1,7 @@
 # Plan: 验证基础设施路线图（17 票 · 信任梯子五阶段 · 自排期队列落档）
 
 - 日期: 2026-10-07
-- 状态: **executing**（2026-10-07 主公明令立计划即执行令，原话见授权链①；teach-back 豁免依据见授权链③）
+- 状态: **已完成（done）**（2026-10-09 十七票全 pass 收口，终态注见文末）〔2026-10-07 原文留档：**executing**（2026-10-07 主公明令立计划即执行令，原话见授权链①；teach-back 豁免依据见授权链③）〕
 - 分支: dev
 - 授权链: ① 主公 2026-10-07 明令原话「根据我们之前的调研写一个计划文件」（＝立计划即执行令）；② 队列自治章程——`.omo/decisions-20261001.md` §一「按序执行，每项完成后回执写回对应 ✅ 卡尾（续写执行记录），不再逐项请示」（:145-147）；③ intake §4.2 teach-back 复述确认的**豁免明示**：本计划按 decisions:147 自治章程「不再逐项请示」豁免复述确认门——豁免依据是章程明文＋「17 票票面＝队列 :149-165 原文逐字（2026-10-07 独立评审逐条比对：无增删、无改序）」，对齐面由票面原文承当；此为契约豁免的显式声明。**不援引「主公未否决」作对齐论据**（docs/requirement-intake.md:59「对齐完成 ≠『主公没说不行』」、:131「沉默不算对齐」明文排除）
 - 素材来源: 缺口图谱波 dwfrun-1357b366（pstack 原语 × 七份笔记 × 仓库实盘，14 候补票）＋ decisions-20261001.md 自排期队列 17 项（:149-165）＋ D31/D32 裁决（同档 :119-133）
@@ -263,3 +263,25 @@
 4. `pnpm test:property` Test Files ≥ 2 passed（票 10 后；基线 1 file / 5 tests，本轮实跑留痕〔核〕）。
 5. 生产冒烟探针在 tests/qa/ 且首跑回执含在场记录（票 17）。
 6. 决策文件队列 17 行各挂回执指针；未决分叉（D-1/D-2/D-4/D-5）各按降级路径或呈报档收口，无悬空「待定」。
+
+---
+
+## 终态注（2026-10-09）
+
+**终态：17/17 票全 pass**（决策台账 6 张 ✅ 卡尾＋11 个队列行尾回执齐）；票 17 经 D33=A 退回重验闭环——生产冒烟当主公会话重跑 4/4 PASS（dwfrun-d42b6c6f，tests/qa/prod-smoke.mjs 对生产实跑 exit 0）。计划后附修复波：票 18（probe-repair，plans/probe-repair-ticket-20261009.md）五笔 7441ca9..cca56ae——七支 KNOWN_STALE 探针 fixed 7/retired 0、烧退纪律清账归零，verify-all 终态「⑥ 探针 20 条：PASS 20 + FAIL 0」。
+
+**收尾三件**：
+
+- waitForFunction 两参形态存量病已修：全仓 19 处机械转三参（home-return 11/offline 2/one-identity 1/online-direct 2/room-reset 1/ux 2）＋tests/qa/waitfn-argshape.test.ts 括号平衡契约防线（正负对照防自身失效）——735079a；真源头 161d7cb（2026-09-18）。
+- CI 侧三项核验工具已预搭：scripts/ci-verify.mjs（bb14cc5）——一条命令核五必绿首跑绿/EVIDENCE_DIR 两态/test:property step；对 PR #18 三历史 run 双向真跑通过（红 run 36742717954 exit 1 点名红 job、绿 run 36748001707 clean）。
+- D-1 已两态取一收口＝**「不展开」**：决定性证据＝run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`（visual-qa.mjs:278 亲证，决策台账 :383；两条防误判：artifact 上传成功≠env 已展开、Set up job 回显永远字面量不作判据）。处置已落地 c451ee5——ci.yml 14 处 env:/path: 改 `${{ runner.temp }}`（run: 段 6 处 bash 变量正确保持原样）；ci.yml 现状：test job 内已含 test:property step（7d208fb 接线），job 数仍 11。
+
+**信任四锚全部 0→1**：走查可复跑（scripts/verify-all.mjs 全链一条命令）／基线可对照（trace＋性能）／断言可自证（gate-replay＋弱断言归零）／生产可冒烟（tests/qa/prod-smoke.mjs 4/4）。§1.2 四轴现状表系 2026-10-07 计划时快照（其「本轮命令复验」标注为计划时口径，按入档纪律保留不改），终态以本注为准。§二 unproven 明示项同步交代：D-1 已判定、票 9 性能基线三类数字已采集入档（决策台账 :175，结论暂不机制化）、D-4 维持呈报档。
+
+**§十整体完成判据六条逐条对账（均已满足）**：①17 票回执齐（6 卡尾＋11 队列行尾，决策台账在位）；②逐波六层绿留痕（波 1-10 全覆盖，各票回执内含）；③scripts/verify-all.mjs 存在且 `node scripts/verify-all.mjs` exit 0；④`pnpm test:property` Test Files 3 passed/Tests 15 passed（判据 ≥2 超额）；⑤tests/qa/prod-smoke.mjs 在仓且首跑在场回执（D33=A 在场重验收口）；⑥队列 17 行回执指针齐＋未决分叉 D-1/D-2/D-4/D-5 各按降级路径或呈报档收口，无悬空「待定」。
+
+**§四事实依赖表 D-1..D-5 终态**（表原文不改，以本段为准）：D-1 收口＝不展开（处置 c451ee5 已落地；展开生效验证挂下次发版 PR 波——跑 `node scripts/ci-verify.mjs --pr <N>` 应判「展开」）；D-2 结论暂不机制化收口（决策台账 :175）；D-3 开工无批注、按自治口径径行接线收口（决策台账 :177）；D-4 维持呈报档（L4 判定时点到时呈报一次时点，不催办）；D-5 解编评估首例留痕、维持人审不解编（决策台账 :134-136——D33=A 在场重验后条件①闭环，②③原判不变）。
+
+**遗留呈报项**（挂主公下次发版 PR 波，不催办）：①ruleset 命名错位（六探针 job 按 job id 登记 vs CI 实报显示名——GitHub 侧配置面）；②test:property CI 真 green 首核；③EVIDENCE_DIR 展开生效验证（跑 `node scripts/ci-verify.mjs --pr <N>` 应判「展开」）；④D-4（L4 判定时点）/D-5（解编评估）到时呈报一次时点。
+
+**待推口径**：dev 上 32 笔（8390a2b..c451ee5，实测一致）待主公 push；本对账波 commit 另计——后续文档表述一律「32 笔＋对账波另计」。
