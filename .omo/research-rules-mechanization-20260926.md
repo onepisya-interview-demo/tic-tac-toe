@@ -95,10 +95,13 @@
 
 > 【2026-10-04 兑现归档注】2d7709b 文档契约断言经 09-30/10-01 两度现场核验仍在生效，已兑现归档（2026-10-04 自治裁决 D10a）。
 
+> 兑现补注（2026-10-09）：C1 兑现＝票 1（887591c，docs/anti-patterns.md 全 48 条补机械化状态字段＋四段位对照表）；C5 兑现＝票 3（b31139a，派发红线断言模板入 docs/dispatcher-playbook.md＋历史波回放演练）；C6 主面兑现＝票 4（fce7af1，豁免清单显式化＋run_attempt=1 首跑绿口径＋BASE_URL 契约，tests/qa/ci-contract.test.ts——触发矩阵覆盖臂与 dev push 触发 CI 立项仍悬置不翻案，故记「主面兑现」而非全兑现）；C4 部分兑现＝22af9e1（package.json 增 lint:fix 档位，仅此——全仓一次性 format 波未做）；C8 部分兑现＝票 6（a6bc793，scripts/ttl-probe-seed.mjs 造数＋zz-ttl-probe 前缀断言入仓；purge 触发＋删留名单对照未做）；C3/C7/C9 仍未动。行 90「C1/C3/C4/C5 维持未裁决」与行 92「C6-C9 未裁决不实施」系历史快照，按档内纪律不改原文，以本注为准。
+
 ## 六、唤醒条件与检索路径
 
 - **唤醒触发**（任一即拉出本报告进 planning）：① 同类错误第 3 次重犯（三犯法则）；② t-n4 型派发漂移再犯；③ Q3 批注落地时顺手评估 C2；④ 主公点名「规则机械化」。
 - **触发与评估记录（2026-09-27 补）**：条件③已触发——Q3 批注落地（主公批注选 a）随 T-P1 兑现（`2d7709b` 2026-09-26）。评估结论：C2 以 maintenance-purge.test.ts 端点契约断言（`purgeStaleRoomsMock).toHaveBeenCalledWith()`）随 T-P1 同波实质兑现，无需另立票；其余唤醒条件未触发，报告整体维持「不立项不开坑」。
+- **触发与评估记录（2026-10-09 补）**：① 2026-10-01 唤醒收口——awaken 材料 87ec30f 入档（.omo/research-rules-mechanization-awaken-20261001.md，C1–C9 九候选裁决卡备齐待裁），主公裁「我回去读的」，D9–D18 缓读未裁未驳；② 2026-10-07 缺口图谱波（dwfrun-1357b366）＋decisions 自排期队列 17 项转化为验证基建路线图执行（.omo/plans/ulw-verification-infra-roadmap-20261007.md，17 票全 pass）——「不立项不开坑」至此被实际立项执行取代；兑现映射见 §五「兑现补注（2026-10-09）」。
 - **检索路径**：ZCode 记忆索引「规则机械化调研待命」条目 → 本文件。
 - **建议第一步**：读 §五候选清单 → docs/requirement-intake.md 对齐 → `$omo:ulw-plan` 立票（候选间正交，可单票可组合；C2 与 Q3 补丁同波最顺）。
 - **本次调研用过的检索词**（复搜起点）：AGENTS.md standard enforcement 2026 / ast-grep YAML rule autofix / Claude Code hooks deterministic guardrails / AI code review learnings conventions / LLM lint rule synthesis / Uber Fixit autofix。
