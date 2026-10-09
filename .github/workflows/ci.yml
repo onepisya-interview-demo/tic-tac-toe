@@ -86,7 +86,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/visual-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/visual-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -127,7 +127,7 @@ jobs:
         if: always()
         with:
           name: visual-qa-evidence
-          path: ${RUNNER_TEMP}/visual-qa
+          path: ${{ runner.temp }}/visual-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -138,7 +138,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/rooms-race-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/rooms-race-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -181,7 +181,7 @@ jobs:
         if: always()
         with:
           name: rooms-race-qa-evidence
-          path: ${RUNNER_TEMP}/rooms-race-qa
+          path: ${{ runner.temp }}/rooms-race-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -193,7 +193,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/home-return-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/home-return-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -235,7 +235,7 @@ jobs:
         if: always()
         with:
           name: home-return-qa-evidence
-          path: ${RUNNER_TEMP}/home-return-qa
+          path: ${{ runner.temp }}/home-return-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -246,7 +246,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/offline-mode-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/offline-mode-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -288,7 +288,7 @@ jobs:
         if: always()
         with:
           name: offline-mode-qa-evidence
-          path: ${RUNNER_TEMP}/offline-mode-qa
+          path: ${{ runner.temp }}/offline-mode-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -299,7 +299,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/offline-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/offline-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -341,7 +341,7 @@ jobs:
         if: always()
         with:
           name: offline-qa-evidence
-          path: ${RUNNER_TEMP}/offline-qa
+          path: ${{ runner.temp }}/offline-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -352,7 +352,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/online-direct-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/online-direct-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -394,7 +394,7 @@ jobs:
         if: always()
         with:
           name: online-direct-qa-evidence
-          path: ${RUNNER_TEMP}/online-direct-qa
+          path: ${{ runner.temp }}/online-direct-qa
           retention-days: 7
           if-no-files-found: warn
 
@@ -405,7 +405,7 @@ jobs:
     needs: [build]
     env:
       NEXT_TELEMETRY_DISABLED: 1
-      EVIDENCE_DIR: ${RUNNER_TEMP}/room-reset-qa
+      EVIDENCE_DIR: ${{ runner.temp }}/room-reset-qa
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -447,6 +447,6 @@ jobs:
         if: always()
         with:
           name: room-reset-qa-evidence
-          path: ${RUNNER_TEMP}/room-reset-qa
+          path: ${{ runner.temp }}/room-reset-qa
           retention-days: 7
           if-no-files-found: warn
