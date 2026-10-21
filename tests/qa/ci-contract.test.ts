@@ -169,3 +169,49 @@ describe("ci-contract D: run_attempt=1 首跑绿收口判据在档（动作②�
     expect(ANTIPATTERNS_MD).toMatch(/^### L1-33：/m);
   });
 });
+
+// —— E. job 级 env 上下文白名单（2026-10-21 D-1 修正案防线）——
+// 教训：c451ee5 把 7 处探针 job 的 env.EVIDENCE_DIR 改成 ${{ runner.temp }}，
+// 而 GitHub Actions 的 job 级 env 仅允许 github/needs/strategy/matrix/vars/
+// secrets/inputs（官方 contexts availability 表），runner 上下文只在 step 级键
+// 可用——整个 ci.yml 被判 invalid：push 建 0s 失败 run（38509360622
+// "Unrecognized named-value: 'runner'"×7），pull_request 静默不触发（PR #22
+// CI 全缺，根因排查见当日本席回执）。本断言把「job 级 env 禁 runner」钉为
+// 层①机械防线，同类写法再进仓即红。
+
+/** 判定器：job 级 env（4 空格 `env:` 段，至 `steps:` 止）值里不得引用 `runner.` 上下文。 */
+function jobEnvRunnerViolations(ciSrc: string): string[] {
+  const violations: string[] = [];
+  for (const [id, body] of parseJobBodies(ciSrc)) {
+    let inEnv = false;
+    for (const line of body.split("\n")) {
+      if (/^    env:$/.test(line)) {
+        inEnv = true;
+        continue;
+      }
+      if (/^    steps:$/.test(line)) {
+        inEnv = false;
+        continue;
+      }
+      if (inEnv && /^\s{6}[A-Za-z_]+:.*\$\{\{[^}]*runner\./.test(line)) {
+        violations.push(`job ${id}: job 级 env 禁引用 runner 上下文（step 级 env 或 run 内 $RUNNER_TEMP 才可用）: ${line.trim()}`);
+      }
+    }
+  }
+  return violations;
+}
+
+describe("ci-contract E: job 级 env 禁 runner 上下文（D-1 修正案防线，2026-10-21）", () => {
+  it("ci.yml 所有 job 级 env 值零 runner. 引用", () => {
+    expect(jobEnvRunnerViolations(CI_YML)).toEqual([]);
+  });
+
+  it("注入对照：job 级 env 添 runner.temp → 判定器必报违例（检查器可证伪）", () => {
+    const mutated = CI_YML.replace(
+      "    env:\n      NEXT_TELEMETRY_DISABLED: 1",
+      "    env:\n      NEXT_TELEMETRY_DISABLED: 1\n      EVIDENCE_DIR: ${{ runner.temp }}/injected",
+    );
+    expect(mutated, "注入前提：首个 job env 段行形未变则注入臂失义").not.toBe(CI_YML);
+    expect(jobEnvRunnerViolations(mutated).length).toBeGreaterThan(0);
+  });
+});
