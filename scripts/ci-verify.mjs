@@ -200,7 +200,10 @@ function parseCiJobs() {
 }
 
 function stripAnsi(s) {
-  return s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  // 双形态剥离：gh run view --log 的日志里 CSI 序列有两种形态——真 ESC 字节（\x1b[）
+  // 与字面「^[」两字符（PR #22 首跑实证：JSON.stringify 可见 ^[[2m 以字面存在，
+  // 仅剥 \x1b 形态会漏剥致计数行正则失配，判据[3]误判 blocked——本行即其修复）。
+  return s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\^\[\[[0-9;]*[A-Za-z]/g, '');
 }
 
 function excerpt(line, max = 200) {
