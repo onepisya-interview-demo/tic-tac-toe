@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { loadRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
+import { withRouteTiming } from '@/lib/api-timing';
 
 // W1 (ulw-room-migration-home-landing) thin transport wrapper.
 //   GET /api/rooms/{room}/stats  →  200 { stats: GameStats }     (row found)
@@ -18,7 +19,7 @@ import { problemResponse } from '@/lib/api-problem';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(
+async function getRoomStats(
   _request: Request,
   { params }: { params: Promise<{ room: string }> },
 ): Promise<Response> {
@@ -36,4 +37,13 @@ export async function GET(
   } catch {
     return problemResponse(500, 'db-unavailable');
   }
+}
+
+// Timing wrapper (trace-minimal, roadmap ticket 8): one JSON line per
+// request with route/duration; response semantics untouched.
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ room: string }> },
+): Promise<Response> {
+  return withRouteTiming('/api/rooms/[room]/stats', getRoomStats)(request, context);
 }

@@ -575,3 +575,146 @@ describe('commit-audit --message-file R7 subject and trailer checks', () => {
     expect(r.stderr).toMatch(/R7: trailer "Constraint:" value lacks CJK characters: "keep the leaf intact\."/);
   });
 });
+
+// R3 严格化（显式 WHAT:/WHY:/HOW: token 硬要求，2026-10-24）integration tests.
+// 漂移实证：fd8db3f 起五笔提交正文为自由散文体、无显式三 token，却因 R3 的
+// 关键词启发式（WHY_RE/HOW_RE 中文词表 50+ 日常词）双表命中而全部过门。
+// A1 以 fd8db3f 最小化复刻 fixture 断言 --message-file 必 FAIL 并列出缺失
+// token 清单；A2 断言部分 token 时清单只列缺失项；A3 钉死同行 token 形态也认
+// （audit 只认 token 存在性，行长排版归既有规则）；B1 走 --branch fixture 以
+// GIT_AUTHOR_DATE 三锚断言 R3_STRICT_ADOPTION_DATE 日级 <= 祖父边界。
+
+// fd8db3f 最小化复刻：散文 ≥60 字、命中词表（「不一致」WHY /「验证」HOW）、
+// 无 WHAT:/WHY:/HOW: 半角 token（「为何：」是全角冒号，不命中 /\bWHY:\s/）。
+const R3_DRIFT_PROSE = [
+  '对照验证基建波终态事实单，四份 .omo 档过时点机械收口：路线图计划档',
+  '状态行 executing→done＋文末终态注；文档状态总图四处 dated 叠注。',
+  '为何：档面仍写 executing 会造成指引不一致——为防后续会话按过时态',
+  '取档派发，按 dated 叠注纪律收口；历史正文零改写。',
+].join('\n');
+
+const R3_DRIFT_TRAILERS = [
+  'Constraint: 只做叠注与状态行更新，历史正文零改写',
+  'Rejected: 全量重写档面 | 引入新漂移',
+  'Confidence: high',
+  'Scope-risk: narrow',
+  'Directive: dated 叠注纪律优先',
+  'Tested: pnpm vitest 单文件红证在档',
+  'Plan: .omo/plans/commit-audit-r3-explicit-heading-20261024.md',
+].join('\n');
+
+const R3_DRIFT_SUBJECT = 'docs(omo): 验证基建终态对账——计划档状态收口＋总图路线叠注';
+
+const R3_DRIFT_MSG = `${R3_DRIFT_SUBJECT}\n\n${R3_DRIFT_PROSE}\n\n${R3_DRIFT_TRAILERS}\n`;
+
+describe('commit-audit --message-file R3 严格化（显式 token 硬要求，2026-10-24）', () => {
+  it('A1 FAILs a keyword-drift prose body that lacks all three explicit tokens', { timeout: 30_000 }, () => {
+    const r = runAudit(R3_DRIFT_MSG);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(
+      /R3: body lacks explicit WHAT:\/WHY:\/HOW: tokens \(missing WHAT: WHY: HOW:\)/,
+    );
+  });
+
+  it('A2 lists only the missing tokens when WHAT: is present but WHY:/HOW: are prose', { timeout: 30_000 }, () => {
+    // 5165933 subject 复刻；正文仅 WHAT: 同行 token，其余散文命中词表
+    // （「避免」「不一致」WHY /「落地」「整理」HOW）——修复前关键词两检放行。
+    const msg = [
+      'docs(omo): 残余过时点补注——调研档 §二勘注＋台账候选枚举补齐',
+      '',
+      'WHAT: 收口四份计划档的过时状态行',
+      '对照终态事实单逐档核对，状态行 executing→done；文档状态总图',
+      '四处 dated 叠注同步落地，台账候选枚举按整理纪律补齐——避免',
+      '后续会话按过时态取档派发造成指引不一致。',
+      '',
+      R3_DRIFT_TRAILERS,
+      '',
+    ].join('\n');
+    const r = runAudit(msg);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/R3: body lacks explicit WHAT:\/WHY:\/HOW: tokens/);
+    expect(r.stderr).toContain('(missing WHY: HOW:)');
+  });
+
+  it('A3 PASSes same-line tokens with wording outside both keyword tables', { timeout: 30_000 }, () => {
+    // 三 token 与内容同行；措辞刻意避开 WHY_RE/HOW_RE 两表（无「因为」「通过」
+    // 「验证」「router」等），证明放行靠显式 token 而非关键词。修复前后皆绿。
+    const msg = [
+      'fix(play-controller): 同行 token 形态走显式结构放行',
+      '',
+      'WHAT: 战绩面板订阅 store 的 lastWriteAt 信号',
+      'WHY: RSC 缓存让导航回旧会话时数字停在旧值',
+      'HOW: 导航层监听信号并驱动重渲染',
+      '',
+      'Constraint: 保留叶子客户端边界完整',
+      'Rejected: 全页 use-client 重写 | 破坏 RSC fetch 契约',
+      'Confidence: high',
+      'Scope-risk: narrow',
+      'Directive: 把战绩读取锁在 store signal 之后',
+      'Tested: 单测与探针双绿',
+      'Plan: .omo/plans/pwa-rsc-stats-bug-fix.md',
+      '',
+    ].join('\n');
+    const r = runAudit(msg);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('PASS');
+  });
+});
+
+// B1: --branch fixture 以 author date 三锚（采纳日前 / 当日 / 后）断言
+// R3_STRICT_ADOPTION_DATE=2026-10-24 的日级 <= 祖父边界（R7 采纳日同款保守
+// 语义：当日整日视为旧账）。三笔正文同为 fd8db3f 散文形态，仅 subject 日期
+// 后缀与 GIT_AUTHOR_DATE/GIT_COMMITTER_DATE 不同。
+const R3_ANCHOR_TMP = mkdtempSync(path.join(tmpdir(), 'commit-audit-r3-anchor-'));
+afterAll(() => {
+  rmSync(R3_ANCHOR_TMP, { recursive: true, force: true });
+});
+
+const R3_ANCHOR_IDENT = {
+  GIT_AUTHOR_NAME: 'R3 Anchor',
+  GIT_AUTHOR_EMAIL: 'r3@example.com',
+  GIT_COMMITTER_NAME: 'R3 Anchor',
+  GIT_COMMITTER_EMAIL: 'r3@example.com',
+};
+
+const R3_ANCHOR_CASES = [
+  { day: '2026-10-23', subject: 'docs(omo): 漂移正文锚点边界——2026-10-23 采纳日前' },
+  { day: '2026-10-24', subject: 'docs(omo): 漂移正文锚点边界——2026-10-24 采纳日当日' },
+  { day: '2026-10-25', subject: 'docs(omo): 漂移正文锚点边界——2026-10-25 采纳日后' },
+] as const;
+
+function initR3AnchorFixture(): { repo: string; shas: string[] } {
+  const repo = path.join(R3_ANCHOR_TMP, `anchor-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+  const shas: string[] = [];
+  for (let i = 0; i < R3_ANCHOR_CASES.length; i++) {
+    const c = R3_ANCHOR_CASES[i];
+    writeFileSync(path.join(repo, 'f.txt'), `iter ${i}\n`, 'utf8');
+    gitIn(repo, ['add', 'f.txt'], { ...R3_ANCHOR_IDENT });
+    const msg = `${c.subject}\n\n${R3_DRIFT_PROSE}\n\n${R3_DRIFT_TRAILERS}\n`;
+    const stamp = `${c.day}T12:00:00+08:00`;
+    gitIn(repo, ['commit', '--no-gpg-sign', '-m', msg], {
+      ...R3_ANCHOR_IDENT,
+      GIT_AUTHOR_DATE: stamp,
+      GIT_COMMITTER_DATE: stamp,
+    });
+    shas.push(gitIn(repo, ['rev-parse', 'HEAD']).slice(0, 8));
+  }
+  return { repo, shas };
+}
+
+describe('commit-audit --branch main R3 严格化锚点（R3_STRICT_ADOPTION_DATE=2026-10-24）', () => {
+  const fixture = initR3AnchorFixture();
+  const result = runBranchAudit(fixture.repo);
+
+  it('B1 grandfathers drift bodies authored on or before 2026-10-24 and FAILs the day after', () => {
+    expect(result.stdout).toContain(`PASS  ${fixture.shas[0]}  ${R3_ANCHOR_CASES[0].subject}`);
+    expect(result.stdout).toContain(`PASS  ${fixture.shas[1]}  ${R3_ANCHOR_CASES[1].subject}`);
+    expect(result.stdout).toContain(`FAIL  ${fixture.shas[2]}  ${R3_ANCHOR_CASES[2].subject}`);
+    expect(result.stdout).toMatch(
+      /R3: body lacks explicit WHAT:\/WHY:\/HOW: tokens \(missing WHAT: WHY: HOW:\)/,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain('total=3 pass=2 skip=0 fail=1');
+  });
+});

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { purgeStaleRooms } from '@/lib/db';
 import { problemResponse } from '@/lib/api-problem';
+import { withRouteTiming } from '@/lib/api-timing';
 
 // T-N3 (ulw-room-lifecycle-20260924 §二 T-N3) — TTL 自动回收的维护端点。
 //
@@ -57,7 +58,7 @@ function authorize(request: Request): Response | null {
   return null;
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function runPurge(request: Request): Promise<Response> {
   const denied = authorize(request);
   if (denied) return denied;
   try {
@@ -68,13 +69,14 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+// Timing wrappers (trace-minimal, roadmap ticket 8): one JSON line per
+// request with route/duration; response semantics (incl. 401 paths)
+// untouched. The log line carries only route/method/status/duration —
+// never header contents, so CRON_SECRET stays out of logs.
+export async function POST(request: Request): Promise<Response> {
+  return withRouteTiming('/api/maintenance/purge', runPurge)(request);
+}
+
 export async function GET(request: Request): Promise<Response> {
-  const denied = authorize(request);
-  if (denied) return denied;
-  try {
-    const result = await purgeStaleRooms();
-    return NextResponse.json(result);
-  } catch {
-    return problemResponse(500, 'db-unavailable');
-  }
+  return withRouteTiming('/api/maintenance/purge', runPurge)(request);
 }

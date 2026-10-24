@@ -5,7 +5,7 @@
 
 ---
 
-## 甲、47 份更新清单（全部 done，零未完成）
+## 甲、47+1 份更新清单（48 号系 2026-10-04 D25 卫生票补列——判定日漏列；全部 done，零未完成）
 
 1. `audit-transitively-calls-commitlint.md` — 补「已实现（0ffde83，2026-09-12）」状态线；git 反查实现提交属实，TL;DR 计划态原文保留
 2. `edge-runtime-migration.md` — 按 项7 选项a 补 ARCHIVED 弃案标注（27e32ec 自述 Vercel 拒 + Next16 弃用）+ 后继指向 runtime-cleanup-\* 两档 【09-28 更新】项7 已追认结档（主图 §二③）
@@ -54,6 +54,7 @@
 45. `research-rooms-race-probe-20260924.md` — 改已裁决兑现措辞 + 补状态行（c102fcd 地图入档 / 87e7c7a 七票收口 / 71ad38d 事务修复 / e1ea4b1 探针进 CI）；§六原文未动
 46. `research-rules-mechanization-20260926.md` — §五表格后补落实注 + §六唤醒条件③后补触发与评估记录（C2 已兑现，维持不立项不开坑）
 47. `research-session-orthogonality-20260924.md` — 改已裁决措辞 + 补状态行（c102fcd 调研入档 / ed25cb0 正交性矩阵落库 / 87e7c7a wayfinder 复盘）
+48. `ulw-readme-shots-bilingual-20260913.md` — 补「已交付（C1 `fe7fef9` + C2 `e61cea2`，2026-09-14）」状态线（2026-10-04 D25 卫生票补列——原 47 清单判定日漏列，主图 §三.1 记录在案）
 
 ---
 
@@ -135,7 +136,7 @@
 - `ulw-p3-hygiene-20260923.md` — e24e615 计划与 4 项卫生改动同票，e3bd3c5 整改跟进 【09-27 更新】已补状态线（§甲#20）
 - `ulw-qa-02c-anchor-20260923.md` — 0451656 计划与重锚实现同票，4be54dc 整改跟进 【09-27 更新】已补状态线（§甲#21）
 - `ulw-quality-hardening-opt-20260922.md` — 85965a7 入档→1cec0a8 翻转→工单链→3fdc921 V13 终验→6aaab5e 收口
-- `ulw-readme-shots-bilingual-20260913.md` — fe7fef9 + e61cea2 两件落地，e1e7e85/cb3ce79 跟进
+- `ulw-readme-shots-bilingual-20260913.md` — fe7fef9 + e61cea2 两件落地，e1e7e85/cb3ce79 跟进 【2026-10-04 更新】状态线已补（§甲#48）
 - `ulw-reset-store-helper-20260923.md` — 47ad7d7 同票 【09-27 更新】已补状态线（§甲#22）
 - `ulw-reset-store-outcome-error.md` — f68e328 同票，3068b22 触档跟进 【09-27 更新】已补状态线（§甲#23）
 - `ulw-result-play-again-loop.md` — 已实现并终验：6b53402 fix(nav) 落地，7af475b V8 ACCEPT 入档
@@ -188,7 +189,7 @@
 ### 调研 parked research-parked（1 份 plan + 1 份根级 = 2 份）
 
 - `evals-mcp-practice-map.md` — 调研入档已交付完结（df69f84），后续 P1–P5 未启动 【09-27 更新】Q8 已裁：后置——文档梳理好后才考虑（→主图 §三③）
-- `research-rules-mechanization-20260926.md`（根级）— 待唤醒 parked（C1/C3/C4/C5 未立票） 【09-27 更新】已补 C2 兑现注与 §六触发评估记录（§甲#46）；唤醒是下一件事→主图 §三②
+- `research-rules-mechanization-20260926.md`（根级）— 待唤醒 parked（C1/C3/C4/C5 未立票） 【09-27 更新】已补 C2 兑现注与 §六触发评估记录（§甲#46）；唤醒是下一件事→主图 §三② 【2026-10-09 叠注】唤醒已于 10-01 发生（87ec30f），档案不再「待唤醒」；候选终态 C1 兑现 887591c／C5 兑现 b31139a／C4 部分兑现 22af9e1／C2 早已兑现 2d7709b／C3 未动；C6 主面兑现 fce7af1／C8 部分兑现 a6bc793（全映射见调研档 §五兑现补注）；最新路线态见 plans/ulw-verification-infra-roadmap-20261007.md（17 票全 pass）。台账其余行系 09-27 快照，维持不动。
 
 ### 弃案 filed-only（1 份）
 
@@ -201,9 +202,9 @@
 ### 待主公 open-pending-master（1 份 plan + 3 份根级 = 4 份）
 
 - `ulw-anonymous-online-server-row-missing-20260922.md` — 唯一提交 5c160c6 仅入档骨架零实现 【09-27 更新】Q2 落档：头部已补「背景速读」人类可读说明，状态仍 drafting 【09-28 更新】前提经代码证据推翻 + 主公终裁 **ARCHIVED 归档**（QA/QB 原话与报错核实结论入计划档「2026-09-28 终裁（归档）」节；主图 §二①）——判定由 open-pending-master 转为 **archived**
-- `alignment-20260926-doc-governance.md`（根级）— 七项裁决中项3/项4 已闭环 【09-27 更新】Q5 落档：裁决回执落 7 处；反馈1-4 未动→主图 §三① 【09-28 更新】项5 已终裁归档、项7 已追认结档——待决收敛为仅剩项1/项2 质量冻结（→主图 §二②）
-- `handover-20260926-ttl-channel-cleanup-wave.md`（根级）— 六项已闭环（Q-A 齐平、2d7709b、30 天、ulw/\* 清零、Q-B/Q-F 交付） 【09-27 更新】Q6 落档：头部落实补注 + §三六项回填已补；余 Q-C/Q-D 冻结→主图 §二② 【09-28 更新】Q-E 项5 已终裁归档、项6→主图 §三②
-- `handover-20260926-two-plans-wave.md`（根级）— §五六项中 Q1/Q3/Q4/Q5 已落实 【09-27 更新】Q7 落档：头部时效补注 + §五四项已决回填；余 Q2/Q6 冻结→主图 §二②
+- `alignment-20260926-doc-governance.md`（根级）— 七项裁决中项3/项4 已闭环 【09-27 更新】Q5 落档：裁决回执落 7 处；反馈1-4 未动→主图 §三① 【09-28 更新】项5 已终裁归档、项7 已追认结档——待决收敛为仅剩项1/项2 质量冻结（→主图 §二②） 【09-30 更新】验收结论+CRON_SECRET 已清（主公亲测 + CLI 注入验证），仅余 dev-stable tag 等正式上线（主公令）
+- `handover-20260926-ttl-channel-cleanup-wave.md`（根级）— 六项已闭环（Q-A 齐平、2d7709b、30 天、ulw/\* 清零、Q-B/Q-F 交付） 【09-27 更新】Q6 落档：头部落实补注 + §三六项回填已补；余 Q-C/Q-D 冻结→主图 §二② 【09-28 更新】Q-E 项5 已终裁归档、项6→主图 §三② 【09-30 更新】**Q-C 已收口**（secret 注入+两态验证+cron 注册）；Q-D 验收已过、余 tag 等正式上线
+- `handover-20260926-two-plans-wave.md`（根级）— §五六项中 Q1/Q3/Q4/Q5 已落实 【09-27 更新】Q7 落档：头部时效补注 + §五四项已决回填；余 Q2/Q6 冻结→主图 §二② 【09-30 更新】密钥项已收口（同 Q-C）；验收已过、余 tag 等正式上线
 
 ---
 

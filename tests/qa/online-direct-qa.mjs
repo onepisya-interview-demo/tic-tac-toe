@@ -200,6 +200,7 @@ await step("F8 direct /online anonymous: gate dialog [open] → zero api pre-sub
         !document
           .querySelector('[data-testid="room-gate-confirm"]')
           ?.hasAttribute("disabled"),
+      null,
       { timeout: 4000 },
     );
     await page.click('[data-testid="room-gate-confirm"]');
@@ -210,6 +211,7 @@ await step("F8 direct /online anonymous: gate dialog [open] → zero api pre-sub
         !document
           .querySelector('[data-testid="room-gate-dialog"]')
           ?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     // 可玩：开局新鲜（提交内 startGame('online')），落子即进。

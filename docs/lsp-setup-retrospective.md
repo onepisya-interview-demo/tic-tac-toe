@@ -1,5 +1,7 @@
 # LSP 配置复盘（LSP setup retrospective）
 
+> [ARCHIVED 2026-10-04 标档：LSP 配置三次演进（`fe892fb` → `b146e50` → `566745f`）复盘已完结、无未结项与唤醒条件；现行 LSP 契约以 docs/conventions.md 与 docs/anti-patterns.md §L2-1 为准，以下为复盘原文存档。]
+
 > 仓库 LSP 配置三次演进（`fe892fb` → `b146e50` → `566745f`）的单一事实源。
 > 覆盖运行时语义、Plan 间冲突与被证伪声明、坑清单、SOP。技术断言逐条标注
 > 出处（commit / plan / dist 源码位置 / 探针输出）；无出处的标「未验证」。

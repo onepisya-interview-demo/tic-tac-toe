@@ -1,5 +1,7 @@
 # Agent 工作流协议（PR 路径守则）
 
+> [按需读 2026-10-04 注：本档系 `scripts/vercel-ignore-build.sh`（Vercel build 决策 SSOT，见下文）的低频说明，不入 AGENTS.md 路由——涉 PR 发版与 build 跳过决策时按需读。]
+
 > 立档 2026-09-14 · 决策依据：主公与调度者共识——严守 GitHub ruleset `main-gate`
 
 ## 决策

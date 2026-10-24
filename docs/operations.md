@@ -54,6 +54,8 @@ node tests/qa/result-celebration-qa.mjs      # W-A F1-F5 confetti 触发与不�
 node tests/qa/result-fresh-qa.mjs            # W-F W-F1/W-F2 胜局/平局首帧战绩新鲜度
 node tests/qa/confetti-origin-qa.mjs         # 桌面内聚起点 ≥1280px / 较小视口边缘起点
 node tests/qa/pwa-sw-cache-qa.mjs            # P3 SW dual-layer：manifest 二次 fetch 经 SW 命中
+# 票 17（2026-10-08）生产冒烟——不需要本地 server，直连生产只读实跑：
+node tests/qa/prod-smoke.mjs                  # 首屏 200 + 关键资源契约 + 只读 404（PROD_BASE_URL 可覆写）
 ```
 
 可选 env：BASE_URL（默认 http://localhost:3000）、EVIDENCE_DIR（默认 .omx/evidence/<script>）、
@@ -191,6 +193,10 @@ turso db shell <db-name> \
 历史 `ulw-demo-*` / `tic-tac-5s4zst0o5-*` 等 deployment URL 全部 404；新部署只走
 `3t-tic-tac-toe.vercel.app` / `tic-tac-arkhtecz7-onepisyas-projects.vercel.app`。
 
+> 【2026-09-30 勘误补注】生产正式入口现为自定义域 **`https://3t.onepis.net`**（Vercel project
+> `tic-tac-toe` 的 Latest Production URL，`vercel projects ls` 实证）；上列 `3t-tic-tac-toe.vercel.app`
+> 等仍作系统域名别名，运维文档与探针一律以 `3t.onepis.net` 为准。
+
 生产部署验证（2026-09-10 起 ranked 单行历史）：`curl -i https://3t-tic-tac-toe.vercel.app/api/stats` 返回
 `200 application/json` + 当前战绩；6 步 curl round-trip 全过——`GET` 当前
 `{totalGames:6,xWins:4,oWins:2,draws:0,currentStreak:2}` → `PUT` 临时值
@@ -234,6 +240,16 @@ executor 不可触达，等用户登录 Dashboard 操作。本表是稳态锚点
 > Turso 免费额度现实 + 孤儿账本兜底：服务端每日凌晨 3 点（UTC）跑一次
 > `purgeStaleRooms(30)`，删除 `updated_at < now - 30 天` 的房间账本。
 > 30 天不活跃的账本视为孤儿，不复活、不迁移、不可导出——纯删。
+>
+> **闭环记录（2026-10-04 补）**：本节设施已于 2026-10-02 实证生效——cron 窗口自动
+> 删除到期探针（id15/id8 恰消、余 6 行零漂移），两阶段验证完结；判定梯子与 11-01
+> 终验判据见
+> [.omo/research-verification-trust-20260930.md](../.omo/research-verification-trust-20260930.md)
+> §六。Hobby plan 的 Cron Logs 仅保留 1 小时，生效断言走「DB 锚点行 SELECT」。
+>
+> **终验关账（2026-10-04）**：cron 线终验关账完成、11-01 判据已兑现关闭——
+> zz-ttl-probe 前缀计数=0 系主公授权删除探针 id7/id14 所致、非 cron 自然清零，
+> cron 删除能力实证仍为 2026-10-02 fired；回执见同档 §六「终验关账回执」（本提交）。
 
 ### Vercel Cron 配置（部署后人工操作）
 

@@ -4,7 +4,11 @@
 // production build. Proves the solo contract end to end:
 //   1. Home renders the dual CTA (start-online + start-offline).
 //   2. A full offline game (forced X-first top-row win) issues ZERO write
-//      requests (POST /api/stats/outcome, PUT/DELETE /api/stats) and
+//      requests on BOTH chains — the retired /api/stats tripwire
+//      (POST /api/stats/outcome, PUT/DELETE /api/stats) AND the live
+//      /api/rooms/** write surface (POST /api/rooms, DELETE
+//      /api/rooms/{room}, POST /api/rooms/{room}/stats/{merge,outcomes,
+//      reset} — the lib/game-net.ts writers) — and
 //      never navigates to /result — ResultNavigator was never installed on
 //      /offline (it only pushes /result from /online); the inline
 //      WinConfetti + StatusBar carry the win announcement on /offline.
@@ -113,15 +117,34 @@ const shoot = shootTo(EVIDENCE);
 const { browser, ctx, page } = await launchQA();
 
 // Write-request counter (the solo contract: zero of these during solo).
+// Two chains share one tripwire (票 14 发现：原检测面只盯已退役的
+// /api/stats 链，对现行 /api/rooms/** 写放行——本监听补齐)：
+//   - /api/stats/* — W1 已退役；保留为回归绊线（若该链复活并在
+//     offline 发写，仍须红）。
+//   - /api/rooms/** — 现行写面（lib/game-net.ts: postRoomSession /
+//     postMerge / postOutcome / postResetRoomStats / deleteRoom）。
+//     GET /api/rooms/{room}/stats 是读，不计。
 let offlineWriteCount = 0;
+const offlineWrites = [];
 page.on("request", (req) => {
-  const url = req.url();
   const method = req.method();
-  const isWrite =
-    (method === "POST" && url.endsWith("/api/stats/outcome")) ||
-    (method === "PUT" && url.endsWith("/api/stats")) ||
-    (method === "DELETE" && url.endsWith("/api/stats"));
-  if (isWrite) offlineWriteCount += 1;
+  let path = "";
+  try {
+    path = new URL(req.url()).pathname;
+  } catch {
+    return;
+  }
+  const isStatsWrite =
+    (method === "POST" && path.endsWith("/api/stats/outcome")) ||
+    (method === "PUT" && path.endsWith("/api/stats")) ||
+    (method === "DELETE" && path.endsWith("/api/stats"));
+  const isRoomsWrite =
+    /^\/api\/rooms(\/|$)/.test(path) &&
+    (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE");
+  if (isStatsWrite || isRoomsWrite) {
+    offlineWriteCount += 1;
+    offlineWrites.push(`${method} ${path}`);
+  }
 });
 
 try {
@@ -196,11 +219,11 @@ try {
     assert.equal(
       offlineWriteCount,
       0,
-      `offline issued ${offlineWriteCount} write request(s); expected 0`,
+      `offline issued ${offlineWriteCount} write request(s) on /api/stats|/api/rooms; expected 0; saw: ${offlineWrites.join(", ") || "none"}`,
     );
 
     const offline = await readOfflineStats(page);
-    assert.ok(offline, `expected ${OFFLINE_KEY} to exist after a offline win`);
+    assert.notEqual(offline, null, `expected ${OFFLINE_KEY} to exist after a offline win`);
     assert.equal(offline.xWins, 1, `expected xWins=1 in ${OFFLINE_KEY}, got ${offline.xWins}`);
     assert.equal(offline.totalGames, 1, `expected totalGames=1, got ${offline.totalGames}`);
     await shoot(page, "offline-win-inline-banner.png");
@@ -408,6 +431,18 @@ try {
     assert.ok(
       heightDelta < 8,
       `card height delta ${heightDelta.toFixed(2)}px must be < 8px (V2 acceptance); board=${boardH} stats=${statsH}`,
+    );
+  });
+
+  await step("10 whole-session zero-write sweep (/api/stats tripwire + /api/rooms/** live chain)", async () => {
+    // 票 14 补强：step 03 只在首胜后断言零写；本步把同一计数器
+    // （自 step 03 前置 reset 后从未清零）钉到全会话——reload、stats
+    // 视图、本地清账、第 2/3 局驱动胜局全程，/api/stats 与
+    // /api/rooms/** 两条链的写请求数都必须是 0（字面钉）。
+    assert.equal(
+      offlineWriteCount,
+      0,
+      `offline session issued ${offlineWriteCount} write request(s) on /api/stats|/api/rooms; expected 0; saw: ${offlineWrites.join(", ") || "none"}`,
     );
   });
 } catch (e) {

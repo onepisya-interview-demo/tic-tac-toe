@@ -2,10 +2,16 @@ import assert from 'node:assert/strict';
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
+import { passRoomGate } from './lib/enter-online.mjs';
 import { ensureDir, writeQaLog } from './lib/evidence.mjs';
 
 const BASE = BASE_URL;
 const OUT = process.env.EVIDENCE_DIR ?? '.omx/evidence/qa-after';
+// Unique room per run (probe-repair ticket 18). The retired
+// `DELETE /api/stats` global reset is replaced by the current
+// per-room surface: seed POST /api/rooms, then POST
+// /api/rooms/<room>/stats/reset.
+const ROOM = `acq-${Date.now() % 1000000}`;
 const findings = [];
 
 async function step(name, fn) {
@@ -30,9 +36,23 @@ page.on('console', (msg) => {
 });
 
 try {
-  await step('reset stats via API', async () => {
-    const r = await page.request.delete(`${BASE}/api/stats`);
-    assert.equal(r.status(), 200);
+  await step('seed room + reset stats via API', async () => {
+    // Pre-gate-era probe called DELETE /api/stats (global reset); that
+    // route is retired (room migration). Same-strength replacement on
+    // the current surface: register the unique room, then reset its
+    // row and assert the 200 carries an all-zero stats body (the old
+    // step only checked the status code — the body check is added
+    // strength, not a relaxation).
+    const seed = await page.request.post(`${BASE}/api/rooms`, {
+      data: { room: ROOM },
+    });
+    assert.equal(seed.status(), 200, `seed /api/rooms 200, got ${seed.status()}`);
+    const r = await page.request.post(
+      `${BASE}/api/rooms/${encodeURIComponent(ROOM)}/stats/reset`,
+    );
+    assert.equal(r.status(), 200, `reset 200, got ${r.status()}`);
+    const body = await r.json();
+    assert.equal(body.stats.totalGames, 0, `reset row all-zero, got ${JSON.stringify(body.stats)}`);
   });
 
   await step('home page loads with muted sound toggle', async () => {
@@ -55,16 +75,19 @@ try {
 
   let winningPlayer = null;
   await step('start a game and drive whoever-is-first to a top-row win', async () => {
-    await page.click('[data-testid="start-online"]');
-    await page.waitForURL('**/online');
-    await page.waitForSelector('[data-testid="board"]');
+    // Entry-drift fix (ticket 18): c75cfdf/c9ef27f gated the home
+    // start-online CTA behind RoomGateDialog — passRoomGate fills the
+    // room name, confirms (POST /api/rooms; room pre-seeded above so
+    // this enters the existing room) and lands on the board.
+    await passRoomGate(page, ROOM);
     await page.waitForTimeout(300);
 
     // Determine which player goes first by inspecting the status bar.
+    const FIRST_PLAYER_RE = /轮到 ([XO])/;
     const firstStatus = await page.locator('[data-testid="status-text"]').textContent();
-    const m = firstStatus?.match(/轮到 ([XO])/);
-    assert.ok(m, `unexpected status: ${firstStatus}`);
-    const firstPlayer = m[1];
+    const m = FIRST_PLAYER_RE.exec(firstStatus ?? "");
+    assert.match(firstStatus ?? "", FIRST_PLAYER_RE, `unexpected status: ${firstStatus}`);
+    const firstPlayer = m?.[1] ?? "";
     winningPlayer = firstPlayer; // X tops row at 0/1/2, O tops row at 0/1/2 too.
 
     // First player always wins the top row (see driveTopRowWin).
@@ -74,8 +97,13 @@ try {
   });
 
   await step('canvas-confetti attaches a fixed-position full-viewport canvas after win', async () => {
-    await page.waitForURL('**/result', { timeout: 4000 });
-    await page.waitForSelector('[data-testid="result-headline"]');
+    // Regex + 8s (was glob + 4s): the online win push goes to
+    // `/result?room=<room>` (end-anchored globs miss query strings)
+    // and the push waits for the in-flight outcome POST (W-F).
+    await page.waitForURL(/\/result/, { timeout: 8000 });
+    // result-headline ("X 获胜") was retired with the room-era result
+    // page; result-name is the current arrival anchor on branches 2/3.
+    await page.waitForSelector('[data-testid="result-name"]');
     // canvas-confetti attaches the canvas via a useEffect on <Confetti>,
     // which mounts as a sibling of the headline. After the
     // ulw-mobile-one-line-ux pass the headline is the page h1, so its
@@ -98,27 +126,55 @@ try {
     });
     assert.ok(canvases.length >= 1, `expected ≥1 canvas, got ${canvases.length}`);
     const fixed = canvases.find((c) => c.position === 'fixed' && c.pointerEvents === 'none');
-    assert.ok(fixed, `expected fixed-position canvas, got ${JSON.stringify(canvases)}`);
+    assert.notEqual(fixed, undefined, `expected fixed-position canvas, got ${JSON.stringify(canvases)}`);
     assert.ok(fixed.width > 800 && fixed.height > 500, `canvas too small: ${fixed.width}x${fixed.height}`);
     findings.push({ name: 'canvas-info', status: 'INFO', canvases });
     await page.screenshot({ path: `${OUT}/04-result-celebration.png` });
   });
 
-  await step('headline shows the correct winning player', async () => {
-    const headline = (await page.locator('[data-testid="result-headline"]').textContent()) ?? '';
+  await step('result page shows this run\'s room + the winning player\'s row', async () => {
+    // Entry-drift fix (ticket 18): /result no longer renders a
+    // 「X 获胜」 headline (retired surface). Same-strength replacement:
+    // the ledger we landed on belongs to THIS run's room, and the
+    // page-rendered stats grid shows the winning player at 1 (the
+    // server-row equivalent is asserted in the stats persist step
+    // below). StatsGrid card order is stable: 总场次/X 胜/O 胜/平局/
+    // 当前连胜 (components/ui/StatsGrid.tsx).
+    const name = (await page.locator('[data-testid="result-name"]').textContent()) ?? '';
     assert.ok(
-      headline.includes(`${winningPlayer} 获胜`),
-      `expected "${winningPlayer} 获胜" in headline, got: ${headline}`,
+      name.includes(ROOM),
+      `expected room "${ROOM}" in result-name, got: ${name}`,
     );
+    const values = await page
+      .locator('[data-testid="result-stats"] [data-testid="stat-value"]')
+      .allTextContents();
+    const [total, xWins, oWins, draws] = values;
+    assert.equal(total, '1', `expected totalGames 1 on page, got ${total}`);
+    if (winningPlayer === 'X') {
+      assert.equal(xWins, '1', `expected X wins 1 on page, got ${xWins}`);
+      assert.equal(oWins, '0', `expected O wins 0 on page, got ${oWins}`);
+    } else {
+      assert.equal(oWins, '1', `expected O wins 1 on page, got ${oWins}`);
+      assert.equal(xWins, '0', `expected X wins 0 on page, got ${xWins}`);
+    }
+    assert.equal(draws, '0', `expected draws 0 on page, got ${draws}`);
   });
 
   await step('stats persist (1 total, 1 win for first player, no draws)', async () => {
-    // Allow ample time for the post-win PUT and the post-nav hydrate GET.
+    // Entry-drift fix (ticket 18): the retired global GET /api/stats is
+    // replaced by the current per-room row GET /api/rooms/<room>/stats
+    // (same assertions — totalGames / xWins / oWins / draws — carried
+    // over verbatim, only the endpoint moved with the room migration).
+    // Allow ample time for the post-win outcome POST and the post-nav
+    // RSC read.
     await page.waitForTimeout(1500);
-    const stats = await page.evaluate(async () => {
-      const r = await fetch('/api/stats', { cache: 'no-store' });
+    const payload = await page.evaluate(async (room) => {
+      const r = await fetch(`/api/rooms/${encodeURIComponent(room)}/stats`, {
+        cache: 'no-store',
+      });
       return r.json();
-    });
+    }, ROOM);
+    const stats = payload.stats;
     findings.push({ name: 'stats-after', status: 'INFO', stats });
     assert.equal(stats.totalGames, 1, `expected totalGames=1, got ${stats.totalGames}`);
     if (winningPlayer === 'X') {

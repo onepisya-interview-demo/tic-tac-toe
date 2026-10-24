@@ -150,7 +150,7 @@ try {
     // Cross-check the persisted ledger: exactly one game, and it is a
     // win for whichever side took the top row (xWins + oWins = 1).
     const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_OFFLINE_KEY);
-    assert.ok(raw, `expected ${LOCAL_OFFLINE_KEY} after the first anonymous game`);
+    assert.equal(typeof raw, "string", `expected ${LOCAL_OFFLINE_KEY} after the first anonymous game`);
     const stats = JSON.parse(raw);
     assert.equal(stats.totalGames, 1, `localStorage totalGames must be 1, got ${stats.totalGames}`);
     assert.equal(stats.xWins + stats.oWins, 1, `xWins+oWins must be 1 (random first player), got ${stats.xWins}+${stats.oWins}`);

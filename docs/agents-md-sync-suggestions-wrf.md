@@ -1,5 +1,7 @@
 # AGENTS.md 调度者节增补建议行（W-RF 蒸馏产物四 · 草案）
 
+> [CONSUMED 2026-10-04 标档：草案建议已消费进 AGENTS.md 契约体系——requirement-intake.md §二五维清单/§三词汇步与 dispatcher-playbook.md「Intake 五维与 Plan 状态机」承载；以下为草案原文存档。]
+
 - 日期：2026-09-22
 - 作者：W-RF 蒸馏席（distiller）
 - 工单：W-RF（`ulw-quality-hardening-opt-20260922.md` §六.2 沉淀方向 7 + §九审批门升级）

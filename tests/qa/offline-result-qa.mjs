@@ -63,7 +63,7 @@ try {
     });
     await page.goto(`${BASE}/result`, { waitUntil: "networkidle" });
     const fbVisible = await page.isVisible('[data-testid="result-fallback"]');
-    assert.ok(fbVisible, `无名 /result 走 fallback；got visible=${fbVisible}`);
+    assert.equal(fbVisible, true, `无名 /result 走 fallback；got visible=${fbVisible}`);
     const html = await page.content();
     // fallback 文案：plan §2.6 提到「在首页点「在线对战」创建房间后再来查看战绩」
     assert.ok(/创建房间|在线对战|房间/.test(html), `fallback 文案含「房间」术语`);
@@ -81,7 +81,7 @@ try {
     const ghost = `ghost-${RUN_SUFFIX}`;
     await page.goto(`${BASE}/result?room=${ghost}`, { waitUntil: "networkidle" });
     const emptyVisible = await page.isVisible('[data-testid="result-empty"]');
-    assert.ok(emptyVisible, `有名无行 → 译空态；got visible=${emptyVisible}`);
+    assert.equal(emptyVisible, true, `有名无行 → 译空态；got visible=${emptyVisible}`);
     // 不渲染 result-stats
     const statsCount = await page.locator('[data-testid="result-stats"]').count();
     assert.equal(statsCount, 0, `空态不渲染 result-stats；got count=${statsCount}`);
@@ -107,7 +107,7 @@ try {
     assert.equal(merge.status(), 200);
     await page.goto(`${BASE}/result?room=${name}`, { waitUntil: "networkidle" });
     const statsVisible = await page.isVisible('[data-testid="result-stats"]');
-    assert.ok(statsVisible, `有名有行 → SSR 战绩；got visible=${statsVisible}`);
+    assert.equal(statsVisible, true, `有名有行 → SSR 战绩；got visible=${statsVisible}`);
     const html = await page.content();
     // SSR HTML 包含战绩数字
     assert.ok(/data-value="7"/.test(html), `SSR 含 totalGames=7`);
@@ -129,7 +129,7 @@ try {
     const resp = await page.goto(`${BASE}/result?name=${realName}`, { waitUntil: "networkidle" });
     assert.equal(resp.status(), 200, `?name= 返回 200；got ${resp.status()}`);
     const fbVisible = await page.isVisible('[data-testid="result-fallback"]');
-    assert.ok(fbVisible, `?name= 走 fallback；got visible=${fbVisible}`);
+    assert.equal(fbVisible, true, `?name= 走 fallback；got visible=${fbVisible}`);
     // 不渲染 result-stats（即使 server 有 row）
     const statsCount = await page.locator('[data-testid="result-stats"]').count();
     assert.equal(statsCount, 0, `?name= 不渲染 result-stats；got count=${statsCount}`);
@@ -157,7 +157,7 @@ try {
       waitUntil: "networkidle",
     });
     const statsVisible = await page.isVisible('[data-testid="result-stats"]');
-    assert.ok(statsVisible, `URL-encoded room → SSR 战绩；got visible=${statsVisible}`);
+    assert.equal(statsVisible, true, `URL-encoded room → SSR 战绩；got visible=${statsVisible}`);
     await shoot(page, "05-url-encoded-room.png");
   });
 

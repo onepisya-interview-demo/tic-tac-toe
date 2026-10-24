@@ -182,6 +182,7 @@ try {
     await page.click('[data-testid="room-gate-cancel"]');
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="room-gate-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 4000 },
     );
     const roomAfter = await page.evaluate((k) => window.localStorage.getItem(k), ROOM_KEY);
@@ -211,7 +212,7 @@ try {
         { timeout: 4000 },
       );
     }
-    assert.ok(xFirst, "12 次内未取到 X-first 在线局");
+    assert.equal(xFirst, true, "12 次内未取到 X-first 在线局");
 
     api.writes.length = 0;
     api.reads.length = 0;
@@ -367,7 +368,7 @@ try {
     await wipeAllKeys(page);
     await page.goto(`${BASE}/result`, { waitUntil: "networkidle" });
     const fb1 = await page.isVisible('[data-testid="result-fallback"]');
-    assert.ok(fb1, `无名 /result 应走 fallback；got visible=${fb1}`);
+    assert.equal(fb1, true, `无名 /result 应走 fallback；got visible=${fb1}`);
     const html1 = await page.content();
     assert.ok(/创建房间|房间/.test(html1), `fallback 文案含「房间」术语`);
     await shoot(page, "q4-branch1-no-room-fallback.png");
@@ -378,7 +379,7 @@ try {
     await page.evaluate((k) => window.localStorage.removeItem(k), ROOM_KEY);
     await page.goto(`${BASE}/result?room=${ghostName}`, { waitUntil: "networkidle" });
     const emptyVisible = await page.isVisible('[data-testid="result-empty"]');
-    assert.ok(emptyVisible, `有名无行 → 译空态；got visible=${emptyVisible}`);
+    assert.equal(emptyVisible, true, `有名无行 → 译空态；got visible=${emptyVisible}`);
     await shoot(page, "q4-branch2-named-empty.png");
 
     // 分支 3：有名 + server 有行 → SSR 战绩
@@ -398,7 +399,7 @@ try {
     assert.equal(merge.status(), 200);
     await page.goto(`${BASE}/result?room=${realName}`, { waitUntil: "networkidle" });
     const statsVisible = await page.isVisible('[data-testid="result-stats"]');
-    assert.ok(statsVisible, `有名有行 → SSR 战绩；got visible=${statsVisible}`);
+    assert.equal(statsVisible, true, `有名有行 → SSR 战绩；got visible=${statsVisible}`);
     const html3 = await page.content();
     assert.ok(/data-value="5"/.test(html3), `SSR 含本局数字 data-value=5`);
     assert.ok(/data-value="3"/.test(html3), `SSR 含本局数字 data-value=3`);
@@ -407,7 +408,7 @@ try {
     // 分支 4：旧 ?name= → 优雅 fallback（不 301）
     await page.goto(`${BASE}/result?name=${realName}`, { waitUntil: "networkidle" });
     const fb4 = await page.isVisible('[data-testid="result-fallback"]');
-    assert.ok(fb4, `?name= 走 fallback；got visible=${fb4}`);
+    assert.equal(fb4, true, `?name= 走 fallback；got visible=${fb4}`);
     const stats4 = await page.locator('[data-testid="result-stats"]').count();
     assert.equal(stats4, 0, `?name= 不渲染 result-stats；got count=${stats4}`);
     await shoot(page, "q4-branch4-name-fallback.png");
@@ -458,11 +459,10 @@ try {
       const r = await fetch("/", { cache: "no-store" });
       return r.text();
     });
-    const m = html.match(
-      /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/,
-    );
-    assert.ok(m, "home SSR 必须含 JSON-LD <script> 块");
-    const payload = JSON.parse(m[1]);
+    const JSONLD_BLOCK_RE = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/;
+    const m = JSONLD_BLOCK_RE.exec(html);
+    assert.match(html, JSONLD_BLOCK_RE, "home SSR 必须含 JSON-LD <script> 块");
+    const payload = JSON.parse(m?.[1] ?? "");
     const types = Array.isArray(payload["@type"]) ? payload["@type"] : [payload["@type"]];
     assert.ok(types.includes("VideoGame"), `JSON-LD @type 必须含 VideoGame；got ${types.join(",")}`);
     assert.equal(payload.playMode, "https://schema.org/MultiPlayer", `playMode = MultiPlayer`);

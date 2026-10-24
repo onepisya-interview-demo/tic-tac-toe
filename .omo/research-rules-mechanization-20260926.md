@@ -38,6 +38,8 @@
 
 **差距（停在文档层、可机械化候选）**：① TTL「改一处」文档承诺 ↔ 端点硬编码 30（= 待决 Q3）；② 多票派发单票范围漂移（t-n4 型，本波靠司机人工拦截）；③ eslint 无 --fix、无 format 自动化。
 
+> 【2026-10-09 勘注】§二现状盘点系 2026-09-26 时点：ci.yml 现 11 job（`grep -cE "^  [a-z0-9-]+:$"` 实测）；差距①②③ 已分别被 C2/C5/C4（部分）兑现消解，见 §五兑现补注。表行原文不改。
+
 ## 三、业界全景（AI 时代，四层）
 
 ### A. 结构规则 + 自动修复层（「加规则→程序自动修」的最短路径）
@@ -82,13 +84,26 @@
 | C3 | ast-grep 进 CI | BR-11 部分断言可下沉为结构规则 | 新 CI job + rules/ 目录 + 正反例 fixture | 中 |
 | C4 | eslint --fix / format 自动化 | lint script 无 --fix，无 format 层 | script 改造 + 一次性全仓 format commit（diff 噪声需主公裁决） | 小，但噪声取舍需裁决 |
 | C5 | 派发红线断言模板化 | t-n4 型漂移靠司机人工拦截 | .omo/ 或 scripts/ 沉淀 workflow 脚本模板（diff 文件面 vs brief 白名单集合断言） | 小 |
+| C6 | CI 触发面覆盖对账 | 探针/CI workflow 变更不经 PR 触发则 CI 全盲，bug 可沉默约 15.9 天（rooms-race 漏 `BASE_URL` 实证，`a2a667d`） | vitest/脚本：断言 ci.yml 触发器矩阵覆盖全部长期分支（或显式豁免清单），另可断言 CI 结论取 run_attempt=1 全绿 | 小——纯配置文本/AST 断言，无生产触达 |
+| C7 | cron 上线验证 runbook 脚本化 | 「验证生效」目前纯手工：两态 curl + crons ls + 次日 Cron Logs 流程已走通但人工执行 | scripts/ runbook：部署轮询（状态迁移链）+ 两态 curl 断言 + crons ls 输出判定；次日日志检查独立成步 | 中——生产 secret 注入与次日窗口调度需设计，授权边界须先裁 |
+| C8 | TTL 边界造数-触发-对照 harness | 「写库造边界行 + 手动触发 + 删留名单对照」模式（2026-09-30 验证波）为一次性临时脚本，可复用 | scripts/ 参数化 harness（zz-ttl-probe 类测试前缀造数 + purge 触发 + 删留名单对照断言） | 中——边界行参数表与断言需随 schema 维护 |
+| C9 | 文档契约测试扩展面评估（C2 推广） | 文档声明与实况漂移（operations.md 生产 URL 过时、探针期待漂移于 BR-1 decree）；C2 已有兑现先例 | vitest 契约测试扩展：生产 URL 常量 ↔ operations.md、「文档断言 ↔ git 实况」、「探针期待 ↔ business-rules 表」逐项对账 | 中——漂移面盘点后逐条立断言，先评估再立项 |
 
 > 落实补注（2026-09-27）：C2 已实质兑现——T-P1（`2d7709b` 2026-09-26）把 `tests/api/maintenance-purge.test.ts:114/:129` 改为 `purgeStaleRoomsMock).toHaveBeenCalledWith()`，即「断言 route handler 不含 purgeStaleRooms 字面实参」的端点契约测试；C1 / C3 / C4 / C5 维持未裁决。本节标题「全部未裁决」措辞保留作入档时快照。
+
+> 增补（2026-10-01）：C6-C9 四行由验证信任沉淀波（[research-verification-trust-20260930.md](research-verification-trust-20260930.md) §三）追加于本表末尾——**待机械化唤醒统一裁决，未裁决不实施**；唤醒条件仍以 §六为准，C2 兑现先例是 C9 的直接参照。
+
+> 【2026-10-04 勘误补注】§五表 C6 行旧记「bug 可沉默 12 天」失实——触发面盲区实为 ≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化；`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）；job 层窗口（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天。正文已按锚点口径更正，verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
+
+> 【2026-10-04 兑现归档注】2d7709b 文档契约断言经 09-30/10-01 两度现场核验仍在生效，已兑现归档（2026-10-04 自治裁决 D10a）。
+
+> 兑现补注（2026-10-09）：C1 兑现＝票 1（887591c，docs/anti-patterns.md 全 48 条补机械化状态字段＋四段位对照表）；C5 兑现＝票 3（b31139a，派发红线断言模板入 docs/dispatcher-playbook.md＋历史波回放演练）；C6 主面兑现＝票 4（fce7af1，豁免清单显式化＋run_attempt=1 首跑绿口径＋BASE_URL 契约，tests/qa/ci-contract.test.ts——触发矩阵覆盖臂与 dev push 触发 CI 立项仍悬置不翻案，故记「主面兑现」而非全兑现）；C4 部分兑现＝22af9e1（package.json 增 lint:fix 档位，仅此——全仓一次性 format 波未做）；C8 部分兑现＝票 6（a6bc793，scripts/ttl-probe-seed.mjs 造数＋zz-ttl-probe 前缀断言入仓；purge 触发＋删留名单对照未做）；C3/C7/C9 仍未动。行 90「C1/C3/C4/C5 维持未裁决」与行 92「C6-C9 未裁决不实施」系历史快照，按档内纪律不改原文，以本注为准。
 
 ## 六、唤醒条件与检索路径
 
 - **唤醒触发**（任一即拉出本报告进 planning）：① 同类错误第 3 次重犯（三犯法则）；② t-n4 型派发漂移再犯；③ Q3 批注落地时顺手评估 C2；④ 主公点名「规则机械化」。
 - **触发与评估记录（2026-09-27 补）**：条件③已触发——Q3 批注落地（主公批注选 a）随 T-P1 兑现（`2d7709b` 2026-09-26）。评估结论：C2 以 maintenance-purge.test.ts 端点契约断言（`purgeStaleRoomsMock).toHaveBeenCalledWith()`）随 T-P1 同波实质兑现，无需另立票；其余唤醒条件未触发，报告整体维持「不立项不开坑」。
+- **触发与评估记录（2026-10-09 补）**：① 2026-10-01 唤醒收口——awaken 材料 87ec30f 入档（.omo/research-rules-mechanization-awaken-20261001.md，C1–C9 九候选裁决卡备齐待裁），主公裁「我回去读的」，D9–D18 缓读未裁未驳；② 2026-10-07 缺口图谱波（dwfrun-1357b366）＋decisions 自排期队列 17 项转化为验证基建路线图执行（.omo/plans/ulw-verification-infra-roadmap-20261007.md，17 票全 pass）——「不立项不开坑」至此被实际立项执行取代；兑现映射见 §五「兑现补注（2026-10-09）」。
 - **检索路径**：ZCode 记忆索引「规则机械化调研待命」条目 → 本文件。
 - **建议第一步**：读 §五候选清单 → docs/requirement-intake.md 对齐 → `$omo:ulw-plan` 立票（候选间正交，可单票可组合；C2 与 Q3 补丁同波最顺）。
 - **本次调研用过的检索词**（复搜起点）：AGENTS.md standard enforcement 2026 / ast-grep YAML rule autofix / Claude Code hooks deterministic guardrails / AI code review learnings conventions / LLM lint rule synthesis / Uber Fixit autofix。

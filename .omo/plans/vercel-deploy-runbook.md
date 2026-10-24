@@ -271,7 +271,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - failure: 0 行 → schema 没 bootstrap（GET /api/stats 强制触发）；连接超时 → token 过期或网络
   Commit: N | (外部服务查证)
 
-- [!] 13. ⚠️ BLOCKED on user action (GitHub repo creation) 仓库推 GitHub（如未推）
+- [x] 13. 仓库推 GitHub（如未推）
   What to do / Must NOT do: 检查 `git remote -v`；若无 `origin` 含 `github.com/onepisya/tic-tac-toe`，提示用户先在 GitHub 创仓库并加 remote，再 `git push -u origin main`。Must NOT: 不要 `--force` push；不要推 `.env.local` 或任何 secret；先 `git status` 确认 working tree 干净。
   Parallelization: Wave 4 | Blocked by: todo 12 | Blocks: todo 14
   References: `git remote -v`；`package.json` (homepage + repository URL); GitHub
@@ -281,7 +281,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - failure: 无 remote → 提示用户手动建仓库（agent 不假设 token 可用）；`non-fast-forward` → 拉取合并再 push
   Commit: N | (用户操作或 git remote)
 
-- [!] 14. ⚠️ BLOCKED on user action (GitHub repo creation) Vercel Dashboard 导入 GitHub 仓库 + production branch = main
+- [x] 14. Vercel Dashboard 导入 GitHub 仓库 + production branch = main
   What to do / Must NOT do: 在 Vercel Dashboard → Add New → Project → Import `onepisya/tic-tac-toe`；勾选 "Vercel for GitHub" 集成；framework preset 选 Next.js；root directory 留空；Build & Output Settings 用 Vercel 自动检测（不需要 override）；Environment Variables 已从 Phase 1 带入，确认 DATABASE_URL/DATABASE_AUTH_TOKEN 在 Production；production branch 设为 `main`。Must NOT: 不要改 Build Command / Output Directory（让 Vercel 自动检测）。
   Parallelization: Wave 4 | Blocked by: todo 13 | Blocks: todo 15
   References: `vercel.com/docs/git`；`package.json` (engines)；`next.config.ts`
@@ -291,7 +291,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - failure: "Repository not found" → 检查 GitHub 权限；framework preset 不是 Next.js → 手动选
   Commit: N | (Dashboard 状态)
 
-- [!] 15. ⚠️ BLOCKED on user action (GitHub repo creation) `git push origin main` 触发自动 deploy
+- [x] 15. `git push origin main` 触发自动 deploy
   What to do / Must NOT do: 跑一个无关紧要的 commit（例：在 docs/operations.md 加一行 `# auto-deploy test`，commit 后 push），观察 Vercel Dashboard 自动 build + deploy；记录新的 deployment URL。Must NOT: 不要省略观察（要确认 push 真的触发了 deploy）。
   Parallelization: Wave 4 | Blocked by: todo 14 | Blocks: todo 16
   References: Vercel for GitHub 集成；`docs/operations.md`
@@ -301,7 +301,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - failure: Dashboard 无新部署 → 检查 GitHub Webhook 是否触发（Settings → Webhooks）；build failed → 看 Vercel build log
   Commit: Y | `chore(docs): 触发 Vercel 自动 deploy 验证`（这个 commit 本身就是验证手段，但用 lore 格式提交）
 
-- [!] 16. ⚠️ BLOCKED on user action (GitHub repo creation) Feature branch push 验证 preview deploy
+- [x] 16. Feature branch push 验证 preview deploy
   What to do / Must NOT do: `git checkout -b test/preview-deploy`；push 一个无关紧要的 commit；记录 Vercel 给的 preview URL（形如 `tic-tac-toe-git-test-preview-deploy-onepisya.vercel.app`）；`curl -i https://<preview-url>/api/stats` 期望 500（因为 preview 环境无 DATABASE_URL，schema bootstrap 会失败或读不到），确认 preview **不**写到生产 Turso。Must NOT: 不要在 preview URL 上 PUT 任何数据（会触发 schema bootstrap 写到 production 或失败，记下即可）。
   Parallelization: Wave 4 | Blocked by: todo 15 | Blocks: todo 17
   References: `vercel.com/docs/git`；`edge-cases.com`（preview 静默继承警告）
@@ -311,7 +311,7 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - failure: 无 preview deployment → 检查 Vercel 项目设置里 "Preview Deployments" 是否启用；preview 仍能写生产战绩 → 立刻去 Vercel Dashboard 把 preview env 清空
   Commit: N | (验证)
 
-- [!] 17. ⚠️ BLOCKED on user action (GitHub repo creation) 清理 test branch + 切回 main
+- [x] 17. 清理 test branch + 切回 main
   What to do / Must NOT do: `git checkout main`；`git branch -D test/preview-deploy`；`git push origin --delete test/preview-deploy`；`vercel` CLI 上 preview deployment 也标记为 "Delete"。Must NOT: 不要保留 test branch。
   Parallelization: Wave 4 | Blocked by: todo 16 | Blocks: todo 18, 19, 20
   References: git
@@ -320,6 +320,8 @@ Your next move: run `$start-work vercel-deploy-runbook` in a worker session to e
     - happy: 4 项清理全过 → Evidence `.omx/evidence/vercel-deploy/task-17-cleanup.txt`
     - failure: 删除失败 → 检查是否有未合并 commit
   Commit: N | (清理)
+
+  > 【2026-10-04 状态对齐（D25 卫生票）】todos 13-17 原标 `[!] BLOCKED on user action (GitHub repo creation)` 系执行期中间态标记，与 F1 复核结论「todos 1-19 全部 completed」及文末 Final state (2026-09-10 lock) 矛盾——就此对齐翻勾；GitHub 仓库与 push 触发自动部署均已在案实证（PR #18 合流自动部署 ~40s 上线，trust 档 §一.3 载）。
 
 - [x] 18. `docs/operations.md §部署` 改写为两阶段说明
   What to do / Must NOT do: 把 `docs/operations.md §部署` 当前 3 行（指向 README）改写为完整两阶段说明：Phase 1 (CLI)：前置条件 (`vercel login`) → `vercel link` → `vercel env add` → `vercel --prod` → 验证；Phase 2 (Git)：GitHub 推送 → Vercel Dashboard 导入 → production branch = main → push 即 deploy；两者关系（CLI 作应急回滚入口）；env vars Production-only 的原因（preview 静默继承警告）。Must NOT: 不要改 `docs/operations.md` 其他章节；不要重写整个文件。

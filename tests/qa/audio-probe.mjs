@@ -6,11 +6,16 @@ import assert from 'node:assert/strict';
 
 import { launchQA, BASE_URL } from './lib/browser.mjs';
 import { driveTopRowWin } from './lib/win-drive.mjs';
+import { passRoomGate } from './lib/enter-online.mjs';
 
 const BASE = BASE_URL;
+// Unique room per run (probe-repair ticket 18): /api/stats was retired
+// by the room migration, so the old `DELETE /api/stats` clean-up is a
+// no-op 404. A fresh hermetic DB + a unique room name gives the same
+// zero-history starting point through the current /api/rooms surface.
+const ROOM = `ap-${Date.now() % 1000000}`;
 const { browser, ctx, page } = await launchQA({ autoplay: true });
 
-await page.request.delete(`${BASE}/api/stats`);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 
 // 1. Unmute via the toggle on the home page.
@@ -18,11 +23,12 @@ await page.click('[data-testid="sound-toggle"]');
 const mutedFlag = await page.evaluate(() => localStorage.getItem('ttt.sound.muted'));
 assert.equal(mutedFlag, '0');
 
-// 2. Navigate to /online (this reloads the page, so install the probe
-//    AFTER navigation — the mute flag is in localStorage so it persists).
-await page.click('[data-testid="start-online"]');
-await page.waitForURL('**/online');
-await page.waitForSelector('[data-testid="board"]');
+// 2. Enter /online through the RoomGateDialog (c75cfdf/c9ef27f made
+//    the start-online CTA gated — passRoomGate fills the room name,
+//    confirms, and lands on the board). Navigation loads a new page,
+//    so install the probe AFTER it — the mute flag is in localStorage
+//    so it persists.
+await passRoomGate(page, ROOM);
 await page.waitForTimeout(200);
 
 // 3. Install the AudioContext probe BEFORE the first cell click so we can
@@ -52,7 +58,12 @@ const firstPlayer = firstStatus?.match(/轮到 ([XO])/)?.[1];
 await driveTopRowWin(page);
 
 // 5. Allow the page to settle so playSound('win') ran.
-await page.waitForURL('**/result', { timeout: 4000 });
+// Regex, not the `**/result` glob: the online win push goes to
+// `/result?room=<room>` (ResultNavigator) and end-anchored globs do
+// not match query strings. 8s (was 4s): the push now waits for the
+// in-flight outcome POST to settle (W-F) — same timeout the green
+// result probes use.
+await page.waitForURL(/\/result/, { timeout: 8000 });
 await page.waitForTimeout(400);
 
 const probe = await page.evaluate(() => window.__probe);

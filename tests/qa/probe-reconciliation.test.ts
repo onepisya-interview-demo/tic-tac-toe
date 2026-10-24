@@ -15,7 +15,7 @@
 // 加 docs/operations.md 显式解析为第三引用源；KNOWN_ORPHANS 由 10 扩 13。
 // T-L2 triage (2026-09-25)：13 → 0（白名单清零，详见 KNOWN_ORPHANS 块下注释）。
 //
-// 真源：docs/anti-patterns.md:209 L1-31；research-rooms-race-probe §4.3。
+// 真源：docs/anti-patterns.md L1-31（编号引用，去行号防漂移——2026-10-08 票 1）；research-rooms-race-probe §4.3。
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

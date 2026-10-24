@@ -28,6 +28,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## L1 路由指针（一行式 digest + 完整文档）
 
 - 仓库结构与查找入口：[`docs/repo-map.md`](docs/repo-map.md)
+- 文档状态总图（哪个计划实现了没）：[`.omo/doc-status-map-20260927.md`](.omo/doc-status-map-20260927.md)
 - 代码符号地图：[`docs/code-symbols.md`](docs/code-symbols.md)
 - 约定与命名：[`docs/conventions.md`](docs/conventions.md)
 - 视觉与无障碍：[`docs/style.md`](docs/style.md)

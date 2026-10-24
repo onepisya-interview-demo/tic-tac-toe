@@ -159,7 +159,7 @@ try {
 
     // Assert localStorage accumulated 3 games.
     const raw = await page.evaluate((key) => window.localStorage.getItem(key), LOCAL_OFFLINE_KEY);
-    assert.ok(raw, `expected ${LOCAL_OFFLINE_KEY} to exist after 3 games`);
+    assert.equal(typeof raw, "string", `expected ${LOCAL_OFFLINE_KEY} to exist after 3 games`);
     const stats = JSON.parse(raw);
     assert.equal(stats.totalGames, 3, `localStorage totalGames must be 3, got ${stats.totalGames}`);
     assert.equal(stats.xWins + stats.oWins + stats.draws, 3, "xWins+oWins+draws must equal 3");
@@ -277,6 +277,7 @@ try {
     }
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-confirm"]')?.hasAttribute('disabled'),
+      null,
       { timeout: 4000 },
     );
 
@@ -291,6 +292,7 @@ try {
     });
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="sync-confirm-dialog"]')?.hasAttribute("open"),
+      null,
       { timeout: 8000 },
     );
     await page.waitForTimeout(400);

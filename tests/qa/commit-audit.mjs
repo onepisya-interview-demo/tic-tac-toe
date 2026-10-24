@@ -112,12 +112,22 @@ const DEPENDABOT_NAME = "dependabot[bot]";
 //      date (2026-09-23, chore(audit) 3068b22a) cannot have violated R7
 //      because R7 did not yet exist; grandfather them in branch mode only.
 //      Author-date based (time anchor), orthogonal to subject / author.
+//      This class now carries two anchors, each grandfathering its own
+//      rule surface: R7_ADOPTION_DATE exempts R7 (CJK subject / trailer);
+//      R3_STRICT_ADOPTION_DATE exempts only the R3 explicit-token
+//      requirement (keyword fallback stays for pre-anchor history).
 //
 // The three classes absorb the 164 existing per-commit R1-R5/R7 failures
 // without changing the rule semantics for any commit authored on or after
 // 2026-09-23. R6 (repo-state check) and the --message-file hook path
 // (human commit entry point) are intentionally untouched.
 const R7_ADOPTION_DATE = "2026-09-23";
+// R3 严格化（显式 WHAT:/WHY:/HOW: token 硬要求）采纳锚点，语义仿 R7_ADOPTION_DATE：
+// 日级 <= 比较（ISO-8601 日字符串字典序），采纳日整日视为旧账的保守读法。仅用于
+// branch/range 模式旧账豁免（preR3StrictAdoption）——锚点及之前的散文正文仍走
+// WHY_RE/HOW_RE 关键词祖父分支；--message-file 钩子路径永不豁免（main() 调
+// checkMessage 无第三参，opts.preR3StrictAdoption 恒 falsy，结构性不可达）。
+const R3_STRICT_ADOPTION_DATE = "2026-10-24";
 const MERGE_COMMIT_RE = /^Merge pull request #\d+ /;
 
 function parseArgs(argv) {
@@ -202,12 +212,26 @@ function checkMessage(label, raw, opts = {}) {
       findings.push({ rule: "R7", msg: `subject description lacks CJK characters: "${subjectNoPrefix}"` });
     }
 
-    const hasExplicitHeading = /\bWHAT:\s/.test(body) && /\bWHY:\s/.test(body) && /\bHOW:\s/.test(body);
+    // R3 严格化（2026-10-24 采纳）：docs/commit-policy.md §正文 schema 的
+    // WHAT/WHY/HOW 三段由可选捷径升为硬要求——缺任一显式 token 即 FAIL，
+    // finding 列出缺失 token 清单。散文关键词启发式（WHY_RE/HOW_RE）退役为
+    // branch/range 模式采纳日前旧账的祖父分支（preR3StrictAdoption，仿
+    // preR7Adoption；--message-file 路径无此 opt，恒走严格门）。token 形态
+    // 同行/独占行均认（/\bWHAT:\s/），行长排版归 commitlint 与排版硬规则。
+    const missingHeadings = [
+      ["WHAT:", /\bWHAT:\s/],
+      ["WHY:", /\bWHY:\s/],
+      ["HOW:", /\bHOW:\s/],
+    ].filter(([, re]) => !re.test(body)).map(([tok]) => tok);
     if (body.length < 60) {
       findings.push({ rule: "R3", msg: `body too short (${body.length} chars) - must explain what + why + how` });
-    } else if (!hasExplicitHeading) {
-      if (!WHY_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention WHY (no because/so-that/to fix/missing/bug/...)" });
-      if (!HOW_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention HOW (no via/by/with/pnpm/vitest/playwright/...)" });
+    } else if (missingHeadings.length > 0) {
+      if (opts.preR3StrictAdoption) {
+        if (!WHY_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention WHY (no because/so-that/to fix/missing/bug/...)" });
+        if (!HOW_RE.test(body)) findings.push({ rule: "R3", msg: "body does not mention HOW (no via/by/with/pnpm/vitest/playwright/...)" });
+      } else {
+        findings.push({ rule: "R3", msg: `body lacks explicit WHAT:/WHY:/HOW: tokens (missing ${missingHeadings.join(" ")}) - keyword fallback is pre-2026-10-24 branch-mode history only` });
+      }
     }
 
     if (!/\bConfidence:\s*(low|medium|high)\b/i.test(footer)) {
@@ -373,7 +397,11 @@ function main() {
     // not have complied with a rule that did not exist yet. ISO-8601
     // day strings sort lexicographically, so a string compare suffices.
     const preR7Adoption = authorDate.slice(0, 10) <= R7_ADOPTION_DATE;
-    return checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption });
+    // Same day-level `<=` semantics for the R3 explicit-token anchor: the
+    // whole adoption day (2026-10-24) is grandfathered so earlier commits
+    // from that day keep the keyword fallback in branch / range mode.
+    const preR3StrictAdoption = authorDate.slice(0, 10) <= R3_STRICT_ADOPTION_DATE;
+    return checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption });
   });
   let failures = 0;
   let skips = 0;

@@ -1,5 +1,7 @@
 # dev vs main 分支差异对比报告（工单 W-DIFF）
 
+> [已过期 2026-10-04 注：本文全部数字系 2026-09-22 时点快照（dev @ `1cec0a8`），仅留档备查；现状以实时 `git rev-list` 实测为准。]
+
 > 调度者注记（2026-09-22）：本报告由 W-DIFF 分析席独立实测产出，基线为 dev @ `1cec0a8`；此后 dev 新增 `39acfaa`（fix(test) coverage 工具链，1 提交），对四维度结论无影响，规模数字以本报告实测为准（其已修正 plan §2.4 的较早时点数字）。
 > 关联 Plan: .omo/plans/ulw-quality-hardening-opt-20260922.md
 

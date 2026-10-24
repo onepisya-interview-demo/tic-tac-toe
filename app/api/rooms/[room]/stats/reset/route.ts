@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { resetRecordByRoom } from '@/lib/db';
 import { normalizeRoom } from '@/lib/room-name';
 import { problemResponse } from '@/lib/api-problem';
+import { withRouteTiming } from '@/lib/api-timing';
 
 // W-R (ulw-online-reset-and-result-fresh D-2) thin transport wrapper.
 //   POST /api/rooms/{room}/stats/reset
@@ -22,7 +23,7 @@ import { problemResponse } from '@/lib/api-problem';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(
+async function postReset(
   _request: Request,
   { params }: { params: Promise<{ room: string }> },
 ): Promise<Response> {
@@ -45,4 +46,13 @@ export async function POST(
   } catch {
     return problemResponse(500, 'db-unavailable');
   }
+}
+
+// Timing wrapper (trace-minimal, roadmap ticket 8): one JSON line per
+// request with route/duration; response semantics untouched.
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ room: string }> },
+): Promise<Response> {
+  return withRouteTiming('/api/rooms/[room]/stats/reset', postReset)(request, context);
 }

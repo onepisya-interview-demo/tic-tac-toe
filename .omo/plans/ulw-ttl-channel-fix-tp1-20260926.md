@@ -38,9 +38,9 @@
 | # | 项 | 期望 | 实测 |
 |---|---|---|---|
 | AC-1 | `pnpm vitest run` | 全绿；基线 540 passed / 11 skipped 不减 | 540 passed / 11 skipped PASS |
-| AC-2 | `pnpm typecheck` | exit 0 | exit 0 PASS |
-| AC-2 | `pnpm lint` | 0 errors（warnings 可接受但不得新增） | 0 errors（12 warnings 均为既有 `.zcode/workflow-runs/*` 噪声，未新增） PASS |
-| AC-2 | `pnpm build` | exit 0 + `/api/maintenance/purge` 路由编译通过 | exit 0 PASS |
+| AC-2a | `pnpm typecheck` | exit 0 | exit 0 PASS |
+| AC-2b | `pnpm lint` | 0 errors（warnings 可接受但不得新增） | 0 errors（12 warnings 均为既有 `.zcode/workflow-runs/*` 噪声，未新增） PASS |
+| AC-2c | `pnpm build` | exit 0 + `/api/maintenance/purge` 路由编译通过 | exit 0 PASS |
 | AC-3 | 负对照 `rg 'purgeStaleRooms\([^)\s]' app/` | 零命中 | 零命中 PASS |
 | AC-4 | `git commit` 经 commit-msg hook | exit 0 | PASS（`2d7709b` 存在即证） |
 | 端口 | `lsof -ti :3000 :3009 :3101` | 全空 | 全空 PASS |

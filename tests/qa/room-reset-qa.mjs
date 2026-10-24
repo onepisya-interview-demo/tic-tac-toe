@@ -150,6 +150,7 @@ await step("S1 seed → /result non-zero ledger + reset entry visible", async ()
         document.querySelector(
           '[data-testid="result-stats"] [data-testid="stat-value"]',
         )?.getAttribute("data-value") === "0",
+      null,
       { timeout: 15000 },
     );
     const zeroed = await statValues(page);

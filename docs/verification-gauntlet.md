@@ -14,7 +14,7 @@
 | Lint | eslint 9 + eslint-config-next/core-web-vitals + typescript，`pnpm lint = eslint`（不传参；等价于 `eslint .` 由 `eslint.config.mjs` 默认 targets + `globalIgnores(['tests/qa/**', ...])` 共同决定） | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm lint 通过」 |
 | Changed-line coverage | vitest --coverage（v8 provider，scope = `lib/**` + `db/**`，thresholds: lines 80 / functions 80 / branches 70 / statements 80） | ⚠️ 部分配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖 app/ + tests/qa/ + docs/，详见 §2 on-demand 规则）；未来 commit 触及 `lib/db` 时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
 | Mutation | Stryker 10 + vitest-runner（scope = `lib/game.ts` + `lib/db.ts` + `lib/store.ts` + `db/schema.ts`，break: null 信息性） | ✅ 已配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖本次改动）；未来 commit 触及 4 个文件时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
-| Property-based | fast-check 4 已装；`pnpm test:property = vitest run property`（substring 过滤命中 `lib/game.property.test.ts`） | ✅ 已配 | ⚠️ on-demand：commit 新增 `lib/X.ts` 纯函数时必跑 + 配套 `lib/X.property.test.ts`（当前 `lib/game.property.test.ts` 5 条不变量） | ❌ AGENTS.md §验证门禁未列；AGENTS.md 也未提及 `pnpm test:property` |
+| Property-based | fast-check 4 已装；`pnpm test:property = vitest run property`（substring 过滤命中 `lib/{game,store,db}.property.test.ts`） | ✅ 已配 | ⚠️ on-demand：commit 新增 `lib/X.ts` 纯函数时必跑 + 配套 `lib/X.property.test.ts`（当前 3 文件 15 条不变量：game 5 / store 5 / db 5）；**已进 CI**（2026-10-08 前从未进 CI——ci.yml `test` job 原仅 `pnpm test`；票 10 接线后该 job 增跑 `pnpm test:property` step，Plan: `.omo/plans/ulw-verification-infra-roadmap-20261007.md` §七票 10） | ❌ AGENTS.md §验证门禁未列；AGENTS.md 也未提及 `pnpm test:property` |
 
 ## 2. On-demand 触发规则
 
@@ -93,6 +93,67 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    engines.node 不一致，(c) 本地 vitest fork pool 退化为 `undici 8` 报错
    （`webidl.util.markAsUncloneable is not a function`）。历史决策链：commit
    `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
+6. **探针 / CI job 触发面覆盖的结构性盲区（2026-09-30 验证波新增）**：CI 自
+   2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不
+   触发任何 CI job——凡不产生 PR 的改动面，CI 触发面语境下六层中依赖 CI 实跑的门禁全部静默
+   （⑤commit-audit 系本地 hook、①tests ②typecheck ③lint 另有每 commit 本地纪律跑，本地执行
+   不受影响；2026-10-04 表述精确化）。实证：rooms-race 探针 job
+   漏传 `BASE_URL`，自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI →
+   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
+   实施）；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
+   [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
+   [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)；反模式侧记 L1-32 见
+   [`docs/anti-patterns.md`](./anti-patterns.md)（同源互链，2026-10-04 补回指——b5a3299 互链实为单向）。
+   触发面豁免显式清单见 §5.1（票 4 · ✅D14 对本盲区的显式化收口——豁免不翻案，
+   C6 悬置口径不变）。
+
+## 5. CI 触发面豁免清单与「五必绿 ↔ 11 job」对账（票 4 · ✅D14 · 2026-10-08）
+
+> 真源：`.omo/decisions-20261001.md` ✅D14 卡；验证基建路线图队列票 4（Plan: `.omo/plans/ulw-verification-infra-roadmap-20261007.md` §七）。机械断言载体：`tests/qa/ci-contract.test.ts`（BASE_URL 契约／豁免条目在档／对账表↔ci.yml job 集合双向一致／run_attempt=1 首跑绿口径在档，挂层①vitest）。
+
+### 5.1 CI 触发面豁免清单（显式化）
+
+| 豁免对象 | 现状（实测口径） | 纪律替代（本地侧） | 教训锚 | 解豁免通道 |
+| --- | --- | --- | --- | --- |
+| dev push | ci.yml `on:` 仅 `pull_request → main`，dev 直推零 CI——凡不产生 PR 的改动面，CI 侧全静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6——主公裁决档，未裁决不翻案；本清单只显式化现状，不立项亦不驳回 |
+
+### 5.2 「五 CI 必绿」↔ 11 job 对账表
+
+「五 CI 必绿」系 [docs/branching.md](./branching.md) main-gate 措辞的历史口径（五门＝lint／typecheck／test／build／visual-qa）；main-gate ruleset 实测（2026-10-08 `gh api` rulesets，B 档外取通道）`required_status_checks` 已列 **11 contexts**＝ci.yml 全部 11 job（2026-09-25 T-L2 五 BR 探针 job 入 CI 时同步扩列，见 `tests/qa/probe-reconciliation.test.ts` 注记）。对账以本表为准；branching.md 措辞修订不属票 4 范围（记档不代改）。
+
+| # | ci.yml job id | CI 实报 check 名（job `name:`） | ruleset required context（gh 实测） | 必绿档位 | 六层对应 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | lint | Lint (ESLint) | Lint (ESLint) ✅ | 五必绿 | ③ |
+| 2 | typecheck | Typecheck (tsc) | Typecheck (tsc) ✅ | 五必绿 | ② |
+| 3 | test | Test (Vitest) | Test (Vitest) ✅ | 五必绿 | ① |
+| 4 | build | Build (Next.js) | Build (Next.js) ✅ | 五必绿 | ④ |
+| 5 | visual-qa | Visual QA (Playwright probe) | Visual QA (Playwright probe) ✅ | 五必绿 | ⑥ |
+| 6 | rooms-race | Rooms-race QA (Playwright probe) | Rooms-race QA (Playwright probe) ✅ | 追加 BR 探针 | ⑥ |
+| 7 | home-return-qa | Home-return QA (Playwright probe) — BR-1/2/3/5 | Home-return QA (Playwright probe) — BR-1/2/3/5 ✅ | 追加 BR 探针 | ⑥ |
+| 8 | offline-mode-qa | Offline-mode QA (Playwright probe) — BR-4 | Offline-mode QA (Playwright probe) — BR-4 ✅ | 追加 BR 探针 | ⑥ |
+| 9 | offline-qa | Offline QA / pure-local (Playwright probe) — BR-4 | Offline QA / pure-local (Playwright probe) — BR-4 ✅ | 追加 BR 探针 | ⑥ |
+| 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | Online-direct QA (Playwright probe) — BR-2/8 ✅ | 追加 BR 探针 | ⑥ |
+| 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | Room-reset QA (Playwright probe) — BR-7 ✅ | 追加 BR 探针 | ⑥ |
+
+对账发现（2026-10-08，票 4 实测；第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下）：
+
+- **命名错位（✅ 已于 2026-10-21 修复，方案 a）**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设。
+  **修复回执（2026-10-21，主公令「先修复」，随 PR #22 发版波执行）**：repo ruleset（id 23195249）`required_status_checks` 六 context 由 job id 改列 CI 实报显示名——新名单自 ci.yml `name:` 字段机械提取（零转抄），五必绿五项本就一致未动；PUT 写回实测 11 contexts 全部与实报名重合，PR #22 `mergeStateStatus` 当即 BLOCKED→CLEAN。改名防漂移无静态断言可拦（GitHub 侧配置面），对账依赖本表第 3/4 列人工或 gh api 复核。
+- **行数对账**：本表 11 行＝`grep -cE "^  [a-z0-9-]+:$" .github/workflows/ci.yml`＝11；`tests/qa/ci-contract.test.ts` 持续断言表行 job id 集合与 ci.yml job id 集合双向相等，防 job 增删后本表漂移。
+
+### 5.3 BASE_URL 契约（动作③）
+
+每个探针 job 的探针 step 必须显式携带 `BASE_URL=http://localhost:<port>`，且端口与本 job 起 server 的 `PORT`（或裸 `pnpm start` 的 Next.js 默认 3000）一致——教训：rooms-race job 漏传 `BASE_URL`（server :3101／探针默认 :3000）自进 CI 起约 6.3 天未绿（`a2a667d` 修复，L1-32）。本票将 visual-qa step 补齐显式 `BASE_URL=http://localhost:3000`（与其探针默认值同值，行为零变），契约对全部 7 个探针 job 统一、无「默认端口例外」分支——默认值耦合正是 a2a667d 事故类。
+
+### 5.4 EVIDENCE_DIR 三态核验——✅ 已终判＝「展开」并断言定版（2026-10-21）
+
+- **疑点起点**：ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用）。
+- **10-08 判定＝「不展开」**（决定性证据：run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`；两条防误判教训：artifact 上传成功≠env 已展开、`##[group]Set up job` 回显段永远字面量不可作判据）。
+- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。
+- **2026-10-21 终判＝「展开」**：PR #22 run 39582362835，ci-verify 判据 [2] clean——env 已展开为 runner 真实绝对路径，锚行 `QA complete. … written to /home/runner/work/_temp/visual-qa`。D-1 至此闭环。
+- **断言定版**：`tests/qa/ci-contract.test.ts` describe E（job 级 env 禁 runner——防 c451ee5 同型再犯）＋ describe F（探针 step 级 EVIDENCE_DIR 必须为 `${{ runner.temp }}/<name>` 写法——防丢失/回退 shell 字面量两态）。证据件：`.omo/evidence/ci-verify-20261021-pr22.md`（判据 [1][2][3] 全 clean）。
+
+> 【2026-10-04 勘误补注】本条旧记「自进 CI 起 12 天从未绿过」系窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化）。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 
 ## 4. 与 `docs/operations.md` §部署 的边界
 
@@ -113,3 +174,10 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 > 2026-09-11 更新：`lib/store.ts` 在 RSC refactor C4 之后不再持有 `stats` 字段，mutation target 仍为 `lib/store.ts` 但内容已收缩（无 `hydrateStats`、无 stats set 分支）。如发现 mutation 得分变化，在本文件记录新基线。
 
 > 2026-09-14 基线：全量重跑 `pnpm test:mutation`（main @ 6778bd8，含九刀键控修复后首录）——总 68.55%（covered 70.78%）：game.ts 96.75 / db.ts 50.00 / store.ts 50.49 / schema.ts 58.33；killed 217 + timeout 1 + survived 90 + no-cov 10 + errors 7（store.ts 7 枚 RuntimeError：Test runner crashed 两次重启无果，沙箱已知噪声，非幸存者）。较 2026-09-11 记录（69.40 / store 53.40）微降：测试主体未退，系 store 键控修复后幸存者分布变化；break=null 不阻塞，仅为下一轮补测之坐标。
+
+> 2026-10-09 层⑥验收语义记档（票 18 探针修复票清账）：⑥ 浏览器探针曾于 2026-10-08 票 2 走查首录 7 支存量过时红（入口漂移族 5 支、pwa 缓存名版本化、ux-qa dialog 相位）入 `scripts/verify-all.mjs` 的 KNOWN_STALE 基线——照跑照报 FAIL 不计 exit，语义对齐 ⑤ 层 commit-audit 的「历史豁免基线」；该豁免随票 18（2026-10-09，七支全修复、零退役）清账归零、机制随之移除，层⑥验收语义自此回到**「探针全绿」**：verify-all ⑥ 20/20 全 PASS，任一 FAIL 即 exit 1，新红零容忍。
+
+> 2026-09-30 验证实践补充（验证信任沉淀波增补，六层框架不变，仅记三条实践要点）：
+> ① **首跑绿收口判据**——rerun 绿与 admin bypass 混过不算数，`run_attempt=1` 首跑全绿才算收口（PR #18 流程实证，anti-patterns L1-33）；
+> ② **本地复现定责法**——探针红先 `pnpm build` + 起 hermetic server（L0-8）本地三犯复现，区分「业务回归」与「探针过时」再动手（offline A2a/A2b → `1b80a99` 实证，anti-patterns L1-34）；
+> ③ **生产边界实证两阶段**——生产设施操作须主公明示授权且 secret 值不回显；「生效」以状态迁移链 + 两态对照亲见为准；cron 类定时任务两阶段验证（今天手动验删除逻辑、明天 cron 验定时器）并预埋「必过线」造数行作为次日日志证据锚点。生产部署操作细节归 [`docs/operations.md`](./operations.md) §部署辖域（本注不重复其事实）；13 条经验全录与机械化候选 C6-C9 见 [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)。两阶段验证已于 2026-10-02 fired 实证完结（cron 自动删除到期探针 id15/id8、余 6 行零漂移），判定梯子与 11-01 终验判据见同档 §六。

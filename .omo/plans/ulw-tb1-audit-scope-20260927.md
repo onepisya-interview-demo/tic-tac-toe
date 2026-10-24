@@ -133,5 +133,6 @@ node tests/qa/commit-audit.mjs --range main                # 显式等价 --bran
 - subject：`chore(qa): audit 口径收窄本波面 + 历史豁免基线——层⑤恢复信号`
 - WHAT / WHY / HOW 排版（token 独占行、内容每行 ≤72 字符）。
 - Trailer：`Confidence: high` / `Scope-risk: narrow` / `Plan: .omo/plans/ulw-homedialog-flaky-fix-20260926.md`
+  - 【2026-10-04 注（D25 卫生票）】Plan: 指向 homedialog 总档系本计划自身规定（T-B1 为其席位子票，交付 `d9f8a36` 即按此 footer 落地，亲证在案），属设计决定、非漂移。
 - 禁 `--no-verify`。
 - 单原子 commit，含本席位 plan 文件。
