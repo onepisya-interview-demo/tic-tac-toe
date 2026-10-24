@@ -42,7 +42,7 @@ BASE_URL=http://localhost:3101 node tests/qa/one-identity-qa.mjs
 5. `node tests/qa/commit-audit.mjs --range origin/main..HEAD`（本波 commit 面，0 violations）
 6. 触及浏览器界面时跑 `tests/qa/*.mjs` 探针
 
-层⑤走本波 commit 面（默认 ref=main；可用 `--branch <name>` 走全史或 `--range <git-rev>` 走任意 git ref 表达式）。全史扫描由「历史豁免基线」吸收存量 fail：merge commit（subject `Merge pull request #N from …`）、dependabot 作者（identity-based）、R7 采纳日（2026-09-23）之前的旧账——见 [docs/commit-policy.md §hook 段](./commit-policy.md#commit-msg-hook) 与 [`.omo/plans/ulw-homedialog-flaky-fix-20260926.md` §二 T-B1](../.omo/plans/ulw-homedialog-flaky-fix-20260926.md)。R6 全仓状态检查与 `--message-file` 模式不受豁免，hook 路径仍逐 commit 严格闸门。
+层⑤走本波 commit 面（默认 ref=main；可用 `--branch <name>` 走全史或 `--range <git-rev>` 走任意 git ref 表达式）。全史扫描由「历史豁免基线」吸收存量 fail：merge commit（subject `Merge pull request #N from …`）、dependabot 作者（identity-based）、R7 采纳日（2026-09-23）/ R3 严格化采纳日（2026-10-24）之前的旧账（各豁各的规则面）——见 [docs/commit-policy.md §hook 段](./commit-policy.md#commit-msg-hook) 与 [`.omo/plans/ulw-homedialog-flaky-fix-20260926.md` §二 T-B1](../.omo/plans/ulw-homedialog-flaky-fix-20260926.md)。R6 全仓状态检查与 `--message-file` 模式不受豁免，hook 路径仍逐 commit 严格闸门。
 
 **豁免三类本地实测（2026-10-05，D26a 自决票）**：于临时分支 `qa/d26-exemption-test` 用 `git commit-tree` 造 6 个 fixture（不经 hook、不用 --no-verify）实测三层豁免在两层的真实行为，实测后分支即删、dev HEAD 未动：
 

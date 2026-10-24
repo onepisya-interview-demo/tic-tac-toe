@@ -32,7 +32,7 @@
 - **WHY**：说明缺陷、需求、动机或架构权衡；有关联 issue/PR 时引用。
 - **HOW**：说明策略、兼容性、验证、风险和用户影响；diff 已列出文件，正文不逐文件复述。
 
-非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。audit 脚本硬性要求 Confidence:（low|medium|high）与 Scope-risk:（narrow|moderate|broad）；触发 on-demand 验证层时 `Not-tested:` 改为 `Tested:` + 触发原因（模板见 docs/verification-gauntlet.md §2）。
+非平凡提交还要带 lore trailer：Constraint:、Rejected:、Confidence:、Scope-risk:、Directive:、Tested:、Not-tested:。设计记录页脚写 Plan: .omo/plans/<slug>.md。trailer 键名保持英文，值可以中文。audit 脚本硬性要求 Confidence:（low|medium|high）与 Scope-risk:（narrow|moderate|broad）；触发 on-demand 验证层时 `Not-tested:` 改为 `Tested:` + 触发原因（模板见 docs/verification-gauntlet.md §2）。2026-10-24 起正文还硬性要求显式 `WHAT:` / `WHY:` / `HOW:` token（见下节 R3 严格化）。
 
 ### 正文排版硬规则（commit-msg hook 实测，2026-09-24 补）
 
@@ -40,6 +40,16 @@
 - **subject 剥掉 Conventional 前缀后以中文或小写词开头**——大写单词开头触发 subject-case（sentence-case）拒绝：「T-B2 …」「Session …」「W-DIFF …」均实测被拒；中文/小写开头最稳。
 - **每条 trailer 行 ≤100 字符**（长值拆成多条 trailer 或收窄措辞，不要硬塞一行）。
 - 参照范本：commit `2e7104d`（@types/node 对齐，全要素合规）。
+
+### R3 严格化：显式 WHAT/WHY/HOW token 机械要求（2026-10-24 入档）
+
+`tests/qa/commit-audit.mjs` R3 自 2026-10-24 起把本节正文 schema 的三段结构由「可选捷径」升为硬要求（设计记录 `.omo/plans/commit-audit-r3-explicit-heading-20261024.md`）：
+
+- **`--message-file` 钩子路径（人类提交入口）**：正文必须含显式 `WHAT:` / `WHY:` / `HOW:` 三个 token（`/\bWHAT:\s/` 形态——token 后跟空白；同行 `WHAT: 内容` 与独占行 `WHAT:` 换行接内容均认），缺任一即 FAIL R3，finding 列出缺失 token 清单（如 `missing WHY: HOW:`）。行长排版仍归上节「正文排版硬规则」与 commitlint，audit 只认 token 存在性。
+- **关键词启发式退役为祖父分支**：原 R3 在三 token 缺位时退化到 `WHY_RE` / `HOW_RE` 关键词匹配（中文词表 50+ 日常词，几乎任何 ≥60 字技术散文都双表命中）。该路径自本日起只服务 `--branch` / `--range` 模式下 author date ≤ 2026-10-24 的旧账（`R3_STRICT_ADOPTION_DATE` 常量，日级 `<=`、当日整日视为旧账，仿 R7 采纳日先例）；其后提交在两种模式一律要求显式 token。
+- **豁免零变化、编号不动**：bot / merge / prompt 豁免语义不变；R1/R2/R4/R5/R6/R7 零改动；本修正按 R3 收紧处理，不开 R8——正文 schema 一直是策略真源语义、R3 是其机械实现，这是收敛「脚本弱于文档」的实现缺口，不是新规则维度。
+- **漂移实证锚**：fd8db3f / 5165933 / d9c608b / c303d8b / 35ac680 五笔散文体正文在旧 R3 下全部过门。词表伪命中例：「不触发」命中「触发」；「验证基建」名词命中「验证」；`github` / `needs` 等英文残留伪命中；「修复」一词 WHY/HOW 双表兼任，单词即满足两检。
+- **已推送提交不 reword**：五笔漂移提交保持原样，branch 模式对它们永远走祖父分支（零新 FAIL）；force-push 属单向门，留主公裁定另行工单。
 
 ## 中文提交（默认）
 
@@ -113,6 +123,7 @@ branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref �
 - **GitHub merge commit**（subject `Merge pull request #N from …`）：按构造豁免——机器生成的合并记录无人类正文/尾注，按 subject 模式识别；R1-R5/R7 全豁免。
 - **Dependabot 自动提交**（author 为 `dependabot[bot]`）：identity-based 即现有架构（ae02a33 先例）；R3-R5/R7 豁免（subject 仍受 R1/R2 约束，不按 subject 猜测避免人类借用豁免）。
 - **规则采纳日之前的旧账**（author date 在 R7 采纳日 2026-09-23 或更早）：按时间锚点豁免——commit 写于该日时 R7 还未上线（commit `3068b22a` 落仓于 22:30:11），结构性无法事后合规；仅豁免 R7 的 subject 与 trailer CJK 检查，R1-R5 仍走全检。
+  - **2026-10-24 补注（R3 严格化采纳日）**：同理，author date ≤ 2026-10-24 的旧账在 branch/range 模式对 R3 显式 `WHAT:/WHY:/HOW:` token 检查走关键词祖父分支（`R3_STRICT_ADOPTION_DATE` 常量、日级 `<=`、同 R7 语义）；R1/R2/R4/R5 仍全检，`--message-file` 永不豁免。
 
 三层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
 
