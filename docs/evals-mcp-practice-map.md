@@ -32,9 +32,17 @@
 
 《Evaluating Large Language Models Beyond Textual Understanding with ChildPlay》（arXiv 2407.11068）实测 LLM 下井字棋/海战棋/四子棋（对手为 minimax）：
 
+> 【2026-10-24 勘误补注】上句括注「对手为 minimax」确证错误——论文对局对手是**随机玩家**：arXiv 2407.11068v5 正文 random-moves 句直读＋官方源码 `main.py:611`（`player2 = RandomPlayer(...)`，grep minimax 零命中），三通道互证（底稿＝`.omo/evidence/decision-approval-sheet-20261014.md` §2 AI-Q3，10-14 审批表自决备案·默认生效）。原文照留可追溯；下文「minimax 基线 99.6%」系论文另行运行的确定性基线对照实验（minimax vs 随机对手），非 LLM 的对局对手。
+
 - GPT-4o 在 temperature 0.5 达最高胜率 92%；GPT-4 为 77%；GPT-3.5 为 53%；GPT-4o-mini 为 61%。
 - **没有任何模型达到 minimax 基线 99.6%**——确定性基线永远有区分度。
+
+> 【2026-10-24 勘误补注】99.6% 数字真实在案——arXiv 2407.11068v5 正文＋附录 B.3：minimax 对随机玩家 1000 局基线 996/1000。含义须注明（「确定性基线 vs 随机对手」的千局战绩，非 LLM 对局门槛），按勘误判定加含义注、原文不删。
+
 - 温度越高胜率越低；**模型代际更新与胜率不单调**（海战棋上 GPT-3.5 反而最好）——正是「为什么需要回归 evals」的实证。
+
+> 【2026-10-24 勘误补注】本条前半「温度越高胜率越低」与论文不完全相符——论文口径为 generally modest（温度效应总体温和），且 GPT-4o-mini 最高胜率恰在 t=1.0；后半「代际更新与胜率不单调」无误，照留。
+
 - 结论：井字棋作为 LLM eval 对象有学术级先例，胜率数字可直接作为我方实验的对照参考系。
 
 ### 1.3 evals 框架格局：2026 收购潮确认赛道
