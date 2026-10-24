@@ -73,7 +73,7 @@
 - `ci-pnpm-single-source.md` — 42569b4 计划与 ci.yml 删显式 version 同一提交
 - `commit-policy-enforcement.md` — 93e18b7 计划 + commitlint.config.cjs + commit-audit.mjs 同票，236782d 锁 devDeps、ae02a33 dependabot 豁免分票
 - `commit-policy-zh.md` — 9012283 中文化全量历史 + 策略/钩子扩展同票，6a6bf8a/7138f76 后续修补
-- `deep-module-dedup.md` — 8c4a437 streakLabel/StatsGrid 下沉与页面壳统一落地，a9363e9 治理笔记入档
+- `deep-module-dedup.md` — 8c9a437 streakLabel/StatsGrid 下沉与页面壳统一落地，a9363e9 治理笔记入档 【2026-10-24 勘正】原档笔误 8c4a437（09-27 入档即有的单字符笔误，对象库零命中），现史哈希 8c9a437
 - `docs-sync-libsql.md` — 6febbaa 文档同步与计划同一提交落地
 - `glossary-context-md.md` — 4b71391 计划 + CONTEXT.md + AGENTS.md 消费契约同票，APPROVED 措辞按裁决记录对待
 - `herdr-session-hygiene.md` — a8ddca2 协议入 AGENTS.md、6fc72d8 注册表位置修订、d8329a4 v2.1 增补
@@ -210,3 +210,4 @@
 
 > 台账统计：130 行 = implemented 107 + note-record 15 + research-parked 2 + filed-only 1 + placeholder 1 + open-pending-master 4（其中 anonymous 已于 09-28 转 archived）。
 > 判定判定日 2026-09-27；【09-28 更新】叠注仅刷新状态口径，原判定文字未改写。
+> 【2026-10-24 叠注】10-09 后三波——**10-14** 决策审批表 17 项分诊（[evidence/decision-approval-sheet-20261014.md](evidence/decision-approval-sheet-20261014.md)，档面自述「分诊终裁 17 项（含 PROTO-STD）」）、**10-21** 发版波（`022c1b4`/`c966292`）、**10-24** 波（PR #21 并回 dev `343e51c`、R3 收紧 `e5104ed`/`38e4933`、`311d91c`、五笔 reword `fd8db3f`→`1ad6bd5`／`5165933`→`6f0377f`／`d9c608b`→`022c1b4`／`c303d8b`→`c966292`／`35ac680`→`311d91c`、PR #22 squash 合并入 main `4ac5acf`）——均属 git/流程面事实，不改本台账 09-27 判定行情，§甲/§乙 各行维持快照；「32 笔待推」口径作废与 47+1 口径详见主图末节 2026-10-24 叠注与 §四。最新路线态以 plans/ulw-verification-infra-roadmap-20261007.md 与决策台账为准。

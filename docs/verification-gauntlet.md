@@ -9,7 +9,7 @@
 
 | 层 | 工具 | 项目状态 | 跑吗 | 在 AGENTS.md §验证门禁吗 |
 | --- | --- | --- | --- | --- |
-| Tests | vitest 5 + jsdom 30（88→102 例）`pnpm test = vitest run` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm vitest run 100% 通过」 |
+| Tests | vitest 5 + jsdom 30（实测口径·2026-10-24 对账波：测试文件 50 过／2 跳，测试用例 576 过／11 跳——两口径并列；旧记「88→102 例」系用例口径历史快照，已滞后）`pnpm test = vitest run` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm vitest run 100% 通过」 |
 | Types | tsc 5 strict `pnpm typecheck = tsc --noEmit` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm typecheck 通过」 |
 | Lint | eslint 9 + eslint-config-next/core-web-vitals + typescript，`pnpm lint = eslint`（不传参；等价于 `eslint .` 由 `eslint.config.mjs` 默认 targets + `globalIgnores(['tests/qa/**', ...])` 共同决定） | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm lint 通过」 |
 | Changed-line coverage | vitest --coverage（v8 provider，scope = `lib/**` + `db/**`，thresholds: lines 80 / functions 80 / branches 70 / statements 80） | ⚠️ 部分配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖 app/ + tests/qa/ + docs/，详见 §2 on-demand 规则）；未来 commit 触及 `lib/db` 时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
@@ -135,7 +135,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 | 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | Online-direct QA (Playwright probe) — BR-2/8 ✅ | 追加 BR 探针 | ⑥ |
 | 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | Room-reset QA (Playwright probe) — BR-7 ✅ | 追加 BR 探针 | ⑥ |
 
-对账发现（2026-10-08，票 4 实测；第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下）：
+对账发现（2026-10-08，票 4 实测；勘注 2026-10-24：旧括注「第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下」列号笔误——⚠️ 实在第 4 列「ruleset required context」，且表体 6 处 ⚠️ 已被 311d91c 清零、现全 ✅，旧态仅见该 commit 前版本）：
 
 - **命名错位（✅ 已于 2026-10-21 修复，方案 a）**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设。
   **修复回执（2026-10-21，主公令「先修复」，随 PR #22 发版波执行）**：repo ruleset（id 23195249）`required_status_checks` 六 context 由 job id 改列 CI 实报显示名——新名单自 ci.yml `name:` 字段机械提取（零转抄），五必绿五项本就一致未动；PUT 写回实测 11 contexts 全部与实报名重合，PR #22 `mergeStateStatus` 当即 BLOCKED→CLEAN。改名防漂移无静态断言可拦（GitHub 侧配置面），对账依赖本表第 3/4 列人工或 gh api 复核。
@@ -149,7 +149,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 
 - **疑点起点**：ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用）。
 - **10-08 判定＝「不展开」**（决定性证据：run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`；两条防误判教训：artifact 上传成功≠env 已展开、`##[group]Set up job` 回显段永远字面量不可作判据）。
-- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。
+- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。（勘注 2026-10-24：d9c608b 系 reword 前旧锚，任何分支不含、仅存本地 reflog、新克隆不可解析；现史哈希＝022c1b4，2026-10-21。）
 - **2026-10-21 终判＝「展开」**：PR #22 run 39582362835，ci-verify 判据 [2] clean——env 已展开为 runner 真实绝对路径，锚行 `QA complete. … written to /home/runner/work/_temp/visual-qa`。D-1 至此闭环。
 - **断言定版**：`tests/qa/ci-contract.test.ts` describe E（job 级 env 禁 runner——防 c451ee5 同型再犯）＋ describe F（探针 step 级 EVIDENCE_DIR 必须为 `${{ runner.temp }}/<name>` 写法——防丢失/回退 shell 字面量两态）。证据件：`.omo/evidence/ci-verify-20261021-pr22.md`（判据 [1][2][3] 全 clean）。
 

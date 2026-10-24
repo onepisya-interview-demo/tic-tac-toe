@@ -20,7 +20,7 @@
 | 性能 | 采集设施 0——无 bench 脚本、无 bundle-analyzer/Lighthouse |
 | trace | 0——grep `opentelemetry\|otel\|traceparent\|performance.mark\|performance.measure` 于 package.json/app/lib/db 零命中〔核，本轮 wc -l = 0〕 |
 | 浏览器调试 | 20 探针在档，但 tests/qa/lib/browser.mjs 无统一 console/pageerror 捕获（本轮 grep 零命中〔核〕；素材口径：散点 3 处） |
-| 生产探针 | 0——grep `3t.onepis.net` tests/ 零命中〔核〕；「生产验证纯人工」系本席由探针零命中推出的概括〔推断〕；生产边界两阶段纪律的明文在 docs/verification-gauntlet.md:133 |
+| 生产探针 | 0——grep `3t.onepis.net` tests/ 零命中〔核〕；「生产验证纯人工」系本席由探针零命中推出的概括〔推断〕；生产边界两阶段纪律的明文在 docs/verification-gauntlet.md:133〔勘注 2026-10-24：gauntlet 增补致行号漂移，所指「生产边界实证两阶段」段现位于 :183〕 |
 | fresh-clone 全链一条命令 | 0——scripts/ 仅 5 件〔核：build-favicon-assets.mjs / build-favicon-ico.mjs / sw-bust.mjs / vercel-ignore-build.sh / vercel-ignore-build.test.sh〕 |
 | CI 触发面 | 仅 pull_request→main（ci.yml:3-5〔核〕），dev push 零 CI；结构性盲区分析见 docs/verification-gauntlet.md §3.6 |
 
@@ -226,9 +226,9 @@
 
 ### 票 17｜prod-smoke（新）
 
-- **目标**：生产冒烟探针 0→1（首屏 200＋关键资源契约＋只读 404 链路，凭据不回显）；**首跑邀主公在场**（D32 三条件之「首验人审在场」）；随后随验证波人带多遍、按三条件逐门评估解编——到时呈报一次时点，不催办（D-5）。现状：生产探针 0（grep 3t.onepis.net tests/ 零命中〔核〕）；「生产验证纯人工」系探针零命中推出的概括〔推断〕；生产边界纪律明文锚 docs/verification-gauntlet.md:133。
+- **目标**：生产冒烟探针 0→1（首屏 200＋关键资源契约＋只读 404 链路，凭据不回显）；**首跑邀主公在场**（D32 三条件之「首验人审在场」）；随后随验证波人带多遍、按三条件逐门评估解编——到时呈报一次时点，不催办（D-5）。现状：生产探针 0（grep 3t.onepis.net tests/ 零命中〔核〕）；「生产验证纯人工」系探针零命中推出的概括〔推断〕；生产边界纪律明文锚 docs/verification-gauntlet.md:133〔勘注 2026-10-24：gauntlet 增补致行号漂移，所指「生产边界实证两阶段」段现位于 :183〕。
 - **动作**：探针脚本入 tests/qa/（全只读：首屏 200、关键资源契约、只读 404 链路）；首跑预约主公在场；解编评估留痕决策文件。
-- **验收（机械判据）**：① 探针脚本入仓且对生产实跑全绿（200／资源契约／404 断言全过）；② 凭据不回显（脚本无明文凭据、token 只从 env 现读——grep 负断言＋证据件人工审注，双确认）；③ 首跑在场事实入回执（主公在场记录）；④ 解编评估留痕决策文件（三条件逐门）；⑤ 生产边界纪律遵 docs/verification-gauntlet.md:133（主公明示授权＋secret 不回显＋两阶段验证）；⑥ 六层绿。
+- **验收（机械判据）**：① 探针脚本入仓且对生产实跑全绿（200／资源契约／404 断言全过）；② 凭据不回显（脚本无明文凭据、token 只从 env 现读——grep 负断言＋证据件人工审注，双确认）；③ 首跑在场事实入回执（主公在场记录）；④ 解编评估留痕决策文件（三条件逐门）；⑤ 生产边界纪律遵 docs/verification-gauntlet.md:133〔勘注 2026-10-24：gauntlet 增补致行号漂移，所指「生产边界实证两阶段」段现位于 :183〕（主公明示授权＋secret 不回显＋两阶段验证）；⑥ 六层绿。
 - **挂层**：⑥（生产探针——「生产验证纯人工→探针化」首例）。
 - **量级**：M。**依赖**：票 5（统一捕获/证据通道）。**回执去向**：队列第 17 行尾（decisions-20261001.md:165）＋呈报档一次时点（decisions-20261001.md §一呈报档）。
 
@@ -239,7 +239,7 @@
 3. **完成回执入档**：每票完成后回执写回决策文件对应位置（✅ 卡尾或队列行尾，见各票「回执去向」），续写执行记录；回执含日期、commit SHA、验收命令与结果。
 4. **不催办不排期主公**：涉主公事项（票 17 首跑在场、D-4 L4 判定、D-5 解编评估、push、D-3 批注）一律到时呈报一次时点，不催办。
 5. **D32 三条件适用面**：prod-smoke 首验人审在场（票 17）；解编评估按三条件逐门、入决策文件留痕；**业务语义层无论档位留人审**（D32 裁决原文）。
-6. **生产写不在本计划内**：票 17 全只读；生产设施操作纪律按 docs/verification-gauntlet.md:133（主公明示授权、secret 值不回显、两阶段验证）。
+6. **生产写不在本计划内**：票 17 全只读；生产设施操作纪律按 docs/verification-gauntlet.md:133〔勘注 2026-10-24：gauntlet 增补致行号漂移，所指「生产边界实证两阶段」段现位于 :183〕（主公明示授权、secret 值不回显、两阶段验证）。
 7. **push 归主公**：本计划所有票不 push；票 4 的 CI 实跑判定搭下次主公发版 PR 波，不单独催 push。
 8. **结论口径**：走查/审计类票（2/3/9/12/14/15）结论只报 clean/changed/blocked 三值，禁「看起来对了」。
 9. **提交纪律**：提交严格走 commit-msg hook（node tests/qa/commit-audit.mjs --message-file），禁 `--no-verify`；不合规按 hook 输出修 message 重试；Plan footer 指本计划文件；逐文件 add，不 `git add . / -A`。
@@ -274,7 +274,7 @@
 
 - waitForFunction 两参形态存量病已修：全仓 19 处机械转三参（home-return 11/offline 2/one-identity 1/online-direct 2/room-reset 1/ux 2）＋tests/qa/waitfn-argshape.test.ts 括号平衡契约防线（正负对照防自身失效）——735079a；真源头 161d7cb（2026-09-18）。
 - CI 侧三项核验工具已预搭：scripts/ci-verify.mjs（bb14cc5）——一条命令核五必绿首跑绿/EVIDENCE_DIR 两态/test:property step；对 PR #18 三历史 run 双向真跑通过（红 run 36742717954 exit 1 点名红 job、绿 run 36748001707 clean）。
-- D-1 已两态取一收口＝**「不展开」**：决定性证据＝run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`（visual-qa.mjs:278 亲证，决策台账 :383；两条防误判：artifact 上传成功≠env 已展开、Set up job 回显永远字面量不作判据）。处置已落地 c451ee5——ci.yml 14 处 env:/path: 改 `${{ runner.temp }}`（run: 段 6 处 bash 变量正确保持原样）；ci.yml 现状：test job 内已含 test:property step（7d208fb 接线），job 数仍 11。
+- D-1 已两态取一收口＝**「不展开」**：决定性证据＝run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`（visual-qa.mjs:278 亲证，决策台账 :383；两条防误判：artifact 上传成功≠env 已展开、Set up job 回显永远字面量不作判据）。处置已落地 c451ee5——ci.yml 14 处 env:/path: 改 `${{ runner.temp }}`（run: 段 6 处 bash 变量正确保持原样）；ci.yml 现状：test job 内已含 test:property step（7d208fb 接线），job 数仍 11。〔勘正 2026-10-24：本段处置形态已被 **022c1b4**（2026-10-21，D-1 修正案）超越——c451ee5 将 7 处探针 EVIDENCE_DIR 写在 **job 级 env**，而 job 级 env 不支持 runner 上下文（GitHub Actions contexts availability），ci.yml 整体被判 invalid：push run 38509360622 0s 失败（「Unrecognized named-value: 'runner'」×7）、PR #22 CI 静默不触发；022c1b4 将 7 处 EVIDENCE_DIR 下挪至 **step 级 env**，并加 ci-contract describe E 静态防线（job 级 env 值禁引用 runner. ＋注入对照臂，570 passed）。EVIDENCE_DIR 现行层级＝step 级（源：`git show 022c1b4`）〕
 
 **信任四锚全部 0→1**：走查可复跑（scripts/verify-all.mjs 全链一条命令）／基线可对照（trace＋性能）／断言可自证（gate-replay＋弱断言归零）／生产可冒烟（tests/qa/prod-smoke.mjs 4/4）。§1.2 四轴现状表系 2026-10-07 计划时快照（其「本轮命令复验」标注为计划时口径，按入档纪律保留不改），终态以本注为准。§二 unproven 明示项同步交代：D-1 已判定、票 9 性能基线三类数字已采集入档（决策台账 :175，结论暂不机制化）、D-4 维持呈报档。
 
@@ -284,4 +284,8 @@
 
 **遗留呈报项**（挂主公下次发版 PR 波，不催办）：①ruleset 命名错位（六探针 job 按 job id 登记 vs CI 实报显示名——GitHub 侧配置面）；②test:property CI 真 green 首核；③EVIDENCE_DIR 展开生效验证（跑 `node scripts/ci-verify.mjs --pr <N>` 应判「展开」）；④D-4（L4 判定时点）/D-5（解编评估）到时呈报一次时点。
 
+〔对账勘注 2026-10-24〕**①②③已了结**（10-21～10-24 发版波，事实源＝仓态对账简报 §二 2.1）：①ruleset 命名错位已修；②test:property CI 真 green 首核通过——ci-verify 三项核验全 clean（[1] 五必绿＋首跑绿、[2] EVIDENCE_DIR 两态判定、[3] test:property step）；③EVIDENCE_DIR 展开生效验证收口——**终判「展开」**。呈报载体＝发版 PR #22（主公 2026-10-24 亲手合并，4ac5acf，CI 全绿）。④D-4/D-5 维持呈报档开放，不在本勘注了结范围。
+
 **待推口径**：dev 上 32 笔（8390a2b..c451ee5，实测一致）待主公 push；本对账波 commit 另计——后续文档表述一律「32 笔＋对账波另计」。
+
+〔对账勘注 2026-10-24〕**本待推口径作废**、「32 笔＋对账波另计」表述停用——简报落款 2026-10-24 18:55 实测 dev 与 origin/dev 齐平（`git rev-list --left-right --count origin/dev...HEAD`＝0/0）、PR #22 已由主公合并（4ac5acf）；本勘注补写时复跑同命令仍 0/0，且 8390a2b/c451ee5 两端点均经 `git merge-base --is-ancestor` 亲证 ∈ origin/dev——32 笔早已入远端史。此后待推计数一律以该命令现场实跑为准，不再沿用固定口径。

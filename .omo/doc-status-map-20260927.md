@@ -3,7 +3,7 @@
 - **版本**：2026-09-27 裁决落档版（2026-09-28 两次落档叠注在案；同日按主公要求重排格式、并随终裁刷新全部状态——内容零删减）
 - **基线**：dev @ `2f11c36`，与 origin/dev 齐平
 - **上一版**：[doc-status-map-20260926.md](doc-status-map-20260926.md)（`01283ed` 入档静态快照）
-- **备查台账**：47 份更新清单与 130 份全景判定外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md)
+- **备查台账**：47+1 份更新清单与 130 份全景判定外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md)（【2026-10-24 勘注】＋1＝ulw-readme-shots 状态线——判定日漏列项，2026-10-04 D25 卫生票 `5cb599a` 补列，见台账 §甲#48；原 47 系判定日清单口径，与本图 §四标题同步改口径、「全部 done」结论不变）
 
 ---
 
@@ -147,6 +147,7 @@
 - ulw-room-lifecycle-20260924：关联行 T-M1 仍写「已批待派」（实已 `d685cf6` 落地）；
 - vercel-deploy-runbook：正文 todo 13–17 仍标 [!] BLOCKED，与 F1–F4 [x] 及文末 Final state 矛盾；
 - ulw-ttl-channel-fix-tp1-20260926：AC 表两个 AC-2 重复编号（既有笔误）；
+  > 【2026-10-24 勘注】上述 5 条欠账（readme-shots 状态线／offline-anonymous 前置阅读行／room-lifecycle T-M1 行／runbook todos 13-17／AC-2 重复编号）均已被 2026-10-04 D25 卫生票 `5cb599a` 清掉——状态线补记、前置阅读行改「已收官」、T-M1 改「已落地 `d685cf6`」、todos 13-17 翻勾对齐、重复 AC-2 拆 AC-2a/2b/2c（五处 diff 经 `git show 5cb599a` 逐条核实）。本清单仍未清者仅反馈1/3/4（反馈2 见上注）与末两条非欠账判定。
 - ulw-solo-mode-split-view-transitions：§3.4 实录段历史性表述——实录性质按纪律保留，非欠账；
 - ulw-tb1-audit-scope-20260927：§八与交付 footer 指向 homedialog 总档——plan 自身规定，属设计决定。
 
@@ -168,11 +169,11 @@
 
 ---
 
-## 四、47 份更新清单 —— ✅ 全部 done（零未完成）
+## 四、47+1 份更新清单 —— ✅ 全部 done（零未完成）
 
-> 明细外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md) §甲。
+> 明细外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md) §甲（48 号＝判定日漏列的 ulw-readme-shots，2026-10-04 D25 卫生票 `5cb599a` 补列；【2026-10-24 勘注】标题口径由 47 与台账 §甲同步为 47+1，「全部 done」结论不变）。
 
-- 上版 §四 47 份 needsUpdate 逐份执行完毕：44 份由更新波完成、3 份（#7/#40/#42）随裁决落档完成；
+- 上版 §四 47 份 needsUpdate 逐份执行完毕：44 份由更新波完成、3 份（#7/#40/#42）随裁决落档完成（47 系上版清单判定日口径；另漏列 1 份 ulw-readme-shots 经 D25 `5cb599a` 补列同判 done——合计 47+1，台账 §甲#48）；
 - 抽验 44 份全部通过（ok=44/44，零内容问题）。
 
 ---
@@ -230,3 +231,4 @@
 本图与全部落档改动系工作树未提交变更；沿「计划入档即停，执行须主公明令」纪律，commit 与 push 待主公指令。
 
 > 【2026-10-09 叠注】本图已于 2026-09-30 随 d2296e5 入档，后续 2bf1663/b8e3e0c/6a63887 三笔回写；截至 2026-10-09 对账波前，本图与台账工作树无未提交改动（本叠注自身属对账波待提交变更）；push 仍归主公（表述口径：dev 32 笔 8390a2b..c451ee5 待推＋对账波另计）。
+> 【2026-10-24 叠注】上段「dev 32 笔 8390a2b..c451ee5 待推＋对账波另计」口径**作废**——该 32 笔连同此前未推的路线图入档笔 `8390a2b` 与对账波 2 笔，共 **35 笔**已随单笔 push 上 origin/dev（push 前后 tip `23d5866`→`5165933`，`git rev-list --count 23d5866..5165933`＝35；`5165933` 系 reword 前旧哈希）；补写波 fetch 后实测 dev 与 origin/dev **0/0 齐平**（tip `80b2f3e`），**PR #22 已合并**（dev→main squash 单亲 `4ac5acf`，`gh pr view 22` 实测 MERGED @ 2026-10-24T10:16:04Z）。10-09 后三波档案侧动作补记：**10-14**——决策审批表 17 项分诊入档（[decision-approval-sheet-20261014.md](evidence/decision-approval-sheet-20261014.md)，档面自述「分诊终裁 17 项（含 PROTO-STD）」）；**10-21**——发版波 `022c1b4`（D-1 修正案：EVIDENCE_DIR 下挪 step 级）＋`c966292`（ci-verify stripAnsi 修正）；**10-24**——PR #21 依赖升级并回 dev（`343e51c`）、R3 收紧（`e5104ed` 失败测试复现＋`38e4933` commit-audit 正文显式 WHAT/WHY/HOW token 硬要求）、`311d91c`（ruleset 命名错位修复＋D-1 终判「展开」）、五笔 reword（`fd8db3f`→`1ad6bd5`／`5165933`→`6f0377f`／`d9c608b`→`022c1b4`／`c303d8b`→`c966292`／`35ac680`→`311d91c`，五枚旧锚经 `git branch --all --contains` 实测零分支可达）、PR #22 创建并 squash 合并入 main（`4ac5acf`）。最新路线态以 [plans/ulw-verification-infra-roadmap-20261007.md](plans/ulw-verification-infra-roadmap-20261007.md) 与决策台账为准。

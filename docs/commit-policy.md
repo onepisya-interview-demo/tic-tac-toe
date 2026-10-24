@@ -45,11 +45,11 @@
 
 `tests/qa/commit-audit.mjs` R3 自 2026-10-24 起把本节正文 schema 的三段结构由「可选捷径」升为硬要求（设计记录 `.omo/plans/commit-audit-r3-explicit-heading-20261024.md`）：
 
-- **`--message-file` 钩子路径（人类提交入口）**：正文必须含显式 `WHAT:` / `WHY:` / `HOW:` 三个 token（`/\bWHAT:\s/` 形态——token 后跟空白；同行 `WHAT: 内容` 与独占行 `WHAT:` 换行接内容均认），缺任一即 FAIL R3，finding 列出缺失 token 清单（如 `missing WHY: HOW:`）。行长排版仍归上节「正文排版硬规则」与 commitlint，audit 只认 token 存在性。
+- **`--message-file` 钩子路径（人类提交入口）**：正文必须含显式 `WHAT:` / `WHY:` / `HOW:` 三个 token（`/\bWHAT:\s/` 形态——token 后跟空白；同行 `WHAT: 内容` 与独占行 `WHAT:` 换行接内容均认），缺任一即 FAIL R3，finding 列出缺失 token 清单（如 `missing WHY: HOW:`）。行长排版仍归上节「正文排版硬规则」与 commitlint，audit 只认 token 存在性——且以**正文 ≥60 字为先决**（2026-10-24 勘注）：`body.length < 60`（去首尾空白后）先报 `body too short` FAIL R3 并短路，token 检查只对 ≥60 字正文进行；短正文即便三 token 齐全亦 FAIL（脚本 R3 块两段式判定：先长度、后 token）。
 - **关键词启发式退役为祖父分支**：原 R3 在三 token 缺位时退化到 `WHY_RE` / `HOW_RE` 关键词匹配（中文词表 50+ 日常词，几乎任何 ≥60 字技术散文都双表命中）。该路径自本日起只服务 `--branch` / `--range` 模式下 author date ≤ 2026-10-24 的旧账（`R3_STRICT_ADOPTION_DATE` 常量，日级 `<=`、当日整日视为旧账，仿 R7 采纳日先例）；其后提交在两种模式一律要求显式 token。
 - **豁免零变化、编号不动**：bot / merge / prompt 豁免语义不变；R1/R2/R4/R5/R6/R7 零改动；本修正按 R3 收紧处理，不开 R8——正文 schema 一直是策略真源语义、R3 是其机械实现，这是收敛「脚本弱于文档」的实现缺口，不是新规则维度。
-- **漂移实证锚**：fd8db3f / 5165933 / d9c608b / c303d8b / 35ac680 五笔散文体正文在旧 R3 下全部过门。词表伪命中例：「不触发」命中「触发」；「验证基建」名词命中「验证」；`github` / `needs` 等英文残留伪命中；「修复」一词 WHY/HOW 双表兼任，单词即满足两检。
-- **已推送提交不 reword**：五笔漂移提交保持原样，branch 模式对它们永远走祖父分支（零新 FAIL）；force-push 属单向门，留主公裁定另行工单。
+- **漂移实证锚**：fd8db3f（现史 1ad6bd5）/ 5165933（现史 6f0377f）/ d9c608b（现史 022c1b4）/ c303d8b（现史 c966292）/ 35ac680（现史 311d91c）五笔散文体正文在旧 R3 下全部过门——**2026-10-24 勘注**：括注为同笔提交 reword 后的现行史哈希（见下条回执）；实证所指的散文体正文只存于旧哈希（已自任何分支不可达，仅本地 reflog 与 filter-branch 备份 ref `refs/original/refs/heads/dev`→785458a 可解——后者是真实 ref 而非 reflog，钉住旧史对象、不随 reflog 过期回收），新哈希正文已改为独占行 token 形态，引用一律以新哈希为准。词表伪命中例：「不触发」命中「触发」；「验证基建」名词命中「验证」；`github` / `needs` 等英文残留伪命中；「修复」一词 WHY/HOW 双表兼任，单词即满足两检。
+- **「已推送提交不 reword」——原断言已推翻，reword＋force push 执行回执（2026-10-24）**：本条原载「五笔漂移提交保持原样，branch 模式对它们永远走祖父分支（零新 FAIL）；force-push 属单向门，留主公裁定另行工单」；主公 10-24 裁定推翻该口径，五笔已全部 reword（旧散文体正文改写为独占行 `WHAT:` / `WHY:` / `HOW:`，author date 保留）并 force push 出仓——force push 系主公明令，于 10-24 16:15 推送 38e4933 时完成（本地 origin/dev reflog：该次非快进覆盖旧史尖端 785458a；早于 §push 法令守卫 4cd33b3 入仓）。新旧对照 fd8db3f→1ad6bd5、5165933→6f0377f、d9c608b→022c1b4、c303d8b→c966292、35ac680→311d91c；旧锚自任何分支不可达（新克隆不可解析），仓内各档与外部记忆档引用须按此换新。实测 `node tests/qa/commit-audit.mjs --range 1ad6bd5~1..HEAD` → total=14 pass=10 skip=4 fail=0，五新锚 5/5 PASS，已不依赖祖父分支。
 
 ## 中文提交（默认）
 
@@ -90,8 +90,6 @@ R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7�
 
 - 新增/修订 BR 行或探针文件时**两处头注同步改**，R6 才回绿；探针列反引号内写全路径（规范化路径不命中会误判有洞）。
 - `--branch` 模式走整条分支全历史 + 全仓 R6，因此**基线的隐性违规会在任意波的终验首爆**——不是本波引入的也要当场修（实证 2026-09-25：BR-6 探针头注缺失在两计划波终验被 R6 揪出，cdacf88 修复）。
-
-R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
 
 ## 原子提交
 

@@ -93,17 +93,19 @@
 
 > 增补（2026-10-01）：C6-C9 四行由验证信任沉淀波（[research-verification-trust-20260930.md](research-verification-trust-20260930.md) §三）追加于本表末尾——**待机械化唤醒统一裁决，未裁决不实施**；唤醒条件仍以 §六为准，C2 兑现先例是 C9 的直接参照。
 
-> 【2026-10-04 勘误补注】§五表 C6 行旧记「bug 可沉默 12 天」失实——触发面盲区实为 ≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化；`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）；job 层窗口（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天。正文已按锚点口径更正，verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
+> 【2026-10-04 勘误补注】§五表 C6 行旧记「bug 可沉默 12 天」失实——触发面盲区实为 ≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化；`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）；job 层窗口（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天。正文已按锚点口径更正，verify 波实证，锚 .omo/verify-20261001-docs-wave.md:104-105/:191（「12 天」遗留行原记 :186，经 c6eed4f/9a4c3c7 两波补注插入行移，2026-10-24 勘正）。
 
 > 【2026-10-04 兑现归档注】2d7709b 文档契约断言经 09-30/10-01 两度现场核验仍在生效，已兑现归档（2026-10-04 自治裁决 D10a）。
 
-> 兑现补注（2026-10-09）：C1 兑现＝票 1（887591c，docs/anti-patterns.md 全 48 条补机械化状态字段＋四段位对照表）；C5 兑现＝票 3（b31139a，派发红线断言模板入 docs/dispatcher-playbook.md＋历史波回放演练）；C6 主面兑现＝票 4（fce7af1，豁免清单显式化＋run_attempt=1 首跑绿口径＋BASE_URL 契约，tests/qa/ci-contract.test.ts——触发矩阵覆盖臂与 dev push 触发 CI 立项仍悬置不翻案，故记「主面兑现」而非全兑现）；C4 部分兑现＝22af9e1（package.json 增 lint:fix 档位，仅此——全仓一次性 format 波未做）；C8 部分兑现＝票 6（a6bc793，scripts/ttl-probe-seed.mjs 造数＋zz-ttl-probe 前缀断言入仓；purge 触发＋删留名单对照未做）；C3/C7/C9 仍未动。行 90「C1/C3/C4/C5 维持未裁决」与行 92「C6-C9 未裁决不实施」系历史快照，按档内纪律不改原文，以本注为准。
+> 兑现补注（2026-10-09）：C1 兑现＝票 1（887591c，docs/anti-patterns.md 全 48 条补机械化状态字段＋四段位对照表）；C5 兑现＝票 3（b31139a，派发红线断言模板入 docs/dispatcher-playbook.md＋历史波回放演练）；C6 主面兑现＝票 4（fce7af1，豁免清单显式化＋run_attempt=1 首跑绿口径＋BASE_URL 契约，tests/qa/ci-contract.test.ts——触发矩阵覆盖臂与 dev push 触发 CI 立项仍悬置不翻案，故记「主面兑现」而非全兑现）；C4 部分兑现＝22af9e1（package.json 增 lint:fix 档位，仅此——全仓一次性 format 波未做）；C8 部分兑现＝票 6（a6bc793，scripts/ttl-probe-seed.mjs 造数＋zz-ttl-probe 前缀断言入仓；purge 触发＋删留名单对照未做）；C3/C7/C9 仍未动〔2026-10-24 勘正——三卡均已裁决、C9 且已执行，见下条补记〕。行 92「C1/C3/C4/C5 维持未裁决」与行 94「C6-C9 未裁决不实施」系历史快照，按档内纪律不改原文，以本注为准（两处自引行号原记 90/92，2026-10-24 勘正）。
+
+> 【2026-10-24 裁决补记与勘注】上注「C3/C7/C9 仍未动」按决策台账（decisions-20261001.md §二 自治清算波）终态补记三项裁决——三卡均随 2026-10-04 主公自治令自决闭环：**C3＝D11 裁 b 驳**（零规则零重犯信号、无信号不基建；复评触发＝第二例「调用形状」类缺陷再现，候选保留）；**C7＝D18 裁 a 不立票结卡**（闭环后 runbook 脚本化价值低；遗产「生产写逐次请令」升格 docs/dispatcher-playbook.md 呈报白名单 C-1 永久生效）；**C9＝D16 裁 a**（断言面正源自决钉 3t.onepis.net，排期契约测试扩展）——C9 且已执行：队列票 7 提交 **8d1b960**（2026-10-08，app/layout.tsx metadataBase 钉 3t.onepis.net＋契约断言翻转）早于上注 10-09 落笔在库，「仍未动」系漏记、终态＝已执行。另勘注：上注自引行号 90/92 已勘正为 92/94——根因＝同日 6f0377f 于 §二插入勘注两行、其下整体 +2（git 考古亲证：1ad6bd5 时点 90/92 仍准）；姊妹档 awaken :23 互引本档「:92 增补注」同根漂移、实际位置 :94（该行在姊妹档侧、不在本波编辑范围，记此存照）。
 
 ## 六、唤醒条件与检索路径
 
 - **唤醒触发**（任一即拉出本报告进 planning）：① 同类错误第 3 次重犯（三犯法则）；② t-n4 型派发漂移再犯；③ Q3 批注落地时顺手评估 C2；④ 主公点名「规则机械化」。
 - **触发与评估记录（2026-09-27 补）**：条件③已触发——Q3 批注落地（主公批注选 a）随 T-P1 兑现（`2d7709b` 2026-09-26）。评估结论：C2 以 maintenance-purge.test.ts 端点契约断言（`purgeStaleRoomsMock).toHaveBeenCalledWith()`）随 T-P1 同波实质兑现，无需另立票；其余唤醒条件未触发，报告整体维持「不立项不开坑」。
-- **触发与评估记录（2026-10-09 补）**：① 2026-10-01 唤醒收口——awaken 材料 87ec30f 入档（.omo/research-rules-mechanization-awaken-20261001.md，C1–C9 九候选裁决卡备齐待裁），主公裁「我回去读的」，D9–D18 缓读未裁未驳；② 2026-10-07 缺口图谱波（dwfrun-1357b366）＋decisions 自排期队列 17 项转化为验证基建路线图执行（.omo/plans/ulw-verification-infra-roadmap-20261007.md，17 票全 pass）——「不立项不开坑」至此被实际立项执行取代；兑现映射见 §五「兑现补注（2026-10-09）」。
+- **触发与评估记录（2026-10-09 补）**：① 2026-10-01 唤醒收口——awaken 材料 87ec30f 入档（.omo/research-rules-mechanization-awaken-20261001.md，C1–C9 九候选裁决卡备齐待裁），主公裁「我回去读的」，D9–D18 缓读未裁未驳〔2026-10-24 勘注：该缓读状态已被闭环终态取代——2026-10-04 主公自治令自决闭环（decisions-20261001.md :4 自述闭环 15 卡＝D4/D5/D9–D18/D24/D26/D27），D9–D18 十卡系其子集，其中 7 卡有执行提交实证：D9＝887591c、D12＝22af9e1、D13＝b31139a、D14＝fce7af1、D15＝a6bc793、D16＝8d1b960、D17＝cc26ab7（余三卡：D10 以 §五兑现归档注收口、D11 裁驳、D18 裁不立票，本无执行提交）〕；② 2026-10-07 缺口图谱波（dwfrun-1357b366）＋decisions 自排期队列 17 项转化为验证基建路线图执行（.omo/plans/ulw-verification-infra-roadmap-20261007.md，17 票全 pass）——「不立项不开坑」至此被实际立项执行取代；兑现映射见 §五「兑现补注（2026-10-09）」。
 - **检索路径**：ZCode 记忆索引「规则机械化调研待命」条目 → 本文件。
 - **建议第一步**：读 §五候选清单 → docs/requirement-intake.md 对齐 → `$omo:ulw-plan` 立票（候选间正交，可单票可组合；C2 与 Q3 补丁同波最顺）。
 - **本次调研用过的检索词**（复搜起点）：AGENTS.md standard enforcement 2026 / ast-grep YAML rule autofix / Claude Code hooks deterministic guardrails / AI code review learnings conventions / LLM lint rule synthesis / Uber Fixit autofix。
