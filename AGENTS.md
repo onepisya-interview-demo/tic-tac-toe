@@ -24,6 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **service / transport 分离**：service 函数返回纯数据 + 状态标记；transport 唯一决定 status code。详见 `docs/anti-patterns.md` §L0。
 - 不在 SSR 首帧读 localStorage；先渲染安全默认值 + `useEffect` 同步。
 - 不 `--no-verify` 绕过 commit-msg hook；契约要求生产构建时不在 dev 跑浏览器 QA。
+- 永不自动 push：任何 push（常规/force/tag/远程分支删除）必须主公明令后以 MASTER_PUSH_DECREE=1 执行；机械防线 .git/hooks/pre-push
 
 ## L1 路由指针（一行式 digest + 完整文档）
 

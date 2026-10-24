@@ -128,3 +128,39 @@ branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref �
 三层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
 
 hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
+
+## push 法令（2026-10-24）
+
+> 定位：提交策略管 `.git/hooks/commit-msg`（本地入库闸门）；本节管 `.git/hooks/pre-push`
+> （出仓闸门）——commit 之后、push 之前的那道门。设计记录：
+> `.omo/plans/pre-push-guard-decree-20261024.md`；AGENTS.md §L0 硬约束首条对应 digest。
+
+**主公原话要点（2026-10-24）**：
+
+- 「自动 push 不是一个好习惯，特别是在没有我的允许的情况下，最近好几次都自动 push 了」
+- 「一个是基于安全的考虑，一个是基于 push 之后我们后面改东西还要进行 force push」
+- 「我希望永远不要自动 push，除非我主动说 push 你才允许 push」
+
+**两条理由**：
+
+1. **安全**：未经许可的 push 把内容泄出本地仓边界，主公失去对远端状态的最终控制权——AI 不得自授出仓权。
+2. **force push 连带成本**：推上去再改就要 force push——历史一旦出仓，改写即单向门（与 §R3「已推送提交不 reword」同源约束：出仓的代价由后续每一笔改写支付）。
+
+**机械防线机制**（真源 `tests/qa/pre-push-guard.sh`，POSIX sh）：
+
+- **hook 位置**：`.git/hooks/pre-push`（git 永不跟踪 `.git/` 内文件；克隆/重建后重装：
+  `cp tests/qa/pre-push-guard.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push`）。
+- **两条放行路径**（判定顺序定死）：
+  1. stdin 或 stdout 任一为 TTY → `exit 0`——主公本人终端操作，无感放行；
+  2. 环境变量 `MASTER_PUSH_DECREE=1` → `exit 0`——主公明令后带令牌执行的单次授权
+     （令牌仅当次命令环境注入、不落盘）。
+- **其余一律拦截**：AI 子进程 / GUI / CI 等非交互 push → stderr 输出拦截说明并 `exit 1`；
+  拦截文案首行含稳定标记串 **`[push-guard]`**，供机械验证锚定（含文案、不含放行）。
+
+**AI 执行口径**：平时一律不 push。任何 push——常规 push、`--force`、推 tag、
+`git push origin --delete` 远程分支删除——都必须等主公明令之后，以
+`MASTER_PUSH_DECREE=1 git push ...` 执行单次授权。令牌是明令的回执，不是默认参数；
+不得预置、不得常驻注入。无明令时 push 被 hook 拦下即是正确行为，不是要修的故障。
+
+**GUI 误拦说明**：GUI 客户端（IDE / Git GUI 等）的非交互 push 同样会被拦——这是设计内
+行为，不是 hook 误报；被拦时请主公本人在终端执行 `git push`（TTY 路径免令牌放行）。
