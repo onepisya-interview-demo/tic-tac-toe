@@ -128,25 +128,30 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 | 3 | test | Test (Vitest) | Test (Vitest) ✅ | 五必绿 | ① |
 | 4 | build | Build (Next.js) | Build (Next.js) ✅ | 五必绿 | ④ |
 | 5 | visual-qa | Visual QA (Playwright probe) | Visual QA (Playwright probe) ✅ | 五必绿 | ⑥ |
-| 6 | rooms-race | Rooms-race QA (Playwright probe) | rooms-race ⚠️ | 追加 BR 探针 | ⑥ |
-| 7 | home-return-qa | Home-return QA (Playwright probe) — BR-1/2/3/5 | home-return-qa ⚠️ | 追加 BR 探针 | ⑥ |
-| 8 | offline-mode-qa | Offline-mode QA (Playwright probe) — BR-4 | offline-mode-qa ⚠️ | 追加 BR 探针 | ⑥ |
-| 9 | offline-qa | Offline QA / pure-local (Playwright probe) — BR-4 | offline-qa ⚠️ | 追加 BR 探针 | ⑥ |
-| 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | online-direct-qa ⚠️ | 追加 BR 探针 | ⑥ |
-| 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | room-reset-qa ⚠️ | 追加 BR 探针 | ⑥ |
+| 6 | rooms-race | Rooms-race QA (Playwright probe) | Rooms-race QA (Playwright probe) ✅ | 追加 BR 探针 | ⑥ |
+| 7 | home-return-qa | Home-return QA (Playwright probe) — BR-1/2/3/5 | Home-return QA (Playwright probe) — BR-1/2/3/5 ✅ | 追加 BR 探针 | ⑥ |
+| 8 | offline-mode-qa | Offline-mode QA (Playwright probe) — BR-4 | Offline-mode QA (Playwright probe) — BR-4 ✅ | 追加 BR 探针 | ⑥ |
+| 9 | offline-qa | Offline QA / pure-local (Playwright probe) — BR-4 | Offline QA / pure-local (Playwright probe) — BR-4 ✅ | 追加 BR 探针 | ⑥ |
+| 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | Online-direct QA (Playwright probe) — BR-2/8 ✅ | 追加 BR 探针 | ⑥ |
+| 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | Room-reset QA (Playwright probe) — BR-7 ✅ | 追加 BR 探针 | ⑥ |
 
-对账发现（2026-10-08，票 4 实测）：
+对账发现（2026-10-08，票 4 实测；第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下）：
 
-- **命名错位**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设；修复（ruleset 改列显示名、或 ci.yml 六 job 去 `name:` 改用 id 报名）触 GitHub 侧配置与 ci.yml 票 4 五项外文件面，均不属本票——记档呈报，随下次发版 PR 波处置。
+- **命名错位（✅ 已于 2026-10-21 修复，方案 a）**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设。
+  **修复回执（2026-10-21，主公令「先修复」，随 PR #22 发版波执行）**：repo ruleset（id 23195249）`required_status_checks` 六 context 由 job id 改列 CI 实报显示名——新名单自 ci.yml `name:` 字段机械提取（零转抄），五必绿五项本就一致未动；PUT 写回实测 11 contexts 全部与实报名重合，PR #22 `mergeStateStatus` 当即 BLOCKED→CLEAN。改名防漂移无静态断言可拦（GitHub 侧配置面），对账依赖本表第 3/4 列人工或 gh api 复核。
 - **行数对账**：本表 11 行＝`grep -cE "^  [a-z0-9-]+:$" .github/workflows/ci.yml`＝11；`tests/qa/ci-contract.test.ts` 持续断言表行 job id 集合与 ci.yml job id 集合双向相等，防 job 增删后本表漂移。
 
 ### 5.3 BASE_URL 契约（动作③）
 
 每个探针 job 的探针 step 必须显式携带 `BASE_URL=http://localhost:<port>`，且端口与本 job 起 server 的 `PORT`（或裸 `pnpm start` 的 Next.js 默认 3000）一致——教训：rooms-race job 漏传 `BASE_URL`（server :3101／探针默认 :3000）自进 CI 起约 6.3 天未绿（`a2a667d` 修复，L1-32）。本票将 visual-qa step 补齐显式 `BASE_URL=http://localhost:3000`（与其探针默认值同值，行为零变），契约对全部 7 个探针 job 统一、无「默认端口例外」分支——默认值耦合正是 a2a667d 事故类。
 
-### 5.4 EVIDENCE_DIR 三态核验——unproven（D-1 挂账）
+### 5.4 EVIDENCE_DIR 三态核验——✅ 已终判＝「展开」并断言定版（2026-10-21）
 
-ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（疑点：探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用；`upload-artifact` 的 `path:` 同形字面量或恰好同指工作区相对路径而「意外能跑」）。三态判定＝展开／不展开／疑（判「疑」＝fail）。**本波无 PR/CI 日志可查，按计划 D-1 降级路径以 unproven 注记收口——实跑判定搭下次发版 PR 波**（届时取 CI 日志中 EVIDENCE_DIR 实际值两态取一；若判不展开→在票 4 范围内修为 env 上下文正确写法 `${{ runner.temp }}`）。期间 EVIDENCE_DIR 断言无法定版，不入 `tests/qa/ci-contract.test.ts`。证据件：`.omo/evidence/20261008-ticket4-d14-ci-contract.md`。
+- **疑点起点**：ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用）。
+- **10-08 判定＝「不展开」**（决定性证据：run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`；两条防误判教训：artifact 上传成功≠env 已展开、`##[group]Set up job` 回显段永远字面量不可作判据）。
+- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。
+- **2026-10-21 终判＝「展开」**：PR #22 run 39582362835，ci-verify 判据 [2] clean——env 已展开为 runner 真实绝对路径，锚行 `QA complete. … written to /home/runner/work/_temp/visual-qa`。D-1 至此闭环。
+- **断言定版**：`tests/qa/ci-contract.test.ts` describe E（job 级 env 禁 runner——防 c451ee5 同型再犯）＋ describe F（探针 step 级 EVIDENCE_DIR 必须为 `${{ runner.temp }}/<name>` 写法——防丢失/回退 shell 字面量两态）。证据件：`.omo/evidence/ci-verify-20261021-pr22.md`（判据 [1][2][3] 全 clean）。
 
 > 【2026-10-04 勘误补注】本条旧记「自进 CI 起 12 天从未绿过」系窗口错配——job 层（`e1ea4b1` 09-24 进 CI → `a2a667d` 10-01 修复）≈6.3 天；触发面盲区（`ca7e6ad` 09-15 移除 push trigger → PR #18 首跑红 09-30）≈15.9 天（粗值 15.6 系 UTC/本地混算，同日复核精确化）。verify 波实证更正，锚 .omo/verify-20261001-docs-wave.md:104-105/:186。
 

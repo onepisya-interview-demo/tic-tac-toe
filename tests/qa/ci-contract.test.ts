@@ -14,8 +14,10 @@
 //   D. run_attempt=1 首跑绿口径在档——verification-gauntlet.md 验证实践补充①
 //      ＋ anti-patterns L1-33 编号在档（收口判据不得静默漂移；rerun 绿与 admin
 //      bypass 混过不算数——PR #18 流程实证）。
-// EVIDENCE_DIR 三态核验（票 4 动作④）不在本文件：D-1 挂账 unproven，断言无法
-// 定版（见 verification-gauntlet.md §5.4）。
+// EVIDENCE_DIR 三态核验（票 4 动作④）：D-1 已于 2026-10-21 终判＝「展开」
+// （PR #22 run 39582362835，ci-verify [2] clean），断言定版为 describe E
+// （job 级 env 禁 runner——c451ee5 非法写法教训）＋ describe F（step 级写法契约）
+// （见 verification-gauntlet.md §5.4 修复与定版回执）。
 //
 // 真源：docs/verification-gauntlet.md §3.6/§5；docs/anti-patterns.md L1-32/L1-33
 // （编号引用，去行号防漂移）；.omo/decisions-20261001.md ✅D14 卡。
@@ -213,5 +215,50 @@ describe("ci-contract E: job 级 env 禁 runner 上下文（D-1 修正案防线�
     );
     expect(mutated, "注入前提：首个 job env 段行形未变则注入臂失义").not.toBe(CI_YML);
     expect(jobEnvRunnerViolations(mutated).length).toBeGreaterThan(0);
+  });
+});
+
+// —— F. 探针 step 级 EVIDENCE_DIR 写法契约（2026-10-21 D-1 终判「展开」后定版，VF-S54 连动收口）——
+// 终判依据：PR #22 run 39582362835，ci-verify 判据 [2] clean（env 展开为
+// /home/runner/work/_temp/<name> 真路径，锚行见 §5.4）。本节拦两态回退：
+// ①探针 step 丢 EVIDENCE_DIR；②写法回退 shell 字面量 ${RUNNER_TEMP}（D-1 起点
+// 病灶）。job 级非法写法由 describe E 拦。
+
+function evidenceDirViolations(ciSrc: string): string[] {
+  const violations: string[] = [];
+  const lines = ciSrc.split("\n");
+  const probeRun = /^\s{8}run: BASE_URL=http:\/\/localhost:\d+ pnpm exec node (tests\/qa\/[a-z0-9-]+\.mjs)$/;
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = probeRun.exec(lines[i]);
+    if (!m) continue;
+    let found: string | null = null;
+    for (let j = i - 1; j >= 0 && /^\s{8}/.test(lines[j]); j -= 1) {
+      const em = /^\s{10}EVIDENCE_DIR:\s*(.+?)\s*$/.exec(lines[j]);
+      if (em) {
+        found = em[1];
+        break;
+      }
+    }
+    if (found === null) {
+      violations.push(`探针 step（${m[1]}）缺 step 级 env.EVIDENCE_DIR`);
+    } else if (!/^\$\{\{ ?runner\.temp ?\}\}\/[a-z0-9-]+$/.test(found)) {
+      violations.push(`探针 step（${m[1]}）EVIDENCE_DIR 非 \${{ runner.temp }}/<name> 写法：${found}`);
+    }
+  }
+  return violations;
+}
+
+describe("ci-contract F: 探针 step 级 EVIDENCE_DIR 写法契约（D-1 终判定版，2026-10-21）", () => {
+  it("全部探针 step：step 级 env 携带 ${{ runner.temp }}/<name> 写法的 EVIDENCE_DIR", () => {
+    expect(evidenceDirViolations(CI_YML)).toEqual([]);
+  });
+
+  it("注入对照：剥掉 visual-qa 的 step 级 EVIDENCE_DIR → 判定器必报（检查器可证伪）", () => {
+    const mutated = CI_YML.replace(
+      '        env:\n          EVIDENCE_DIR: ${{ runner.temp }}/visual-qa\n',
+      "",
+    );
+    expect(mutated, "注入前提：visual-qa step env 块行形未变则注入臂失义").not.toBe(CI_YML);
+    expect(evidenceDirViolations(mutated).length).toBeGreaterThan(0);
   });
 });
