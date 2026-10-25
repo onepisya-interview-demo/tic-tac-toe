@@ -120,7 +120,6 @@ function parseArgs(argv) {
     }
   }
   if (!args.help) {
-    // --pr 与 --run 恰给其一
     if (args.pr && args.run) {
       console.error('--pr 与 --run 互斥，恰给其一——--help 查看用法');
       process.exit(1);

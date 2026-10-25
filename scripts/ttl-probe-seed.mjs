@@ -122,7 +122,7 @@ async function apply(rows) {
   );
   await db.execute(DDL);
   for (const r of rows) {
-    assertProbeRoom(r.room); // 写库前逐行过闸
+    assertProbeRoom(r.room);
     await db.execute({
       sql: `INSERT INTO game_stats (room, updated_at)
             VALUES (?, ?)

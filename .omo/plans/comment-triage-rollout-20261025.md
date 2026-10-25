@@ -13,7 +13,7 @@
 | Phase 0 存量盘点 | 调研 | 已完成（见方案 §四 Phase 0、§七命令清单） |
 | Phase 1 立规范与对账 | 文档层 | **本波落地并提交（2026-10-25）**：审读通过后主公令提交，拆两笔——① `test(probes)` 三测试头＋BR-1 探针列登记；② `docs(comments)` 规范/纠偏/存档/台账。SHA 以 `git log` 为准 |
 | Phase 2 增量门禁 | 机制层 | **本波落地并提交（2026-10-25 门禁工程师，主公令拆三笔 feat(qa)／chore(lint)／docs(omo)，SHA 以 `git log` 为准）**：R8 入 `tests/qa/commit-audit.mjs`＋`.git/hooks/pre-commit` 挂载；M2 入 `eslint.config.mjs`；M4' 守卫落地 `scripts/batch-clean-guard.mjs`。P2-a/P2-b/P2-d 由本波派单令裁定（见 §三），P2-c（ci.yml）不动、维持待裁决；未决验证项与 known-issue 处置见 §3.8＋§六 P2-e/P2-f。**B3 存量收尾（2026-10-25 第四轮补理由员）**：7 处 eslint-disable 逐处补 ` -- ` 描述，见 §3.9 |
-| Phase 3 试点分诊 | 存量层 | 占位——Phase 2 后、按裁决启动 |
+| Phase 3 试点分诊 | 存量层 | **试点执行第一波已落地（2026-10-25 执行员，派单令）**：分诊 5 项 safe 全执行——4 文件删 5 块复述注释，沙箱彩排＋真树门禁全绿（§4.1）；fresh-eyes 评审员面与后续波次续记 |
 | Phase 4 复盘定策 | 决策层 | 占位 |
 
 ## 一 核对员漂移备案（执行前提，以实测为准；方案存档不改）
@@ -261,7 +261,41 @@ exit 0
 - 评审员＝不携带产出 session 上下文的独立只读评审 session（M5' 可操作定义），逐注释块判删/留/转化出 blocking/advisory 报告。
 - 批量动作走 L2-7 git 通道（tracked 先 commit、untracked 先备份）；涉批量改写先 /tmp 沙箱彩排全绿再上真树；禁手搓行匹配（NIH 戒律）。
 - 验证：前后六层门禁全绿；探针对照零行为差异；报告数字说话。
-- 实收占位：删＿＿／留＿＿／转化＿＿（块数）。
+- 实收：**试点第一波（2026-10-25，§4.1）删 5／留 0／转化 0**（块）；fresh-eyes 评审员面、2 个 .sh 全量纳入面（P3-b）与后续波次续记。
+
+### 4.1 试点执行第一波（2026-10-25 执行员）——分诊可删项 5 处落地
+
+**输入**：试点分诊 JSON 5 项（verdict 全「删」、safe=true、anchorRisk 全空）——`scripts/build-favicon-assets.mjs:39/:75`、`scripts/ci-verify.mjs:123`、`scripts/ttl-probe-seed.mjs:125`（行尾）、`scripts/vercel-ignore-build.test.sh:69`。授权＝本波派单令（只执行 safe=true 且 anchorRisk 空的项；≥3 文件先 /tmp 沙箱彩排全绿再上真树；改后 typecheck＋相关测试必须绿；按纪律提交）。零「存疑待主公」项（5 项全执行）。其中含 1 个 .sh 项——分诊面已覆盖 .sh、派单令明令执行 safe 项即含它；P3-b（.sh 全量纳入）正式裁决位维持待裁。
+
+**改动**：4 文件 5 处注释删除，diff＝1 insertion/5 deletions（唯一 insertion 系 ttl :125 行尾注释剥离后的代码行本身），零新增注释行。
+
+#### 4.1.1 自决决策留痕（编号续 §3.9.2；证据在括号内）
+
+26. **vercel-ignore-build.test.sh 自测只在沙箱跑、真树不跑**：该测试 :46 `git stash push --include-untracked`＋循环内 :56 历史 SHA checkout＋:70 `git checkout main`——真树执行会把 §一 D7 三条既有未提交变更卷入 stash-循环，属触碰禁碰项；沙箱（独立 worktree、无 D7 变更、`git stash list` 基线空）跑等价内容（HEAD 同为 06c7358）14/14 绿＋stash 前后零残留即其证（§4.1.2）。
+27. **沙箱机制＝`git worktree add --detach /tmp/p3-rehearsal-20261025 HEAD`＋node_modules 符号链接**：P2-f 已认可的独立 worktree 模式；不 rsync 全仓（重）、不改共享 `.git/info/exclude`（零共享配置写入面）；真树应用复用沙箱导出的同一 patch（`git apply /tmp/p3-rehearsal.patch`），`diff <(git diff)` 比对 4 文件 hunk 逐字节一致（差异仅 D7 既有 .gitignore 段）。worktree 用后即删。
+28. **锚点独立复核补正分诊结论一处**：`rg -n -F` 五串全仓实测——4 串仅自引；`恰给其一` 另命中 ci-verify.mjs:125 错误消息字符串（注释系复述该消息，删注释不触消息，与分诊判定一致）；`写库前逐行过闸` 另命中 `.omo/decisions-20261001.md:393`（D7 untracked 决策档）——分诊 rationale「rg 全仓仅自引」漏此 untracked 命中；复核判定其为 a6bc793 入仓回执的历史叙述（描述 assertProbeRoom 行为「--apply 写库前逐行过闸」，非对注释文本的锚定引用），代码行为面不变（assertProbeRoom 仍于 apply 循环逐行调用），删除安全。
+29. **R8 彩排先行**：沙箱精确 staged 4 文件跑 `node tests/qa/commit-audit.mjs --staged` → `R8-STAGED: PASS`（本波 diff 唯一新增行系 ttl :125 代码行、非注释行，B1/B2/B3 结构性不命中）后 reset；真提交时 pre-commit 钩子再实检一次。
+30. **提交拆一笔、type 取 chore(comments)**：4 脚本文件＋本台账同笔（06c7358「组件改动与台账同笔」先例）；改动面是代码文件，非 docs(comments)（6759b3b 系纯文档），与 433ab49 chore(lint) 同构。
+
+#### 4.1.2 验证证据（本波实跑，2026-10-25；沙箱＝/tmp worktree @06c7358，真树＝主 worktree @06c7358）
+
+| 检查 | 命令 | 结果 |
+| --- | --- | --- |
+| 锚点复核 | `rg -n -F` 五串（含 hidden、排除 .git） | 4 串仅自引；`恰给其一`＋:125 消息；`写库前逐行过闸`＋decisions-20261001.md:393（决策 28 判非锚点） |
+| 沙箱 层② typecheck | `pnpm typecheck` | exit 0（engine WARN 系环境既有，§3.9.3 同款） |
+| 沙箱 层① vitest | `pnpm exec vitest run` | Test Files 50 passed/2 skipped；Tests 579 passed/11 skipped，exit 0（与 §3.4 基线同数字） |
+| 沙箱 R8 彩排 | 精确 staged 4 文件后 `node tests/qa/commit-audit.mjs --staged` | `R8-STAGED: PASS`，exit 0（跑毕 `git reset`） |
+| 沙箱 .sh 自测 | `bash scripts/vercel-ignore-build.test.sh` | 14 passed/0 failed，exit 0；`git stash list` 前后均空、4 文件改动经 stash/pop 往返完好 |
+| 真树 层② typecheck | `pnpm typecheck` | exit 0 |
+| 真树 层③ lint | `pnpm lint` | exit 0（零输出） |
+| 真树 层① vitest | `pnpm test` | Test Files 50 passed/2 skipped；Tests 579 passed/11 skipped，exit 0 |
+| 真树 .sh 自测 | 未跑（决策 26：D7 保护；沙箱等价内容全绿） | — |
+| diff 一致性 | `diff <(git diff) /tmp/p3-rehearsal.patch` | 4 文件 hunk 逐字节一致；差异仅 D7 既有 .gitignore 段 |
+
+#### 4.1.3 git 自查与提交
+
+- D7 三条既有未提交变更（` M .gitignore`、`?? .omo/decisions-20261001.md`、`?? .omo/plans/pre-push-guard-decree-20261024.md`）零触碰：全程未 `git add -A`／`git add .`，精确 add 4 脚本＋本台账；未 push、未 `--no-verify`；commit-msg／pre-commit／pre-push 三钩子与 `.github/workflows/ci.yml` 零改动。
+- 提交信息先过 `node tests/qa/commit-audit.mjs --message-file` 预验（R1-R5/R7＋commitlint 双检查点）再经 pre-commit（R8）＋commit-msg 双钩提交；SHA 以 `git log` 为准。
 
 ## 五 Phase 4 复盘定策——占位
 

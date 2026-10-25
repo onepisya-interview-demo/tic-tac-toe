@@ -66,7 +66,6 @@ for entry in "${CASES[@]}"; do
   fi
 done
 
-# Restore main + any stashed changes
 git checkout --quiet main
 git stash pop --quiet 2>/dev/null || true
 rm -f "$SCRIPT_PATH"

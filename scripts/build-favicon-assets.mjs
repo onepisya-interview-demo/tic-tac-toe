@@ -36,7 +36,6 @@ import { join } from "node:path";
 
 const DEFAULT_SOURCE = ".next/server/app/apple-icon.body";
 
-// (target filename in public/, dimensions) pairs.
 const TARGETS = [
   { file: "public/favicon-16x16.png", size: 16 },
   { file: "public/favicon-32x32.png", size: 32 },
@@ -72,7 +71,6 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-// Ensure public/ exists.
 mkdirSync("public", { recursive: true });
 
 const tmpDir = join(tmpdir(), "build-favicon-assets");
