@@ -25,13 +25,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 不在 SSR 首帧读 localStorage；先渲染安全默认值 + `useEffect` 同步。
 - 不 `--no-verify` 绕过 commit-msg hook；契约要求生产构建时不在 dev 跑浏览器 QA。
 - 永不自动 push：任何 push（常规/force/tag/远程分支删除）必须主公明令后以 MASTER_PUSH_DECREE=1 执行；机械防线 .git/hooks/pre-push
+- `// BR:` 头注释（前 20 行内）不可动：`docs/business-rules.md` 探针列登记文件的头是契约载体（R6 双向校验，仅 branch/range 审计面；误删不在提交时被挡，故靠此条守住）。
 
 ## L1 路由指针（一行式 digest + 完整文档）
 
 - 仓库结构与查找入口：[`docs/repo-map.md`](docs/repo-map.md)
 - 文档状态总图（哪个计划实现了没）：[`.omo/doc-status-map-20260927.md`](.omo/doc-status-map-20260927.md)
 - 代码符号地图：[`docs/code-symbols.md`](docs/code-symbols.md)
-- 约定与命名：[`docs/conventions.md`](docs/conventions.md)
+- 约定与命名（含注释规范：删/留/转化分诊矩阵＋四条归格规则）：[`docs/conventions.md`](docs/conventions.md)
 - 视觉与无障碍：[`docs/style.md`](docs/style.md)
 - 命令与端口：[`docs/commands.md`](docs/commands.md)
 - 反模式全集：[`docs/anti-patterns.md`](docs/anti-patterns.md)
@@ -44,6 +45,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 业务规则清单（decree + 正反面场景 + 探针映射）：[`docs/business-rules.md`](docs/business-rules.md)
 - 运行时能力边界：[`.omo/plans/agent-runtime-boundaries.md`](.omo/plans/agent-runtime-boundaries.md)
 - 调度者四层职责（设计记录）：[`.omo/plans/dispatcher-roles-retrospective.md`](.omo/plans/dispatcher-roles-retrospective.md)
+
+## 注释写作纪律（两条，对齐 Anthropic 官方提示模板）
+
+- 不给未改动的代码加注释。
+- 只在 logic 不自明处加注释。
 
 ## 验证六层一行式
 

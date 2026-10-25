@@ -30,7 +30,7 @@
 - **多个探针用「 + 」分隔**；步骤细节可放在括号里（如 `tests/qa/home-return-qa.mjs` step03 强断言）——R6 仅校验文件存在与头注释，步骤描述是给人看的。
 - **探针头必须反向引用 BR**：每个被引用的探针/测试文件，前 20 行内须含 `// BR: BR-N[, BR-M]` 行（逗号分隔、按升序）。R6 检查文件首 20 行是否含 BR-N 文本。
 - **缺探针条目标 `⚠ 未探针化`**：探针列直接写 `⚠ 未探针化` 即可豁免 R6；R6 只校验有路径的探针。
-- **R6 失效 = 阻断**：`--branch dev` 模式跑全分支 audit，R6 失败 exit 1、commit-msg hook 同步阻止提交。
+- **R6 失效 = 阻断（仅 branch/range 审计面，无自动触发点）**：R6（`auditBrProbeBinding`）只在 `--branch` / `--range` 模式执行——触发面＝手动 `node tests/qa/commit-audit.mjs --range origin/main..HEAD`（⑤层绿色门槛，`scripts/verify-all.mjs` ⑤层同款接线）或 `--branch dev` 全分支审计；R6 失败计入 failures、exit 1。**commit-msg hook 不跑 R6**：`.git/hooks/commit-msg` 只调 `--message-file`，该模式仅跑 R1–R5 与 R7（`tests/qa/commit-audit.mjs` 源码注释自述「per-commit --message-file mode skips it」）；CI（ci.yml）与 pre-push 亦无 commit-audit 调用。后果：误删 BR 头**不会在提交时被挡**，要等下一次 verify-all ⑤层或手动 branch/range 审计才被抓到——AGENTS.md L0「`// BR:` 头不可动」是第一道防线。（2026-10-25 按实测改写；原文「commit-msg hook 同步阻止提交」与代码不符。）
 
 ## 维护约定
 
