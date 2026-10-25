@@ -103,7 +103,7 @@ export function ResultCelebration() {
     // consumed by the first run) so the state can never regress. Cascading
     // renders are bounded to exactly one extra pass on the celebration path.
     if (consumeJustWonSentinel()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR 首帧安全默认值：sessionStorage 服务端不可用，首帧恒 false，水合后一次性消费哨兵同步；至多翻转一次、哨兵已耗不回退
       setCelebrate(true);
     }
   }, []);

@@ -18,7 +18,7 @@ export function SoundToggle() {
     // updates, so useSyncExternalStore would be over-engineering. React 18
     // bails out of the re-render when getMuted() === true (matches state),
     // so the "cascading render" the lint rule warns about never happens.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 水合后一次性从 localStorage 同步静音偏好；首帧恒 true 安全默认值，相等时 React 跳过重渲染（详见上文）
     setLocalMuted(getMuted());
   }, []);
 

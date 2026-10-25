@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Phase 0 存量盘点 | 调研 | 已完成（见方案 §四 Phase 0、§七命令清单） |
 | Phase 1 立规范与对账 | 文档层 | **本波落地并提交（2026-10-25）**：审读通过后主公令提交，拆两笔——① `test(probes)` 三测试头＋BR-1 探针列登记；② `docs(comments)` 规范/纠偏/存档/台账。SHA 以 `git log` 为准 |
-| Phase 2 增量门禁 | 机制层 | **本波落地并提交（2026-10-25 门禁工程师，主公令拆三笔 feat(qa)／chore(lint)／docs(omo)，SHA 以 `git log` 为准）**：R8 入 `tests/qa/commit-audit.mjs`＋`.git/hooks/pre-commit` 挂载；M2 入 `eslint.config.mjs`；M4' 守卫落地 `scripts/batch-clean-guard.mjs`。P2-a/P2-b/P2-d 由本波派单令裁定（见 §三），P2-c（ci.yml）不动、维持待裁决；未决验证项与 known-issue 处置见 §3.8＋§六 P2-e/P2-f |
+| Phase 2 增量门禁 | 机制层 | **本波落地并提交（2026-10-25 门禁工程师，主公令拆三笔 feat(qa)／chore(lint)／docs(omo)，SHA 以 `git log` 为准）**：R8 入 `tests/qa/commit-audit.mjs`＋`.git/hooks/pre-commit` 挂载；M2 入 `eslint.config.mjs`；M4' 守卫落地 `scripts/batch-clean-guard.mjs`。P2-a/P2-b/P2-d 由本波派单令裁定（见 §三），P2-c（ci.yml）不动、维持待裁决；未决验证项与 known-issue 处置见 §3.8＋§六 P2-e/P2-f。**B3 存量收尾（2026-10-25 第四轮补理由员）**：7 处 eslint-disable 逐处补 ` -- ` 描述，见 §3.9 |
 | Phase 3 试点分诊 | 存量层 | 占位——Phase 2 后、按裁决启动 |
 | Phase 4 复盘定策 | 决策层 | 占位 |
 
@@ -210,6 +210,49 @@ exit 0
 - **未决项入裁决队列**：① 未决验证项＝层④ build／层⑥ 浏览器探针（§3.4 未跑声明）→ §六 P2-f（补跑方式：独立 worktree 跑 `node scripts/verify-all.mjs` 全六层，L2-13 禁主 worktree 在线 dev 服时跑 build；或主公豁免）；② known-issue 4ac5acf 处置 → §六 P2-e 扩为三选项（a 维持现状＝D1 已裁口径／b reword 须明令＋force push 法令／c squash 并入豁免类须主公令），本波维持 a。
 - **提交令解除决策 19 终态**：第三轮派单令「现在提交本阶段改动（合规信息＋Plan footer；可拆 1-3 笔）」——拆三笔执行：feat(qa)（R8＋fixture 测试＋M4' 守卫）／chore(lint)（M2）／docs(omo)（本台账）。三笔均先过 `node tests/qa/commit-audit.mjs --message-file` 预验、经 **pre-commit（R8）与 commit-msg（R1-R5/R7）双钩**提交（钩子先装后提交，时序即「自食其力」）、精确逐文件 `git add`（未 `-A`）、**未 push**（push 法令：须主公另行明令）。SHA 以 `git log` 为准。
 - **过渡日语义（by design）**：三笔 author date＝2026-10-25 → branch/range 面落 R8 祖父带（采纳日当日整日旧账口径）；其增量内容已在提交时由 pre-commit 面实检（与 §3.4 自食其力正路径同源），次日起 range 面不复检（by design，方案祖父条款语义）。
+
+### 3.9 B3 存量收尾（2026-10-25 第四轮：补理由员——7 处 eslint-disable 补行内 ` -- ` 描述）
+
+**输入**：派单令携核对员清单 7 处（预期 7）。实测 `grep -rn "eslint-disable" --include="*.ts" --include="*.tsx" components/ lib/ app/` → 恰 7 处，路径与行号与清单逐一吻合；即 §3.4「B3 存量 7 处皆无 ` -- `」的收尾。派单令硬要求：逐处读代码确认属实再写、Alert 读上下文写真实理由、SoundToggle 散文保留另补行内简述、`pnpm lint` 全绿、按纪律提交一笔。
+
+#### 3.9.1 逐处理由（均逐处读代码后写；证据 file:line 为改前行号，改动仅在同一行追加文本、行号不漂）
+
+| # | 位置 | 规则 | 行内理由（` -- ` 后原文） | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | `components/RoomGateDialog.tsx:81` | react-hooks/set-state-in-effect | 弹窗重开时把最新 initialName prop 同步进受控输入（关闭期间 store 房间名可能已变）；open 守卫下单次有界同步 | `useState<string>(initialName)` :73——初始态已是真值、无「默认值→真值」切换；effect 体仅 `if (open) setName(initialName)` :82、deps `[open, initialName]` :83；:77-79 既有注释自述「re-opens with a fresh name」。**非 SSR 场景，不套模板** |
+| 2 | `components/SyncConfirmDialog.tsx:108` | 同上 | 弹窗重开时把最新 initialName prop 同步进受控输入（关闭期间 RoomGateDialog 可能已存新名）；open 守卫下单次有界同步 | `useState<string>(initialName)` :101；:105-106 自述「RoomGateDialog save fires while the dialog was closed」。非 SSR 场景 |
+| 3 | `components/ResultCelebration.tsx:106` | 同上 | SSR 首帧安全默认值：sessionStorage 服务端不可用，首帧恒 false，水合后一次性消费哨兵同步；至多翻转一次、哨兵已耗不回退 | `useState(false)` :96；`consumeJustWonSentinel` 读 `window.sessionStorage` :49；:90-93 SSR safety 段、:99-104 one-shot／no-regress 段 |
+| 4 | `components/HomeDialogMount.tsx:81` | 同上 | SSR 首帧安全默认值（false/0/''），水合后一次性读 sessionStorage 哨兵＋localStorage 台账快照进 state；仅 BR-1 触发路径、单次有界 | `useState` 三默认值 :63-65；`consumeNavPrev` 消费读 :72、`pendingSyncCount`/`loadDeclinedPending` :74-75；:78-80 自述 mount-time external read；BR-1 arm check :70-72 |
+| 5 | `components/OfflineStatsPanel.tsx:44` | 同上 | SSR 首帧安全默认值：首帧渲染 emptyStats，挂载后从 localStorage 水合真实战绩（头注「SSR 安全」契约） | `useState<GameStats>(emptyStats)` :37；`loadOfflineStats` 读 `window.localStorage`（`lib/offline-stats.ts:29`）；头注 :29「SSR 安全：emptyStats 首帧，挂载后从 localStorage 水合」 |
+| 6 | `components/SoundToggle.tsx:21` | 同上 | 水合后一次性从 localStorage 同步静音偏好；首帧恒 true 安全默认值，相等时 React 跳过重渲染（详见上文） | `useState<boolean>(true)` :11；`getMuted` 读 `window.localStorage`（`lib/sound.ts:59`）；:7-10／:14-20 既有英文散文**原样保留**，行内仅简述并回指 |
+| 7 | `components/ui/Alert.tsx:36` | @typescript-eslint/no-unused-vars | variant 是 AlertProps 公开契约位：当前唯一值 'danger' 已直绑样式 token，无需读值分支；签名处显式解构记默认值、不混入 rest | `AlertVariant = 'danger'` 单值 :20；`AlertProps.variant?` :23；className 直写 `bg-danger-surface border-danger-border text-danger` :50；`rest` 仅读 `data-testid` :43、未 spread 到 DOM；头注 :8-9「目前只暴露 danger 变体」 |
+
+#### 3.9.2 自决决策留痕（编号续 §3.3；证据在括号内）
+
+20. **理由语言取中文**：派单令给出的理由模板为中文（「SSR 首帧安全默认值：首帧渲染默认值，useEffect 内再同步」）、仓内 commit／docs 默认中文（docs/commit-policy.md §中文提交）；四处既有英文散文（SoundToggle／两 Dialog／ResultCelebration）零改动，仅新增的 ` -- ` 片段用中文。
+21. **两 Dialog 不套「SSR 首帧默认值」模板**：派单令明令「必须逐处读代码确认属实再写」——实读为 props→受控输入的重开同步（初始态已是 `initialName`，无安全默认值切换；effect 由 `if (open)` 守卫），与 SSR 无关，按实写（§3.9.1 #1/#2 证据）。
+22. **Alert 理由不写「为将来变体预留」**：`...rest` 未 spread 到 DOM（:43 仅读 data-testid），解构的实效是「契约位显式消费＋默认值落在签名处＋rest 语义干净」；「预留」说辞不可证伪故不写。
+23. **提交 type 取 `chore(lint)`**：改动面为 lint 抑制指令的描述补齐、零行为面、非 docs 文件；与 433ab49（M2 入 eslint 配置）同 scope，便于 `git log --grep` 聚合。
+24. **本波不新增裁决项**：动作由派单令逐字授权（清单、语法、lint 门槛、提交一笔），无裁量空间；§六 P2-c／P2-e／P2-f 维持原状。
+25. **辅助证据加跑 `--report-unused-disable-directives`**：补理由的前提是抑制仍在压真 finding——若某条已失效，理由即空话；该检查零报告钉住 7 条皆有效（§3.9.3）。
+
+#### 3.9.3 验证证据（本波实跑，2026-10-25）
+
+| 检查 | 命令 | 结果 |
+| --- | --- | --- |
+| 层③ lint（派单令指名门禁，全量） | `pnpm lint` | **exit 0，零 finding**（pnpm 另有 Node engine WARN：wanted 24.x／current v22.23.1——环境既有、非本波） |
+| 抑制指令仍有效 | `pnpm exec eslint --report-unused-disable-directives components/` | exit 0，零 unused-directive 报告 → 7 条抑制各自仍在压真 finding |
+| 层② typecheck | `pnpm typecheck` | exit 0 |
+| diff 范围 | `git diff --stat -- components/` | 7 files changed, 7 insertions(+), 7 deletions(-)——每文件恰 1 行 |
+| B3 存量复扫 | 上述 `grep -rn "eslint-disable"` ∧ `grep -c " -- "` | total=7 with_description=**7**（§3.4 时点 7/0 → 7/7） |
+| M2 面探针 | `grep -rniE "^\s*//\s*(todo|fixme|xxx)"` 三目录 | 0 命中（理由文案无 M2 判据词） |
+| 提交信息预验（hook 同款路径） | `node tests/qa/commit-audit.mjs --message-file /tmp/b3-reasons-msg.txt` | **PASS**，exit 0（R1–R5/R7＋commitlint 双检查点均过；最长行 97 字节 ≤ header 100） |
+| 未跑（如实声明） | 层① vitest／层④ build／层⑥ 浏览器探针 | 改动为 7 行纯注释文本（eslint 指令描述段），零代码行为面；层②③已覆盖 |
+
+#### 3.9.4 git 自查与提交
+
+- 既有 3 条未提交变更（§一 D7：` M .gitignore`、`?? .omo/decisions-20261001.md`、`?? .omo/plans/pre-push-guard-decree-20261024.md`）零触碰；精确 `git add` 7 组件文件＋本台账，未 `-A`／`.`；经 pre-commit（R8 `--staged`）与 commit-msg（R1-R5/R7＋commitlint）双钩，永不 `--no-verify`；**未 push**（push 法令：须主公另行明令）。SHA 以 `git log` 为准。
+- 过渡日语义同 §3.8：author date＝2026-10-25 落 R8 祖父带；本笔 7 行新增内容恰为 B3 合法形态（含 ` -- `），pre-commit 面实检 `R8-STAGED: PASS` 即其证。
 
 ## 四 Phase 3 试点分诊（存量层）——占位
 

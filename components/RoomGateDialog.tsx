@@ -78,7 +78,7 @@ export function RoomGateDialog({
   // (RoomGateMount passes store.roomName; when the store has one,
   // pre-fill so the user sees their existing room).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 弹窗重开时把最新 initialName prop 同步进受控输入（关闭期间 store 房间名可能已变）；open 守卫下单次有界同步
     if (open) setName(initialName);
   }, [open, initialName]);
 

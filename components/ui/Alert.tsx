@@ -33,7 +33,7 @@ export interface AlertProps {
 }
 
 export function Alert({
-  variant = 'danger', // eslint-disable-line @typescript-eslint/no-unused-vars
+  variant = 'danger', // eslint-disable-line @typescript-eslint/no-unused-vars -- variant 是 AlertProps 公开契约位：当前唯一值 'danger' 已直绑样式 token，无需读值分支；签名处显式解构记默认值、不混入 rest
   title,
   children,
   role = 'alert',
