@@ -211,6 +211,99 @@ describe('commit-audit --branch main dependabot exemption', () => {
   });
 });
 
+// Branch-mode integration test for the GitHub squash-merge exemption
+// (2026-10-25, GITHUB_COMMITTER_EMAIL). Fixture repo carries two commits
+// with the SAME message - a GitHub squash shape: PR-title subject (no
+// Conventional prefix, "(#N)" suffix) + concatenated member messages whose
+// first "Plan:" line flips the parser into trailer mode so later "WHAT:"
+// own-line tokens land in the footer with empty values (the exact 4ac5acf
+// R1+R7 signature):
+//   1. committer noreply@github.com -> SKIP (github committer), all
+//      per-commit rules exempt
+//   2. regular human committer      -> FAIL R1 + R7 (identity keys the
+//      exemption; the subject shape alone borrows nothing)
+// Plus one --message-file run proving the hook path never exempts.
+const GH_TMP = mkdtempSync(path.join(tmpdir(), 'commit-audit-ghsquash-'));
+afterAll(() => {
+  rmSync(GH_TMP, { recursive: true, force: true });
+});
+
+const GH_SQUASH_MSG = [
+  'dev→main：示例波收口（2 commits） (#99)',
+  '',
+  '* docs(omo): 第一段成员提交标题',
+  '',
+  'WHAT:',
+  '首段说明内容，值在 token 下一行。',
+  '',
+  'Plan: .omo/doc-status-map-fixture.md',
+  'Confidence: high',
+  'Scope-risk: narrow',
+  '',
+  '* test(qa): 第二段成员提交标题',
+  '',
+  'WHAT:',
+  '第二段说明内容。',
+].join('\n');
+
+function initGithubSquashFixture(): { repo: string; gh: string; human: string } {
+  const repo = path.join(GH_TMP, `repo-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+  const author = {
+    'GIT_AUTHOR_NAME': 'Fixture Author',
+    'GIT_AUTHOR_EMAIL': 'author@example.com',
+  };
+  const githubCommitter = {
+    ...author,
+    'GIT_COMMITTER_NAME': 'GitHub',
+    'GIT_COMMITTER_EMAIL': 'noreply@github.com',
+  };
+  const humanCommitter = {
+    ...author,
+    'GIT_COMMITTER_NAME': 'Fixture Author',
+    'GIT_COMMITTER_EMAIL': 'author@example.com',
+  };
+  let commitSeq = 0;
+  const commit = (msg: string, env: Record<string, string>): string => {
+    // Content must differ per commit (identical messages are the point of
+    // this fixture); a static payload would leave the tree clean on the
+    // second commit and fail with "nothing to commit".
+    commitSeq += 1;
+    writeFileSync(path.join(repo, 'f.txt'), `gh-squash fixture iter ${commitSeq}\n`, 'utf8');
+    gitIn(repo, ['add', 'f.txt']);
+    gitIn(repo, ['commit', '--no-gpg-sign', '-m', msg], env);
+    return gitIn(repo, ['rev-parse', 'HEAD']).slice(0, 8);
+  };
+  const gh = commit(GH_SQUASH_MSG, githubCommitter);
+  const human = commit(GH_SQUASH_MSG, humanCommitter);
+  return { repo, gh, human };
+}
+
+describe('commit-audit --branch main github squash committer exemption', () => {
+  const fixture = initGithubSquashFixture();
+  const result = runBranchAudit(fixture.repo);
+
+  it('SKIPs GitHub-committed squash messages entirely', () => {
+    expect(result.stdout).toContain(
+      `SKIP  ${fixture.gh}  dev→main：示例波收口（2 commits） (#99) (github committer)`,
+    );
+  });
+
+  it('FAILs the identical message under a human committer (identity keys the exemption)', () => {
+    expect(result.stdout).toContain(`FAIL  ${fixture.human}  dev→main：示例波收口（2 commits） (#99)`);
+    expect(result.stdout).toMatch(/R1: subject does not match Conventional/);
+    expect(result.stdout).toMatch(/R7: trailer "WHAT:" value lacks CJK characters: ""/);
+    expect(result.stdout).toContain('total=2');
+    expect(result.stdout).toContain('skip=1 fail=1');
+  });
+
+  it('never exempts the hook path: --message-file rejects the squash message', { timeout: 30_000 }, () => {
+    const r = runAudit(GH_SQUASH_MSG);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/R1: subject does not match Conventional/);
+  });
+});
+
 // R6 (BR ↔ probe two-way binding) integration tests for --branch mode.
 // Builds a fixture repo whose docs/business-rules.md references a mix of
 // probe files: one happy (exists + BR header), one missing (path not in

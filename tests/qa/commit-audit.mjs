@@ -98,6 +98,16 @@ const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Teste
 const DEPENDABOT_EMAIL = "dependabot[bot]@users.noreply.github.com";
 const DEPENDABOT_NAME = "dependabot[bot]";
 
+// GitHub squash merge（2026-10-25 补，第四类机器产物豁免）——GitHub 端 squash
+// 与网页提交的 committer 恒为 "GitHub <noreply@github.com>"：subject 是 PR 标题
+// 原文（含 "(#N)" 后缀），正文是成员提交消息机器拼接，Conventional 前缀与
+// lore trailers 均非提交时刻可承载。identity-based 判据（committer 面，与
+// Dependabot 的 author 面同构）；branch/range 模式全 per-commit 规则豁免（同
+// merge commit 豁免面），--message-file 钩子路径结构性不可达（main() 调
+// checkMessage 无此 opt）。实证：4ac5acf（PR #22 squash 产物，dev 终审 fail=1）
+// 即此豁免缺口。
+const GITHUB_COMMITTER_EMAIL = "noreply@github.com";
+
 // Historical exemption baseline for branch / range mode (--message-file hook
 // path is never exempted). Three classes, each keyed on a distinct dimension
 // so a single token cannot borrow multiple exemptions:
@@ -214,6 +224,12 @@ function checkMessage(label, raw, opts = {}) {
   // --message-file to its own branch before calling checkMessage at all.
   if (opts.isMerge) {
     return { label, subject, body, footer, findings: [], mergeCommit: true };
+  }
+
+  // GitHub squash / web commits (GITHUB_COMMITTER_EMAIL above): skip every
+  // per-commit rule in branch mode, mirroring the merge-commit surface.
+  if (opts.githubCommitted) {
+    return { label, subject, body, footer, findings: [], githubCommitted: true };
   }
 
   if (subject.length > 100) findings.push({ rule: "R2", msg: `subject ${subject.length} chars > 100` });
@@ -501,13 +517,14 @@ function main() {
   // printed verbatim in the summary line so CI logs make the audited
   // surface self-describing.
   const ref = args.range ?? args.branch ?? "main";
-  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an%x1f%aI", ref)
+  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an%x1f%aI%x1f%ce", ref)
     .split("\n").filter(Boolean);
   const results = records.map((record) => {
-    const [sha, authorEmail, authorName, authorDate] = record.split("\x1f");
+    const [sha, authorEmail, authorName, authorDate, committerEmail] = record.split("\x1f");
     const raw = git("log", "-1", "--format=%B", sha);
     const subject = raw.split("\n")[0];
     const botAuthored = authorEmail === DEPENDABOT_EMAIL || authorName === DEPENDABOT_NAME;
+    const githubCommitted = committerEmail === GITHUB_COMMITTER_EMAIL;
     const isMerge = MERGE_COMMIT_RE.test(subject);
     // Compare date prefixes (YYYY-MM-DD), not full ISO timestamps: the
     // audit must answer "was this commit authored before R7 took effect?",
@@ -530,7 +547,7 @@ function main() {
     // are structurally exempt (a merge diff is not a human-authored
     // increment).
     const preR8Adoption = authorDate.slice(0, 10) <= R8_ADOPTION_DATE;
-    const result = checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption });
+    const result = checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption, githubCommitted });
     if (!preR8Adoption && !isMerge) {
       const r8 = scanR8(git("show", "--format=", "-U0", sha));
       result.findings.push(...r8.findings);
@@ -550,6 +567,9 @@ function main() {
     } else if (r.findings.length === 0 && r.botAuthored) {
       skips++;
       console.log(`SKIP  ${r.label}  ${r.subject} (dependabot)`);
+    } else if (r.findings.length === 0 && r.githubCommitted) {
+      skips++;
+      console.log(`SKIP  ${r.label}  ${r.subject} (github committer)`);
     } else if (r.findings.length === 0) {
       console.log(`PASS  ${r.label}  ${r.subject}`);
     } else {

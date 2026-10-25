@@ -116,14 +116,15 @@ fix 类提交采用「失败测试在前」序列——修复的验收证据是*
 
 `.git/hooks/commit-msg` 会调用 `node tests/qa/commit-audit.mjs --message-file "$1"`。消息不合规时提交失败；**禁止用 `git commit --no-verify` 绕过**。需要独立校验时使用 `pnpm exec commitlint --edit <message-file>`。
 
-branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref 表达式）对三类来源做规则化豁免，输出记 `SKIP` 并单列计数；`--message-file` 模式（人类提交入口，commit-msg hook 闸门）不受任何豁免。判别维度各异避免单 token 多义：
+branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref 表达式）对四类来源做规则化豁免，输出记 `SKIP` 并单列计数；`--message-file` 模式（人类提交入口，commit-msg hook 闸门）不受任何豁免。判别维度各异避免单 token 多义：
 
 - **GitHub merge commit**（subject `Merge pull request #N from …`）：按构造豁免——机器生成的合并记录无人类正文/尾注，按 subject 模式识别；R1-R5/R7 全豁免。
 - **Dependabot 自动提交**（author 为 `dependabot[bot]`）：identity-based 即现有架构（ae02a33 先例）；R3-R5/R7 豁免（subject 仍受 R1/R2 约束，不按 subject 猜测避免人类借用豁免）。
+- **GitHub squash merge / 网页端提交**（committer 为 `GitHub <noreply@github.com>`，2026-10-25 补）：identity-based（committer 面，与 Dependabot 的 author 面同构）；squash 产物 subject 是 PR 标题原文（含 `(#N)` 后缀）、正文是成员提交消息机器拼接，Conventional 前缀与 lore trailers 均非提交时刻可承载——R1-R5/R7 全豁免（同 merge commit 面）。实证：4ac5acf（PR #22 squash 产物）在 dev 终审报 fail=1（R1 非常规 subject＋R7 对拼接正文里 `WHAT:` 独占行取空值），该提交已出仓（origin/main 与 origin/dev 双双在档）不可 reword，属豁免缺口而非提交违规，按本条收口。
 - **规则采纳日之前的旧账**（author date 在 R7 采纳日 2026-09-23 或更早）：按时间锚点豁免——commit 写于该日时 R7 还未上线（commit `3068b22a` 落仓于 22:30:11），结构性无法事后合规；仅豁免 R7 的 subject 与 trailer CJK 检查，R1-R5 仍走全检。
   - **2026-10-24 补注（R3 严格化采纳日）**：同理，author date ≤ 2026-10-24 的旧账在 branch/range 模式对 R3 显式 `WHAT:/WHY:/HOW:` token 检查走关键词祖父分支（`R3_STRICT_ADOPTION_DATE` 常量、日级 `<=`、同 R7 语义）；R1/R2/R4/R5 仍全检，`--message-file` 永不豁免。
 
-三层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
+四层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `GITHUB_COMMITTER_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
 
 hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
 
