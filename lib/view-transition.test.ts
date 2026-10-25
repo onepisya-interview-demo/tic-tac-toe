@@ -1,4 +1,7 @@
-// BR: 案① 时序契约 — lib/view-transition.ts afterViewTransition 分支矩阵
+// BR: BR-1 — 时序契约（原案①）：lib/view-transition.ts afterViewTransition 分支矩阵。
+// 单元级探证 BR-1 反面场景「弹框开启不与 VT 快照同窗」：回调仅在 VT 窗口之后
+// 触发（matching animationend / 无 VT 动画双 rAF / 600ms 安全阀），无关动画名
+// 不提前放行；SSR 无 document 时同步直调。
 //
 // Source: lib/view-transition.ts (667b9ea) + .omo/plans/ulw-transition-alert-unit-tests-20260923.md §三
 

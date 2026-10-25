@@ -1,4 +1,5 @@
-// BR: 案② 错误行契约 — components/ui/Alert.tsx 渲染契约
+// Contract: 案② 错误行契约 — components/ui/Alert.tsx 渲染契约（组件渲染契约，
+// 非 business-rules.md BR-N 业务规则探针，不入 R6 探针列）。
 //
 // Source: components/ui/Alert.tsx (873a255) + .omo/plans/ulw-transition-alert-unit-tests-20260923.md §四
 

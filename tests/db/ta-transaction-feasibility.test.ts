@@ -18,7 +18,9 @@
 //
 // 默认跳过（采样实验非回归用例）：TA_RACE_EXPERIMENT=1 才执行；
 // 轮数可用 TA_RACE_ROUNDS 覆盖。证据归档 .omo/evidence/ta-transaction-20260924/。
-// BR: 无（工程实验，非业务规则探针）。
+// Contract: 无业务规则探针（工程实验，非 business-rules.md BR-N 探针；默认
+// TA_RACE_EXPERIMENT=1 才执行的采样实验，BR-6 侧回归由 lost-update-mutex /
+// turso-remote-race-feasibility 承载）。
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import os from 'node:os';
