@@ -2,7 +2,7 @@
 
 > 2026-10-25 立卷。方案真源：[`.omo/plans/comment-triage-practice-v2-20261024.md`](./comment-triage-practice-v2-20261024.md)（v2 终稿**原样存档**——含已知过期基线，纠偏一律记在本台账，不改存档）。本台账是四阶段 rollout 的唯一执行账本：每阶段落地动作、自决决策（证据 file:line 或命令输出）、验证证据、待主公裁决项。提交 `Plan:` footer 指向本文件。
 >
-> 角色：文档执笔（Phase 1，本波）／门禁工程师（Phase 2）／fresh-eyes 只读评审（Phase 3）／主公（裁决）。
+> 角色：文档执笔（Phase 1）／门禁工程师（Phase 2）／fresh-eyes 只读评审＋执行员（Phase 3）／决策记录员（Phase 4 收口）／主公（裁决）。
 
 ## 〇 目标
 
@@ -13,8 +13,8 @@
 | Phase 0 存量盘点 | 调研 | 已完成（见方案 §四 Phase 0、§七命令清单） |
 | Phase 1 立规范与对账 | 文档层 | **本波落地并提交（2026-10-25）**：审读通过后主公令提交，拆两笔——① `test(probes)` 三测试头＋BR-1 探针列登记；② `docs(comments)` 规范/纠偏/存档/台账。SHA 以 `git log` 为准 |
 | Phase 2 增量门禁 | 机制层 | **本波落地并提交（2026-10-25 门禁工程师，主公令拆三笔 feat(qa)／chore(lint)／docs(omo)，SHA 以 `git log` 为准）**：R8 入 `tests/qa/commit-audit.mjs`＋`.git/hooks/pre-commit` 挂载；M2 入 `eslint.config.mjs`；M4' 守卫落地 `scripts/batch-clean-guard.mjs`。P2-a/P2-b/P2-d 由本波派单令裁定（见 §三），P2-c（ci.yml）不动、维持待裁决；未决验证项与 known-issue 处置见 §3.8＋§六 P2-e/P2-f。**B3 存量收尾（2026-10-25 第四轮补理由员）**：7 处 eslint-disable 逐处补 ` -- ` 描述，见 §3.9 |
-| Phase 3 试点分诊 | 存量层 | **试点执行第一波已落地（2026-10-25 执行员，派单令）**：分诊 5 项 safe 全执行——4 文件删 5 块复述注释，沙箱彩排＋真树门禁全绿（§4.1）；fresh-eyes 评审员面与后续波次续记 |
-| Phase 4 复盘定策 | 决策层 | 占位 |
+| Phase 3 试点分诊 | 存量层 | **已完成（2026-10-25）**：M5' fresh-eyes 只读评审逐块分诊 `scripts/` 9 文件 **63 块——删 5／转化 0／留 58**，教科书面清理对象（死代码／TODO-FIXME／裸抑制／阶段叙述／reviewer 临时说明）五类全零命中（§4.2）；执行员落地 5 项 safe 删除——4 文件 5 块，沙箱彩排＋真树门禁全绿（§4.1，fa0d4e9） |
+| Phase 4 复盘定策 | 决策层 | **已完成（2026-10-25 收口波，决策记录员）**：预判「可删面极薄、止步机制层即最优」被 Phase 3 实收**证实**→定策收口、**不启动全量清理役**；六层门禁 `node scripts/verify-all.mjs` 全绿 exit 0（337.0s，P2-f 随之核销）；复盘见 §五；两档已登记 `.omo/doc-status-map-20260927.md` |
 
 ## 一 核对员漂移备案（执行前提，以实测为准；方案存档不改）
 
@@ -205,6 +205,24 @@ exit 0
 4. **修复面双锁死**：把 squash 产物并入豁免类＝改 R1/R7 语义，违反本波硬纪律「绝不破坏既有 R1-R7 任何行为」；reword／改史涉已出仓历史，须主公明令＋force push 法令（push 法令 §push）。该裁决位即 §六 P2-e（本波维持「保持」现状，选项留主公）。
 5. **结论**：按 D1 口径，#6 的期望无效、实测符合预期（fail=1 known-issue）；绿色门槛 `node tests/qa/commit-audit.mjs --range origin/main..HEAD` 本轮复跑 `total=73 pass=73 skip=0 fail=0` exit 0。沙箱处置建议（「需主公/上游裁决（squash 并入豁免类或接受 fail=1 口径）」）与本台账一致——「接受 fail=1 口径」即 D1 已裁的现状，「并入豁免类」即 P2-e 待裁选项，均已在档，无需新裁决位。
 
+#### 3.7.1 沙箱 fixture 矩阵（两轮合并实收；收口波 2026-10-25 照录沙箱员报告，锚点抽查已复核）
+
+沙箱＝`mktemp -d` → `/tmp/r8-sandbox.I7qUK7/ttt`，`git clone --no-hardlinks` 后 checkout dev；清单以真仓 `git status` 实测，与首轮完全相同（5 仓内文件＋钩子），逐个 `cp` 且 `cmp` 全部 CMP-OK。拷入版 commit-audit.mjs 锚点：`R8_ADOPTION_DATE="2026-10-25"` 在 :147、`R8-STAGED: FAIL` 判定行在 :491（收口波对真仓 HEAD `rg -n` 复核：:147／:491 逐一对上）——R8 机制在位。
+
+| # | fixture | 期望 | 实收 | 判定 |
+| --- | --- | --- | --- | --- |
+| 1 | B1-死代码注入 | 新增 `lib/__sb_b1.ts` 写注释掉的代码形状行（`// const legacyToggle = computeLegacy();`、`// console.log("dead trace");`），`git add` 后钩子须非零退出并报 B1 | 退出码 **1**。输出两行 `FAIL  R8  B1 commented-out code shape: lib/__sb_b1.ts:1: // const legacyToggle = computeLegacy();` 与 `:2: // console.log("dead trace");`，尾行 `R8-STAGED: FAIL`（克隆内 `git add lib/__sb_b1.ts` 后直跑 `.git/hooks/pre-commit`） | pass |
+| 2 | B2-阶段叙述 | 新增 `lib/__sb_b2.ts` 行首 `// Phase 1: 铺开分诊矩阵到六目录`，钩子须报 B2 | 退出码 **1**。`FAIL  R8  B2 phase narration: lib/__sb_b2.ts:1: // Phase 1: 铺开分诊矩阵到六目录`，尾行 `R8-STAGED: FAIL` | pass |
+| 3 | B3-无描述抑制 | 新增 `lib/__sb_b3.ts` 行 `// eslint-disable-next-line no-console`（无 ` -- `），钩子须报 B3 | 退出码 **1**。`FAIL  R8  B3 eslint suppression directive lacks " -- " description: lib/__sb_b3.ts:1`，尾行 `R8-STAGED: FAIL` | pass |
+| 4 | 合法形态三合一 | `lib/__sb_legal.ts` 含 `// BR: BR-2 探针——…`、`// W-RV-07：保留决策回链（判据见台账）`、`// eslint-disable-next-line no-console -- 沙箱验证：…`，钩子须零退出 | 退出码 **0**，尾行 `R8-STAGED: PASS`，无 FAIL/NOTE 行——三形态均未触发任何 blocking 规则 | pass |
+| 5 | 祖父豁免-伪造作者日期 | gf-test 分支落同含 B1/B2/B3 违规的 `lib/__sb_gf.ts`，`GIT_AUTHOR_DATE/GIT_COMMITTER_DATE=2026-10-24T12:00:00+08:00` 伪造提交（钩子移开再恢复；消息按 R1-R5/R7 合规），`--range HEAD~1..HEAD` 须豁免（fail=0、exit 0） | 豁免分支 sha 863515e（作者日期实测 2026-10-24T12:00:00+08:00）：`node tests/qa/commit-audit.mjs --range HEAD~1..HEAD` → PASS、`total=1 pass=1 skip=0 fail=0`、退出码 **0**，零 R8 finding。**对照组**：同违规文件以 `GIT_AUTHOR_DATE=2026-10-26T09:00:00+08:00` 提交（sha b4d362f），同命令 B1/B2/B3 三条 finding 全中、fail=1、退出码 1——豁免分支 fail=0 系作者日期祖父豁免而非漏检 | pass |
+| 6 | 基线--branch-dev | 克隆内 `node tests/qa/commit-audit.mjs --branch dev` 须 fail=0（退出码 0） | 退出码 **1**：`ref=dev total=494 pass=479 skip=14 fail=1`。唯一 FAIL 仍为存量 PR #22 squash 提交 4ac5acf0（R1 无 Conventional/prompt 前缀＋R7 trailer WHAT:/WHY:/HOW: 空值缺 CJK）；作者日期 2026-10-24T18:16:03+08:00（>2026-09-23 不落 R7 祖父锚）、作者 pis1@qq.com（非 dependabot）、subject 非 merge-shape——三类豁免均不适用。与第 1 轮完全同果（两轮间真仓 dev tip 不变）；第 1 轮已在真仓以同命令复跑得相同 exit 1 与同一条 FAIL——系真仓 dev 历史×工作区新版脚本的既有事实，非沙箱伪影 | **fail（期望无效）**——归上文反驳＋§六 P2-e，不另立裁决位（§5.5 决策 31） |
+
+- **allPass=false 的唯一来源即 #6**；钩子面（B1/B2/B3 拦、合法放行）与祖父豁免（含 2026-10-26 对照必罚）5/6 全符合期望。第 2 轮与第 1 轮结论完全一致。
+- 零 node_modules（branch/range/staged 全走 git＋node 内置），未用 NODE_PATH；`--message-file` 路径本轮未触及。
+- 轮内小事故（已自愈）：首次基线命令因外层 `set -e` 在 node 退出 1 时截断 shell，随后以独立命令重跑基线取得完整输出与退出码，沙箱本体未受影响。
+- 清理：`rm -rf /tmp/r8-sandbox.I7qUK7` 已执行，/tmp 无 `r8-sandbox.*` 残留；真仓 `git status` 与初始快照逐行一致（未写真仓任何文件）。
+
 ### 3.8 未决项与提交回执（2026-10-25 第三轮：提交令）
 
 - **未决项入裁决队列**：① 未决验证项＝层④ build／层⑥ 浏览器探针（§3.4 未跑声明）→ §六 P2-f（补跑方式：独立 worktree 跑 `node scripts/verify-all.mjs` 全六层，L2-13 禁主 worktree 在线 dev 服时跑 build；或主公豁免）；② known-issue 4ac5acf 处置 → §六 P2-e 扩为三选项（a 维持现状＝D1 已裁口径／b reword 须明令＋force push 法令／c squash 并入豁免类须主公令），本波维持 a。
@@ -254,14 +272,14 @@ exit 0
 - 既有 3 条未提交变更（§一 D7：` M .gitignore`、`?? .omo/decisions-20261001.md`、`?? .omo/plans/pre-push-guard-decree-20261024.md`）零触碰；精确 `git add` 7 组件文件＋本台账，未 `-A`／`.`；经 pre-commit（R8 `--staged`）与 commit-msg（R1-R5/R7＋commitlint）双钩，永不 `--no-verify`；**未 push**（push 法令：须主公另行明令）。SHA 以 `git log` 为准。
 - 过渡日语义同 §3.8：author date＝2026-10-25 落 R8 祖父带；本笔 7 行新增内容恰为 B3 合法形态（含 ` -- `），pre-commit 面实检 `R8-STAGED: PASS` 即其证。
 
-## 四 Phase 3 试点分诊（存量层）——占位
+## 四 Phase 3 试点分诊（存量层）——2026-10-25 完成（评审员 §4.2＋执行员 §4.1）
 
 - 前置门（anti-patterns L1-27）：先过 `docs/business-rules.md` 清单对账确认行为保持前提。
 - 范围：**`scripts/` 下 7 个 .mjs**（268 行注释）；2 个 .sh（39 行 `#` 注释）纳入/排除按 P3-b 裁决。
 - 评审员＝不携带产出 session 上下文的独立只读评审 session（M5' 可操作定义），逐注释块判删/留/转化出 blocking/advisory 报告。
 - 批量动作走 L2-7 git 通道（tracked 先 commit、untracked 先备份）；涉批量改写先 /tmp 沙箱彩排全绿再上真树；禁手搓行匹配（NIH 戒律）。
 - 验证：前后六层门禁全绿；探针对照零行为差异；报告数字说话。
-- 实收：**试点第一波（2026-10-25，§4.1）删 5／留 0／转化 0**（块）；fresh-eyes 评审员面、2 个 .sh 全量纳入面（P3-b）与后续波次续记。
+- 实收：**M5' fresh-eyes 只读评审逐块分诊（§4.2）：`scripts/` 9 文件 63 块——删 5／转化 0／留 58**；执行员第一波（§4.1）把 5 项删格全部落地（fa0d4e9）。2 个 .sh 已在评审面覆盖（含 1 项删格 `vercel-ignore-build.test.sh:69` 已执行）；P3-b 正式裁决位维持待裁。**后续波次：无**（Phase 4 定策不启动全量清理役，§5.4）。
 
 ### 4.1 试点执行第一波（2026-10-25 执行员）——分诊可删项 5 处落地
 
@@ -297,9 +315,103 @@ exit 0
 - D7 三条既有未提交变更（` M .gitignore`、`?? .omo/decisions-20261001.md`、`?? .omo/plans/pre-push-guard-decree-20261024.md`）零触碰：全程未 `git add -A`／`git add .`，精确 add 4 脚本＋本台账；未 push、未 `--no-verify`；commit-msg／pre-commit／pre-push 三钩子与 `.github/workflows/ci.yml` 零改动。
 - 提交信息先过 `node tests/qa/commit-audit.mjs --message-file` 预验（R1-R5/R7＋commitlint 双检查点）再经 pre-commit（R8）＋commit-msg 双钩提交；SHA 以 `git log` 为准。
 
-## 五 Phase 4 复盘定策——占位
+### 4.2 M5' fresh-eyes 只读评审分诊实收（2026-10-25 评审员；评审时点 HEAD＝06c7358，只读不改文件；收口波照录＋锚点复核）
 
-方案预判：可删项极少，止步 Phase 2 即达本仓最优；若 Phase 3 发现系统性 slop 类别再评估全量清理役。复盘写本台账 §五＋`.omo/doc-status-map` 登记。决策记录须含实收数字与六层门禁证据。
+**结论：证实预判——`scripts/` 9 文件可删面极薄。** 逐块分诊共 **63 个注释块：删 5 ／ 转化 0 ／ 留 58**。
+
+| 面 | 实收 |
+| --- | --- |
+| 删格（5 块，每块单行、全部纯复述） | `build-favicon-assets.mjs:39`／`:75`、`ci-verify.mjs:123`、`ttl-probe-seed.mjs:125`（行尾）、`vercel-ignore-build.test.sh:69`（评审时点行号；已由 §4.1 全部落地于 fa0d4e9） |
+| 教科书面清理对象 | **全零命中**（方案 §〇 判断在 scripts/ 精确成立）：注释掉的死代码 0、TODO/FIXME 0、eslint-disable 0（9 文件无一处）、AI 阶段叙述/装饰 0、写给 reviewer 的临时说明 0 |
+| 留格主体（58 块） | 恰为方案点名的三类——①**约束 why**：favicon 双头块的 Next.js 16 约定缺口＋sharp transitive-dep 论证、sw-bust SW 竞态三段论证、verify-all 超时纪律/进程组杀；②**决策编号＋plan/票回链**：ci-verify 票 4/票 10/L1-33/D-1/PR #22、ttl-probe-seed D15/票 6、verify-all 票 2/票 18、fix-commit-heuristics 票 16；③**契约 doc**：ttl 安全兜底四条、vercel-ignore-build.sh 的 Vercel exit 码外部契约＋CORE_PATH_RE SSOT、test.sh 14 条 CASES 判据 |
+| 判定器核验 | `npx eslint` 7 个 .mjs 实跑 exit 0（当前绿）；删普通注释对 eslint 单调安全——「删除后 lint」评审面**未实跑**（只读评审不改文件），按规则集单调性判定并如实标注；.sh 不在 eslint 范围。**收口波补锚**：删后 lint 已由 §4.1.2 真树 `pnpm lint` exit 0 与 §5.3 verify-all 层③ PASS 实证 |
+| anchorRisk | 5 个删格块 `rg` 全仓逐文本排查全部仅自引、零测试锚定（ci-verify:123 与 :125 错误消息同文系注释复述消息、方向相反，非引用）；执行员独立复核另补 1 处 untracked 命中并判非锚点（§4.1.1 决策 28） |
+
+**三项附带发现（评审员如实报出，收口波核实并处置）**：
+
+| # | 发现 | 收口波核实（HEAD＝fa0d4e9；ci-verify.mjs 因 :123 删除整体前移 1 行，§5.5 决策 33） | 处置 |
+| --- | --- | --- | --- |
+| ① | `ci-verify.mjs:244` 判据 banner 被 `docs/conventions.md:52` 逐字引用——留格块带文档级锚，方案 §二.2 钦定例证的选择被独立证实 | 现行 `scripts/ci-verify.mjs:243`「// ---------- 判据 [1] 五必绿＋首跑全绿（L1-33） ----------」与 `docs/conventions.md:52` 引文逐字对上（`sed -n '243p'`／`sed -n '52p'` 实读） | 留格证据，无动作 |
+| ② | `ci-verify.mjs:571`「供 fixture 级单测复用」用途声明超前于现状（`rg tests/` 对四个导出函数零 import）——文档失真候选 | 现行 `scripts/ci-verify.mjs:570`「// 直接执行时跑主流程；被 import 时只暴露解析函数（供 fixture 级单测复用）。」；`rg -n "import.*from.*ci-verify" tests/ scripts/ --glob '!scripts/ci-verify.mjs'` → exit 1 **零命中** | **非分诊动作**，入 §六 **P4-a** 交主公裁处 |
+| ③ | 结构标记型复述两族判留：`favicon-ico.mjs:66/74/77`（1/2/3 步骤编号，头块已载全部信息，单删致编号悬空）与 `vercel-ignore-build.sh:30/35/40`（Rule N 执行点映射，exit 码 Vercel 语义代码不载）＋ci-verify 纯分隔 banner 4 处（与回链 banner 构成统一分节体系、conventions.md 锚定其一）——字面近复述格但删除净收益为负 | 评审员判留并给出理由；收口波不逐处复核（不改变留格结论） | 备案入 §六（若主公采更激进标准可复议，非待裁） |
+
+**评审结论原文要点**：与方案 Phase 4 预判一致，止步增量门禁即最优，存量仅 5 行边角可删且删除纯属洁癖级收益。
+
+## 五 Phase 4 复盘定策（决策层）——2026-10-25 收口波（决策记录员）
+
+方案 §四 Phase 4 原文：「按 Phase 3 实收决定——本方案预判：可删项极少，止步 Phase 2 即达本仓最优；若发现系统性 slop 类别再评估全量清理役。复盘写 `.omo/plans/` 决策记录＋`.omo/doc-status-map` 登记。验证：决策记录含实收数字与六层门禁证据。」本节即该决策记录。
+
+### 5.1 本波提交（`git log --oneline 40ac019..HEAD` 动态枚举，7 笔，均未 push）
+
+| SHA | subject | 阶段 |
+| --- | --- | --- |
+| 0ca1dc3 | test(probes): 收口 BR 头差集 11/11——view-transition 登记 BR-1、Alert 与 ta-transaction 改 Contract: 前缀 | Phase 1 ① |
+| 6759b3b | docs(comments): 注释分诊 Phase 1 落地——规范入 conventions、R6 触发纠偏、方案存档与台账立卷 | Phase 1 ②（两档入档） |
+| 6eaf05b | feat(qa): 注释增量门禁 R8 入 commit-audit＋批量清理守卫落地 | Phase 2 feat |
+| 433ab49 | chore(lint): 注释分诊 M2——行首 TODO/FIXME/XXX 零容忍规则入 eslint 配置 | Phase 2 chore |
+| 54eeb6a | docs(omo): 注释分诊 Phase 2 台账立卷——三件套落地与两轮验证反驳 | Phase 2 docs |
+| 06c7358 | chore(lint): 注释分诊 B3 存量收尾——7 处 eslint-disable 逐处补行内理由描述 | Phase 2 B3 收尾 |
+| fa0d4e9 | chore(comments): 注释分诊试点执行——scripts 4 文件删 5 处复述型注释 | Phase 3 执行 |
+
+本收口波另加 1 笔 `docs(omo)`（本节＋doc-status-map 登记），SHA 以 `git log` 为准。
+
+### 5.2 各阶段实收数字（汇总，证据指向各节）
+
+| 阶段 | 实收 | 证据 |
+| --- | --- | --- |
+| Phase 1 文档层 | 7 tracked 文件改＋2 `.omo/plans` 新建；BR 头双向对账 10/13 → **11/11**（register 1、rename 2）；`--range origin/main..HEAD` total=71 fail=0、R6 finding 0 | §2.1／§2.3 |
+| Phase 2 机制层 | R8（B1/B2/B3 blocking＋A1/M3' advisory）入 commit-audit＋`.git/hooks/pre-commit`；M2 入 eslint.config.mjs（**前提成立＝true**：lib/store.ts 改前/改后零 finding、注入探针真拦）；M4' 守卫 `scripts/batch-clean-guard.mjs`；commit-audit 套件 22 passed；沙箱 fixture 矩阵 6 项中 5 项符合期望、#6 系 known-issue 4ac5acf（§3.7.1）；**B3 补齐 7/7**（§3.9；收口波 `grep -rn "eslint-disable" … \| grep -c " -- "` 复测 7／总 7） | §3.4／§3.7.1／§3.9.3 |
+| Phase 3 存量层 | fresh-eyes 分诊 9 文件 **63 块：删 5／转化 0／留 58**；教科书面清理对象五类全零命中；5 项删格全部落地（4 文件、diff 1 insertion/5 deletions） | §4.1／§4.2 |
+| Phase 4 决策层 | 六层门禁 verify-all **exit 0**（§5.3）；预判证实；定策收口（§5.4） | 本节 |
+
+### 5.3 六层门禁证据（收口波实跑，2026-10-25，主 worktree @fa0d4e9）
+
+命令：`node scripts/verify-all.mjs`（全链默认模式，含 on-demand 三层与 20 探针）。
+
+| 层 | 结果 |
+| --- | --- |
+| ① `pnpm vitest run` | PASS |
+| ② `pnpm typecheck` | PASS |
+| ③ `pnpm lint` | PASS |
+| ④ `pnpm build` | PASS |
+| ⑤ `commit-audit --range origin/main..HEAD` | PASS |
+| on-demand coverage／mutation／property | PASS ×3 |
+| ⑥ 探针 20 条 | **PASS 20 + FAIL 0**（rooms-race-qa `9 PASS / 0 FAIL`；ux-qa 9 scenarios；visual-qa 7 desktop stages pass、5 mobile no-overflow） |
+| 汇总行 | 「总计 8 步＋探针 20 条，全绿，耗时 337.0s」，**exit 0** |
+
+- L2-13 合规：运行前后 `lsof -nP -iTCP:3000 -sTCP:LISTEN` 无监听（exit 1）——主公 dev 服不在线，主 worktree 跑 build 不触 L2-13（anti-patterns.md:251 条件为「dev 服在线期间」）；verify-all 自带 hermetic server 于 :3101（`scripts/verify-all.mjs:43`），尾行 `ELIFECYCLE Command failed with exit code 143` 系其自身 SIGTERM 收尾，非故障。
+- **P2-f 核销**：Phase 2 未跑的层④ build／层⑥ 探针由本次全链覆盖，§六 P2-f 改「已核销」。
+
+### 5.4 复盘定策：预判被证实 → 定策收口
+
+**预判**（方案 §〇／§四 Phase 4）：本仓存量可删面极薄，主战场在增量门禁；止步 Phase 2 即达本仓最优；若 Phase 3 发现系统性 slop 类别再评估全量清理役。
+
+**Phase 3 实收对照**：
+
+1. **可删面**：63 块中仅 5 块（7.9%）判删，且全部为单行纯复述、零测试锚定、删除「纯属洁癖级收益」（评审员原话）——与「极薄」一致。
+2. **系统性 slop 类别**：教科书面五类（死代码／TODO-FIXME／裸抑制／阶段叙述／reviewer 临时说明）在 scripts/ **全零命中**；全仓面同口径先例——B1/B2 存量 dry-run 双零（§3.4）、TODO/FIXME/XXX 六目录 `rg -i -w` 恰 1 处（`lib/store.ts:98` JSDoc 中部 `*` 行，M2 `location:"start"` 结构性不命中，收口波复测）、裸抑制 7 处已全部转化（§3.9）。**未发现任何系统性 slop 类别**。
+3. **留格主体**：58 块恰落方案点名三类（约束 why／决策回链／契约 doc），且存在文档级锚（`docs/conventions.md:52` ↔ `scripts/ci-verify.mjs:243`）——印证「主体注释是治理资产」的定性。
+
+**定策**：
+
+- **预判证实。** 止步机制层（Phase 2 增量门禁：R8 pre-commit＋range 面、M2、M4' 守卫、B3 全量补理由）即本仓最优；**不启动全量清理役**（方案 Phase 4 的「再评估」触发条件未满足）。
+- 存量层只保留**已完成**的试点一波（5 删），后续不另派清理波次；若将来出现新的系统性类别，由 R8 增量面与 M3' advisory 报表先行暴露，再按方案 §四 Phase 3 流程（L1-27 前置门＋M5' fresh-eyes＋L2-7 git 通道＋沙箱彩排）单独立案。
+- 本 rollout 四阶段**全部完成**，台账转为留档；未决项全部收敛至 §六（P2-c／P2-e／P3-b／P4-a 待裁，其余已裁或核销）。
+
+### 5.5 自决决策留痕（编号续 §4.1.1；证据在括号内）
+
+31. **沙箱矩阵 #6 fail 不另立裁决位**：其期望「`--branch dev` fail=0」系方案存档的过期基线（§一 D1 已裁废），实收 fail=1 的唯一来源 4ac5acf 已有 §六 P2-e 三选项裁决位；重复入列即裁决队列膨胀（§3.7 反驳第 5 点同口径）。
+32. **P2-f 以本收口波主 worktree 实跑核销**：P2-f 原要求「独立 worktree（L2-13）或主公豁免」——L2-13 条件是「dev 服在线」（anti-patterns.md:251 标题原文），实测 :3000 无监听，条件不成立，主 worktree 跑即合规、无需另开 worktree；verify-all 全链 exit 0 是层④/⑥ 的直接证据（§5.3）。
+33. **评审员报告行号记双锚**：评审时点 HEAD＝06c7358，fa0d4e9 删 `ci-verify.mjs:123` 后该文件整体前移 1 行——§4.2 附带发现表同时记评审行号（:244／:571）与现行行号（:243／:570；`git show 06c7358:scripts/ci-verify.mjs | sed -n '244p;571p'` 与 HEAD `sed -n '243p;570p'` 逐字对上）；其余 4 文件无删行前移。
+34. **附带发现 ② 入裁决位 P4-a、③ 仅备案**：② 是「文档超前于代码」的失真候选（方案 §五.10 同族），处置（删句／补 import 消费方／保留）涉代码注释语义，交主公；③ 评审员已判留并给出净收益为负的理由，不构成待决——按 M6 先例以备案行入 §六。
+35. **doc-status-map 登记形态＝总图 §七「入档状态」追加【2026-10-25 叠注】**：沿 10-09／10-24 两条叠注的既有形态（文件末尾按日期顺序叠加、原文零改写），登记两档路径、入档 SHA、7 笔提交区间与 Phase 4 定策一句话；不改 §六 130 份全景（其明细外移至 ledger 文件，本波不动）。
+36. **提交拆一笔 `docs(omo)`**：本台账＋doc-status-map 同笔——两文件均纯文档、同一主题（rollout 收口），54eeb6a 先例同型；type 不取 docs(comments)（6759b3b 系规范/契约文档面，本笔是 .omo 台账面，与 54eeb6a 同 scope 便于 `git log --grep` 聚合）。
+37. **P2-c 推荐 B（维持现状）写入 §六 行内**：推荐与理由随裁决位同行，避免裁决者跨节查找；理由见该行。
+
+### 5.6 收口波 git 自查
+
+- D7 三条既有未提交变更（` M .gitignore`、`?? .omo/decisions-20261001.md`、`?? .omo/plans/pre-push-guard-decree-20261024.md`）零触碰：精确 `git add` 本台账＋`.omo/doc-status-map-20260927.md` 两文件，未 `-A`／`.`；未 push、未 `--no-verify`；commit-msg／pre-commit／pre-push 三钩子与 `.github/workflows/ci.yml` 零改动；零新依赖。
+- 提交信息先过 `node tests/qa/commit-audit.mjs --message-file` 预验（R1-R5/R7＋commitlint）再经 pre-commit（R8 `--staged`）＋commit-msg 双钩提交；本笔新增行均为 `.md`（R8 扫描范围外，预期 `R8-STAGED: PASS`）。SHA 以 `git log` 为准。
 
 ## 六 待主公裁决
 
@@ -308,10 +420,12 @@ exit 0
 | P1-a | **已裁决**：本波 Phase 1 提交（2026-10-25 审读通过，主公令提交） | 拆两笔执行：① `test(probes)` 三测试头＋BR-1 探针列登记；② `docs(comments)` AGENTS/conventions/anti-patterns/business-rules.md :33＋两份 .omo/plans 新建。两笔均先过 `node tests/qa/commit-audit.mjs --message-file` 预验再经 hook 提交；SHA 见 `git log`。未 push（push 法令：须主公另行明令） |
 | P2-a | **已裁决（本波派单令 2026-10-25）**：R8 挂载点 | **pre-commit hook 单挂落地**（`--staged` 增量模式）。verify-all ⑤层无需另接：R8 已在 branch/range 模式对采纳日后 commit 生效，⑤层 `--range origin/main..HEAD` 天然覆盖（§3.2）；过渡日（2026-10-25 当日）commit 由 pre-commit 面兜住 |
 | P2-b | **已裁决（本波派单令 2026-10-25）**：M2 入 eslint.config.mjs | 采纳落地——首个 rules 条目（error 级），改前/改后 lint 零新增、lib/store.ts 零命中前提实测成立、注入探针真拦（§3.4） |
-| P2-c | R6 触发点接入 | A）ci.yml 加 job `commit-audit --range origin/main..HEAD`（PR→main 级自动）／B）维持手动＋清理役 SOP。注意 CI 仅 PR 触发，dev 直提只有 commit-msg hook。**派单令明令本轮不动 ci.yml——维持待主公裁决** |
+| P2-c | **R6/commit-audit 触发点接入**（R8 range 面同一裁决；收口波 2026-10-25 补选项优缺点与推荐） | **A）ci.yml 加 job `node tests/qa/commit-audit.mjs --range origin/main..HEAD`**（PR→main 级自动兜底）——优点：远程强制、不依赖本地钩子是否安装、PR 面红绿可见。缺点：①涉 org ruleset 必需状态检查名单对账（新 job 名须登记否则不阻断——`311d91c` ruleset 命名错位先例，见 doc-status-map 10-24 叠注）；②CI 时长增加（多一 job 启动开销；range 面本身规模小，本波 71–73 笔秒级）；③与既有覆盖重叠（⑤层 verify-all 已含同命令、pre-commit 已拦每笔增量）；④**CI 仅 PR 触发——dev 直提仍绕过**，不解决方案 §3.2 点名的主缺口。**B）维持现状**：pre-commit（R8 `--staged` 每 commit）＋verify-all ⑤层（range 面含 R6/R8）＋清理役 SOP 前后各跑 verify-all（anti-patterns L2-7 机制注已写）——优点：零 CI 面改动、dev 直提亦拦、与本轮「不动 ci.yml」纪律一致。缺点：①依赖自觉（verify-all 手动触发）；②新克隆未重装 `.git/hooks/pre-commit` 则 R8 本地面失效（重建源 §3.6）；③R6 仍无自动触发点（business-rules.md:33 如实口径）。**收口波推荐 B（维持现状）**：A 的唯一净增益是「远程 PR 面兜底」，而该面 R8 已由 pre-commit 在每笔提交时实检、⑤层 range 面在 verify-all 复检，R6 在 range 面亦有覆盖（§2.3 R6 finding 0）；A 不覆盖 dev 直提（主缺口），却带来 ruleset 名单对账＋CI 时长＋重叠三项成本。若未来多人/多机克隆协作常态化（本地钩子安装不可控），再复议 A。派单令明令本轮不动 ci.yml——**维持待主公裁决** |
 | P2-d | **已裁决（本波派单令 2026-10-25）**：M4' 守卫机制落地启用 | 守卫＋备份约定落地 `scripts/batch-clean-guard.mjs`（§3.1 ⑤；路径＝§2.2 决策 1 约定路径，无冲突）。后续波若要求既有批量脚本**强制**接入守卫（enforcement 面），另立工单 |
 | P2-e | 已知 known-issue 4ac5acf（含沙箱回合 #6 反驳条目） | 三选项留主公：a）**维持「保持」现状**（`--range` 门槛天然不含；R8 锚 2026-10-25 已祖父——§一 D1 已裁口径，本波即此态）；b）reword（涉已出仓历史，须主公明令＋force push 法令）；c）GitHub squash 产物并入豁免类（改 R1/R7 语义＋补豁免测试，须主公令——§3.7 反驳第 4 点修复面锁死的正路）。**本波维持 a，b/c 未动** |
-| P2-f | **未决验证项（两轮未尽，2026-10-25 提交令同步入列）** | 层④ build／层⑥ 浏览器探针未随本波跑（§3.4 未跑声明：改动为门禁脚本/配置/测试三面、无应用运行时行为面；层①②③⑤已绿）。补跑方式：独立 worktree（L2-13——主 worktree dev 服在线禁跑 build）执行 `node scripts/verify-all.mjs` 全六层，或主公豁免。留裁决 |
-| P3-a | Phase 3 是否启动 | 方案预判止步 Phase 2 即最优；启动则按 §四 |
-| P3-b | Phase 3 范围 2 个 .sh | 纳入（含 39 行 `#` 注释）／排除（只 7 个 .mjs） |
+| P2-f | **已核销（2026-10-25 收口波）**：未决验证项层④ build／层⑥ 浏览器探针 | 收口波主 worktree 实跑 `node scripts/verify-all.mjs` 全链：六层 ①-⑤ PASS＋on-demand 三层 PASS＋探针 20 条 PASS 20/FAIL 0，exit 0、337.0s（§5.3）。L2-13 条件（dev 服在线）实测不成立（:3000 无监听），无需独立 worktree（§5.5 决策 32）。原「留裁决」解除 |
+| P3-a | **已裁决（本波派单令启动试点；收口波定策）**：Phase 3 启动与否 | 试点已按 §四 启动并完成一波（评审 §4.2＋执行 §4.1）；fresh-eyes 分诊**证实**预判（63 块删 5／留 58，slop 五类全零）→ **不启动全量清理役**，存量层到此为止（§5.4） |
+| P3-b | Phase 3 范围 2 个 .sh | 纳入（含 39 行 `#` 注释）／排除（只 7 个 .mjs）。实况：评审面已覆盖 2 个 .sh，其中 1 项删格（`vercel-ignore-build.test.sh:69`）已随派单令「执行 safe 项」落地（§4.1 输入段）；正式口径裁决位维持——因 Phase 3 不再续波（P3-a），本项仅影响台账口径记法、无后续动作 |
+| P4-a | **新增（收口波，§4.2 附带发现 ②）**：`scripts/ci-verify.mjs:570` 用途声明失真候选 | 注释「被 import 时只暴露解析函数（供 fixture 级单测复用）」超前于现状——`rg "import.*from.*ci-verify" tests/ scripts/`（排除自身）零命中，四个导出函数当前无消费方。三选项：a）删「供 fixture 级单测复用」半句（文档对齐现状）；b）补 fixture 级单测消费导出函数（兑现声明）；c）保留（视为意图声明）。**非分诊动作、涉代码注释语义**，交主公裁处 |
+| 备案 | 结构标记型复述两族（§4.2 附带发现 ③） | `favicon-ico.mjs:66/74/77` 步骤编号、`vercel-ignore-build.sh:30/35/40` Rule N 映射、ci-verify 纯分隔 banner 4 处——评审员判留（删除净收益为负：编号悬空／Vercel 语义代码不载／分节体系含 conventions.md 锚）。**不构成待决**；若主公采更激进标准可复议 |
 | M6 | eslint-plugin-sonarjs | 方案不首推、属新 dev 依赖——**本波明确不采纳**，仅备案 |
