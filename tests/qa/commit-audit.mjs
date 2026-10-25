@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Commit-policy audit.
 //
-// Two modes:
+// Modes:
 //   node tests/qa/commit-audit.mjs                  # audit all commits on main
 //   node tests/qa/commit-audit.mjs --branch <name>  # audit all commits on <name>
 //   node tests/qa/commit-audit.mjs --message-file F # audit a single commit message file
+//   node tests/qa/commit-audit.mjs --staged         # R8 scan of staged added lines (pre-commit hook)
 //
 // Exit 0 when all checks pass; exit 1 when any fail.
 
@@ -130,6 +131,30 @@ const R7_ADOPTION_DATE = "2026-09-23";
 const R3_STRICT_ADOPTION_DATE = "2026-10-24";
 const MERGE_COMMIT_RE = /^Merge pull request #\d+ /;
 
+// R8（注释增量门禁，2026-10-25 入档；注释分诊 rollout 台账 §三）——对六目录
+// (app/components/lib/db/scripts/tests) 的 ts/tsx/mjs/js/cjs 新增行做注释形态
+// 检查。blocking 三子集只检 `//` 行注释形态：B1 注释掉的死代码（代码形状版，
+// 存量零命中）、B2 阶段叙述（收紧版，存量零命中）、B3 eslint 抑制指令缺
+// ` -- ` 描述（ESLint 官方语法；存量 7 处皆无描述、不溯及，只拦增量新增行）。
+// JSX 与块注释形态入 advisory 面（A2 二期，本版不实现）。advisory：A1 banner
+// （半角；含决策编号/判据/票号回链的白名单跳过，纯分隔线存量不拦、只监控
+// 增量）＋M3' 无标记注释占比报表（剔除留格标记后计算，纯报表、无阻断、不
+// 预留收紧）。正则与存量 dry-run 结论逐字取自注释分诊方案 v2 §3.2 M1
+// (.omo/plans/comment-triage-practice-v2-20261024.md)，不得自行放宽或收紧。
+// 触发面：--staged 增量模式（pre-commit hook 调用，读 git diff --cached -U0
+// 新增行）＋branch/range 模式对采纳日之后 commit 的逐笔 added-line 扫描；
+// --message-file 模式（commit-msg hook 路径）行为完全不变、不跑 R8。
+const R8_ADOPTION_DATE = "2026-10-25";
+const R8_SCAN_PATH_RE = /^(app|components|lib|db|scripts|tests)\/.*\.(ts|tsx|mjs|js|cjs)$/;
+const R8_DEAD_CODE_RE = /^\s*\/\/\s*((const|let|var|import|export)\s+\w+.*[;{(]\s*$|console\.\w+\(|return\s+[\w.'"`]+;\s*$)/;
+const R8_PHASE_NARRATION_RE = /\/\/\s*(Phase|Step)\s*\d/;
+// 判据词以 [-] 写法拆开，避免本文件自身新增行命中 B3（语义等价）。
+const R8_ESLINT_DISABLE_RE = /eslint[-]disable/;
+const R8_BANNER_RE = /\/\/\s*(={5,}|-{5,}|\*{5,})/;
+// 留格标记口径（A1 白名单与 M3' 报表共用，方案 §3.2 M3'）：决策编号族＋BR 号＋
+// plan 回链＋判据回链；`// BR:` 头与 JSDoc/块注释契约形态由 scanR8 按行形态识别。
+const R8_RETENTION_RE = /(W-R|案[①②③]|L1-\d|D-\d|票 ?\d|BR-\d|\.omo\/plans\/|判据)/;
+
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -138,6 +163,7 @@ function parseArgs(argv) {
     else if (a === "--message-file") out.messageFile = argv[++i];
     else if (a === "--range") out.range = argv[++i];
     else if (a === "--root") out.root = argv[++i];
+    else if (a === "--staged") out.staged = true;
   }
   return out;
 }
@@ -337,6 +363,73 @@ function parseBrRows(md) {
   return rows;
 }
 
+// Parse a `git diff -U0` style patch into per-file added lines with target-side
+// line numbers. Only `+` payload lines count; deletions do not advance the
+// target counter; hunk headers carry the start line for `no`.
+function parseAddedLines(diff) {
+  const files = [];
+  let cur = null;
+  let lineNo = 0;
+  for (const raw of diff.split("\n")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(raw);
+    if (hunk) {
+      lineNo = Number(hunk[1]) - 1;
+      continue;
+    }
+    if (raw.startsWith("+++ b/")) {
+      cur = { path: raw.slice(6), lines: [] };
+      files.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (raw.startsWith("+")) {
+      lineNo += 1;
+      cur.lines.push({ no: lineNo, text: raw.slice(1) });
+    }
+  }
+  return files;
+}
+
+// R8 scan of one diff's added lines. Returns blocking findings (B1/B2/B3),
+// advisory notes (A1) and the M3' unmarked-comment ratio counters. Blocking
+// regexes self-describe the `//` comment shape and are applied line-level,
+// exactly as the dry-run validated them. M3' counts all comment forms (line,
+// block, JSDoc continuation) in the denominator; retention-marked lines,
+// `// BR:` heads and block/JSDoc-form lines count as marked（留格），so the
+// unmarked remainder answers "how many added comments carry no triage marker
+// at all" — pure observation, no threshold.
+function scanR8(diff) {
+  const findings = [];
+  const notes = [];
+  let commentLines = 0;
+  let markedLines = 0;
+  for (const file of parseAddedLines(diff)) {
+    if (!R8_SCAN_PATH_RE.test(file.path)) continue;
+    for (const { no, text } of file.lines) {
+      const isBlockForm = /^\s*\/\*/.test(text) || /^\s*\*/.test(text) || text.includes("{/*");
+      if (/^\s*\/\//.test(text) || isBlockForm) {
+        commentLines += 1;
+        if (isBlockForm || R8_RETENTION_RE.test(text) || /^\s*\/\/\s*BR:/.test(text)) {
+          markedLines += 1;
+        }
+      }
+      if (R8_DEAD_CODE_RE.test(text)) {
+        findings.push({ rule: "R8", msg: `B1 commented-out code shape: ${file.path}:${no}: ${text.trim()}` });
+      }
+      if (R8_PHASE_NARRATION_RE.test(text)) {
+        findings.push({ rule: "R8", msg: `B2 phase narration: ${file.path}:${no}: ${text.trim()}` });
+      }
+      if (R8_ESLINT_DISABLE_RE.test(text) && !text.includes(" -- ")) {
+        findings.push({ rule: "R8", msg: `B3 eslint suppression directive lacks " -- " description: ${file.path}:${no}` });
+      }
+      if (R8_BANNER_RE.test(text) && !R8_RETENTION_RE.test(text)) {
+        notes.push(`A1 banner without retention backlink (advisory): ${file.path}:${no}: ${text.trim()}`);
+      }
+    }
+  }
+  return { findings, notes, commentLines, markedLines, unmarked: commentLines - markedLines };
+}
+
 function main() {
   if (args.messageFile) {
     const raw = readFileSync(args.messageFile, "utf8");
@@ -374,6 +467,34 @@ function main() {
     process.exit(1);
   }
 
+  // R8 staged mode: incremental comment gate for the pre-commit hook. Reads
+  // added lines from `git diff --cached -U0`; the --message-file branch above
+  // returns before reaching here, so the commit-msg hook path is structurally
+  // unchanged. Exit contract for the hook (see .git/hooks/pre-commit): 0 +
+  // "R8-STAGED: PASS" = clean; 1 + "R8-STAGED: FAIL" = blocking violations
+  // (fail-closed at the hook); 3 = the guard itself could not scan — the hook
+  // fails open on anything that is not an explicit verdict.
+  if (args.staged) {
+    let r8;
+    try {
+      r8 = scanR8(git("diff", "--cached", "-U0"));
+    } catch (err) {
+      console.error(`[r8-guard] --staged scan crashed: ${err && err.message ? err.message : String(err)}`);
+      process.exit(3);
+    }
+    for (const n of r8.notes) console.log(`NOTE  R8  ${n}`);
+    for (const f of r8.findings) console.log(`FAIL  R8  ${f.msg}`);
+    if (r8.commentLines > 0) {
+      console.log(`R8 report M3': added comment lines=${r8.commentLines} marked=${r8.markedLines} unmarked=${r8.unmarked} (pure report, no threshold)`);
+    }
+    if (r8.findings.length > 0) {
+      console.log("R8-STAGED: FAIL");
+      process.exit(1);
+    }
+    console.log("R8-STAGED: PASS");
+    process.exit(0);
+  }
+
   // Branch / range mode: choose ref from --range (any git ref expression
   // such as origin/main..HEAD, HEAD~5..HEAD, or a branch name) and fall
   // back to --branch or "main" for backward compatibility. The ref is
@@ -401,7 +522,24 @@ function main() {
     // whole adoption day (2026-10-24) is grandfathered so earlier commits
     // from that day keep the keyword fallback in branch / range mode.
     const preR3StrictAdoption = authorDate.slice(0, 10) <= R3_STRICT_ADOPTION_DATE;
-    return checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption });
+    // R8 anchor, same day-level `<=` semantics: the whole adoption day
+    // (2026-10-25) is grandfathered. Pre-adoption commits skip the R8 scan
+    // silently (mirroring the preR7Adoption skip, no SKIP line) so the branch
+    // summary shape stays byte-stable for grandfathered history; only
+    // post-adoption commits get their added lines scanned, and merge commits
+    // are structurally exempt (a merge diff is not a human-authored
+    // increment).
+    const preR8Adoption = authorDate.slice(0, 10) <= R8_ADOPTION_DATE;
+    const result = checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption });
+    if (!preR8Adoption && !isMerge) {
+      const r8 = scanR8(git("show", "--format=", "-U0", sha));
+      result.findings.push(...r8.findings);
+      if (r8.notes.length > 0) result.r8Notes = r8.notes;
+      if (r8.commentLines > 0) {
+        result.r8Report = `added comment lines=${r8.commentLines} marked=${r8.markedLines} unmarked=${r8.unmarked}`;
+      }
+    }
+    return result;
   });
   let failures = 0;
   let skips = 0;
@@ -421,6 +559,12 @@ function main() {
         console.log(`        ${f.rule}: ${f.msg}`);
       }
     }
+    // R8 advisory surface for post-adoption commits only (undefined for all
+    // grandfathered history, so existing output stays byte-identical).
+    if (r.r8Notes) {
+      for (const n of r.r8Notes) console.log(`NOTE  R8       ${n}`);
+    }
+    if (r.r8Report) console.log(`        R8 report M3': ${r.r8Report} (pure report)`);
   }
 
   // R6 (BR ↔ probe two-way binding): repo-state check, --branch mode only.

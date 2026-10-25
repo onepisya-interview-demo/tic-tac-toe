@@ -718,3 +718,145 @@ describe('commit-audit --branch main R3 严格化锚点（R3_STRICT_ADOPTION_DAT
     expect(result.stdout).toContain('total=3 pass=2 skip=0 fail=1');
   });
 });
+
+// R8（注释增量门禁，2026-10-25）integration tests. --staged 模式走 fixture 仓
+// 真实暂存区（pre-commit hook 同款面）；branch fixture 以 GIT_AUTHOR_DATE 双锚
+// 断言 R8_ADOPTION_DATE 日级 <= 祖父边界（采纳日当日整日祖父、次日拦截）。
+// 注意：违规样例字符串在源码里拆分拼接——B2/B3 是非锚定行级正则，整串内联会
+// 让本测试文件自身的新增行在 R8 增量扫描时自触发（B1 锚定行首，内联安全）。
+const R8_TMP = mkdtempSync(path.join(tmpdir(), 'commit-audit-r8-'));
+afterAll(() => {
+  rmSync(R8_TMP, { recursive: true, force: true });
+});
+
+const R8_FIXTURE_IDENT = {
+  GIT_AUTHOR_NAME: 'R8 Fixture',
+  GIT_AUTHOR_EMAIL: 'r8@example.com',
+  GIT_COMMITTER_NAME: 'R8 Fixture',
+  GIT_COMMITTER_EMAIL: 'r8@example.com',
+};
+
+const R8_VIOLATIONS = [
+  '// const oldBoard = getBoard();',
+  '// ' + 'Phase 1: add cards',
+  '// eslint-dis' + 'able-next-line no-console',
+].join('\n') + '\n';
+
+// 合法形态：BR 头、决策编号回链、带 ` -- ` 描述的抑制、域名词（无数字跟随）、
+// 普通 why 注释。
+const R8_LEGAL = [
+  '// BR: BR-1 契约头（探针登记面）',
+  '// W-R D-3 决策编号回链注释',
+  '// eslint-disable-next-line no-console -- 探针脚本沙箱理由',
+  '// Phase is still won（域名词、无数字跟随）',
+  '// Apply a move. 同步记账说明',
+].join('\n') + '\n';
+
+function initStagedFixture(): string {
+  const repo = path.join(R8_TMP, `staged-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+  writeFileSync(path.join(repo, 'f.txt'), 'init\n', 'utf8');
+  gitIn(repo, ['add', 'f.txt'], { ...R8_FIXTURE_IDENT });
+  gitIn(repo, ['commit', '--no-gpg-sign', '-m', 'chore: init'], { ...R8_FIXTURE_IDENT });
+  return repo;
+}
+
+function runStagedAudit(cwd: string): AuditResult {
+  try {
+    const stdout = execFileSync('node', [AUDIT_PATH, '--staged'], {
+      encoding: 'utf8',
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (err) {
+    if (typeof err !== 'object' || err === null || !('status' in err)) {
+      throw err;
+    }
+    const status = (err as Record<string, unknown>)['status'];
+    return {
+      status: typeof status === 'number' ? status : 1,
+      stdout: stringProp(err, 'stdout'),
+      stderr: stringProp(err, 'stderr'),
+    };
+  }
+}
+
+describe('commit-audit --staged R8 增量注释门禁', () => {
+  it('FAILs B1/B2/B3 violations in staged added lines; out-of-scope paths never count', () => {
+    const repo = initStagedFixture();
+    mkdirSync(path.join(repo, 'lib'), { recursive: true });
+    writeFileSync(path.join(repo, 'lib', 'r8-bad.ts'), R8_VIOLATIONS, 'utf8');
+    // 同样的违规文本放在 docs/（六目录外）：范围口径钉死，不得计入。
+    mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    writeFileSync(path.join(repo, 'docs', 'note.txt'), R8_VIOLATIONS, 'utf8');
+    gitIn(repo, ['add', '.']);
+    const r = runStagedAudit(repo);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('R8-STAGED: FAIL');
+    expect(r.stdout).toMatch(/B1 commented-out code shape: lib\/r8-bad\.ts:1/);
+    expect(r.stdout).toMatch(/B2 phase narration: lib\/r8-bad\.ts:2/);
+    expect(r.stdout).toMatch(/B3 eslint suppression directive lacks " -- " description: lib\/r8-bad\.ts:3/);
+    expect(r.stdout).not.toContain('docs/note.txt');
+  });
+
+  it('PASSes legal forms; A1 banner reports as advisory (never blocking) with backlink whitelist', () => {
+    const repo = initStagedFixture();
+    mkdirSync(path.join(repo, 'lib'), { recursive: true });
+    writeFileSync(
+      path.join(repo, 'lib', 'r8-good.ts'),
+      R8_LEGAL +
+        '// ----' + '---- 无回链分隔线\n' +
+        '// ---------- 判据 [1] 五必绿（L1-33） ----------\n',
+      'utf8',
+    );
+    gitIn(repo, ['add', '.']);
+    const r = runStagedAudit(repo);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('R8-STAGED: PASS');
+    expect(r.stdout).toMatch(/NOTE  R8  A1 banner without retention backlink \(advisory\): lib\/r8-good\.ts:6/);
+    expect(r.stdout).not.toContain('r8-good.ts:7');
+    expect(r.stdout).toContain('added comment lines=7 marked=3 unmarked=4');
+  });
+});
+
+function initR8AdoptionFixture(): { repo: string; shas: string[] } {
+  const repo = path.join(R8_TMP, `adopt-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+  mkdirSync(path.join(repo, 'lib'), { recursive: true });
+  const cases = [
+    { day: '2026-10-25', subject: 'test(audit): R8 祖父边界——采纳日当日' },
+    { day: '2026-10-26', subject: 'test(audit): R8 祖父边界——采纳日次日' },
+  ] as const;
+  const shas: string[] = [];
+  for (let i = 0; i < cases.length; i++) {
+    const c = cases[i];
+    writeFileSync(path.join(repo, 'f.txt'), `iter ${i}\n`, 'utf8');
+    writeFileSync(path.join(repo, 'lib', `r8-${i}.ts`), R8_VIOLATIONS, 'utf8');
+    gitIn(repo, ['add', '.'], { ...R8_FIXTURE_IDENT });
+    const msg = `${c.subject}\n\n${R7_PASS_BODY}`;
+    const stamp = `${c.day}T12:00:00+08:00`;
+    gitIn(repo, ['commit', '--no-gpg-sign', '-m', msg], {
+      ...R8_FIXTURE_IDENT,
+      GIT_AUTHOR_DATE: stamp,
+      GIT_COMMITTER_DATE: stamp,
+    });
+    shas.push(gitIn(repo, ['rev-parse', 'HEAD']).slice(0, 8));
+  }
+  return { repo, shas };
+}
+
+describe('commit-audit --branch main R8 采纳日祖父（R8_ADOPTION_DATE=2026-10-25）', () => {
+  const fixture = initR8AdoptionFixture();
+  const result = runBranchAudit(fixture.repo);
+
+  it('grandfathers violations authored on the adoption day and FAILs the day after', () => {
+    expect(result.stdout).toContain(`PASS  ${fixture.shas[0]}  test(audit): R8 祖父边界——采纳日当日`);
+    expect(result.stdout).toContain(`FAIL  ${fixture.shas[1]}  test(audit): R8 祖父边界——采纳日次日`);
+    expect(result.stdout).toMatch(/R8: B1 commented-out code shape: lib\/r8-1\.ts:1/);
+    expect(result.stdout).toMatch(/R8: B2 phase narration: lib\/r8-1\.ts:2/);
+    expect(result.stdout).toMatch(/R8: B3 eslint suppression directive lacks " -- " description: lib\/r8-1\.ts:3/);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain('total=2 pass=1 skip=0 fail=1');
+  });
+});
