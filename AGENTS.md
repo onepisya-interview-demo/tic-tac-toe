@@ -26,6 +26,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 不 `--no-verify` 绕过 commit-msg hook；契约要求生产构建时不在 dev 跑浏览器 QA。
 - 永不自动 push：任何 push（常规/force/tag/远程分支删除）必须主公明令后以 MASTER_PUSH_DECREE=1 执行；机械防线 .git/hooks/pre-push
 - `// BR:` 头注释（前 20 行内）不可动：`docs/business-rules.md` 探针列登记文件的头是契约载体（R6 双向校验，仅 branch/range 审计面；误删不在提交时被挡，故靠此条守住）。
+- 依赖新增政令（主公 2026-10-26）：可以新增依赖，但必须非常必要且属『改进环境／改进验证／增加人类对 agent 信任』三类，否则询问人类。
 
 ## L1 路由指针（一行式 digest + 完整文档）
 
