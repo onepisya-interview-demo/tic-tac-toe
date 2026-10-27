@@ -804,11 +804,11 @@ describe('lib/store outcome write seam (W-F awaitOutcomeWrite)', () => {
 // ── W-T blind-spot coverage ──────────────────────────────────────────────
 //
 // Pin the small contract surface of `lib/store.ts` that v8 didn't reach:
-//   - apiRecordOutcome(http-error 404) → reason: 'not-found' (line 210)
-//     so the route handler can branch on row-vanished without inspecting
-//     raw status codes. This is the seam ResultNavigator reads through.
+//   - apiRecordOutcome(http-error 404) → reason: 'not-found' (line 234)
+//     so OutcomeErrorBanner can branch on row-vanished (via
+//     outcomeError.reason) without inspecting raw status codes.
 //   - startGame('offline') rehydrates roomName from localStorage when the
-//     store has none (line 264) — the home-return path leaves the store
+//     store has none (line 291) — the home-return path leaves the store
 //     cleared on hard reload and RoomGateMount has already swept the
 //     legacy key, so this is the only entrypoint that brings the room
 //     name back into the store for offline-mode usage.
@@ -826,8 +826,8 @@ describe('lib/store — W-T blind spots', () => {
   it('makeMove on named online: server 404 → apiRecordOutcome surfaces not-found; store stays at internalStats baseline', async () => {
     // 404 means the room row was deleted server-side between registerOrLogin
     // and the outcome write. The seam must surface reason:'not-found' so
-    // callers (ResultNavigator, /result RSC) can branch on row-vanished
-    // without parsing status codes. internalStats stays unchanged on
+    // OutcomeErrorBanner can branch on row-vanished (via
+    // outcomeError.reason) without parsing status codes. internalStats stays unchanged on
     // not-found (no zero fallback).
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       new Response(
@@ -911,9 +911,10 @@ describe('lib/store — W-T blind spots', () => {
   });
 
   it('resetStore clears outcomeError so subsequent tests do not see a stale banner', () => {
-    // Regression nail: outcomeError was added in 667b9ea. Three hand-copied
-    // resetStore paths in this file + components/HomeDialogMount.test.tsx +
-    // components/OnlineGateMount.test.tsx all forgot to clear it. Zustand's
+    // Regression nail: outcomeError was added in 873a255. The
+    // hand-copied resetStore paths of that era (this file +
+    // components/HomeDialogMount.test.tsx +
+    // components/OnlineGateMount.test.tsx) all forgot to clear it. Zustand's
     // setState is merge-semantics, so a value set by setOutcomeError would
     // leak into the next test until this reset dropped the field.
     useGameStore.getState().setOutcomeError({ reason: 'aborted', at: Date.now() });
@@ -1009,8 +1010,8 @@ describe('lib/store withTimeout (test-only coverage: lines 180-187)', () => {
     );
     const { withTimeout } = await import('@/lib/store');
     await withTimeout('/api/example', { method: 'GET' }, 1000);
-    // clearTimeout must have been called exactly once (the timer from the
-    // AbortController) — anything else and we have a leaked timeout.
+    // clearTimeout must have been called at least once (the timer from the
+    // AbortController) — zero calls mean we leaked the timeout.
     expect(clearSpy).toHaveBeenCalled();
     fetchMock.mockRestore();
   });

@@ -164,7 +164,7 @@ async function postDelete(ctx, room) {
 //（client stats 含 1 次 X 胜）→ 服务端 GET → 断言 totalGames=2, xWins=2。
 //
 // 当前契约：lib/db.ts:mergeRecordByRoom 走 server-row 全行快照（不含累加）+ JS
-// 纯函数 accumulateMergeStats（lib/game.ts:233）做 per-field 求和。语义：服务端
+// 纯函数 accumulateMergeStats（lib/db.ts:394）做 per-field 求和。语义：服务端
 // 已有 totalGames=1 + 客户端 merge stats totalGames=1 → server.totalGames +
 // client.totalGames = 2；xWins 同理。本 step 钉这一端到端事实，回归探测锁。
 // ============================================================================
@@ -386,7 +386,7 @@ await step("step 3 (S4) reset × in-flight outcome race", async () => {
 // 路径：Promise.all([POST /api/rooms {room:A}, POST /api/rooms {room:A}]) → 断言
 // 两边 status=200，DB 仅一行（GET /stats 应 200 非 500），existed 至少一 true 一 false。
 //
-// 语义：registerOrLoginRoom (lib/db.ts:466) 是 race-safe read-then-upsert —
+// 语义：registerOrLoginRoom (lib/db.ts:737) 是 race-safe read-then-upsert —
 // game_stats.room TEXT UNIQUE 约束 + drizzle onConflictDoUpdate 处理并发进入。
 // 双发会同时落到 UNIQUE 冲突的两次进入请求，二者中先到的 existed=false，后到的
 // existed=true。顺序由 race 决定，断言不依赖具体顺序。
@@ -508,8 +508,8 @@ await step("step 5 (S5) 房间删除后 outcome 404 + OutcomeErrorBanner 端到�
 //
 // 路径：监听 page.on('request') 收 POST /api/rooms 的 request 事件 → 断言
 // method=POST 的请求 SW 不拦截（pass-through，resourceType === 'xhr'）；
-// 额外：等到 SW controller 就绪 → 检查 CACHE_NAME === 'tic-tac-toe-v0.1.0'
-// （public/sw.js:7-8 当前版本 — 见 scripts/sw-bust.mjs + package.json version）。
+// SW 版本不在此断言（sw.js 的 CACHE_NAME 由 APP_VERSION 模板串拼出，
+// 见 public/sw.js + scripts/sw-bust.mjs + package.json version）。
 //
 // B-1（SW double-PUT）+ E1（SW 激活竞争）直系后继：sw.js:53-70 显式 non-GET
 // pass-through；本 step 钉死这一不变式。

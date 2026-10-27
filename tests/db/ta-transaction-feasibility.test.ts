@@ -6,7 +6,7 @@
 // 串行不会交错」，concurrent-surface-qa.mjs 旧注释承认窗口存在）——谁对？
 // BEGIN IMMEDIATE / @libsql/client transaction API 能否消除该窗口？
 //
-// 六种配置各 N 轮「重置 → 双并发记局 → 校验终值=2」采样：
+// 八种配置各 N 轮「重置 → 双并发记局 → 校验终值=2」采样：
 //   E1  真产品码（drizzle + @libsql/client native，单连接）——坐实/证伪窗口
 //   E2  同连接 + 裸 BEGIN IMMEDIATE 包裹——同连接嵌套事务的可行性
 //   E3  双连接（模拟多实例）无事务——多写者丢失率
@@ -82,7 +82,8 @@ function emptyStats(): ConfigStats {
 
 /**
  * 裸 SQL 复刻 recordOutcomeForRoom 的三步：load → JS 累加 → 全行快照
- * upsert（与 lib/db.ts:384-394 + upsertRecordByRoom 同构）。tx 参数决定
+ * upsert（与 lib/db.ts recordOutcomeForRoom 事务内联的
+ * tx.insert().onConflictDoUpdate() 同构）。tx 参数决定
  * 是否用 BEGIN IMMEDIATE 包裹（模拟 T-C 修复形态）。
  */
 async function rawRecordOutcome(

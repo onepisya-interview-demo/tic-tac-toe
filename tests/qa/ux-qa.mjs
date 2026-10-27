@@ -74,7 +74,10 @@ const SCENARIOS = [
     name: 'home-with-history',
     viewport: { width: 1280, height: 900 },
     setup: async (page) => {
-      // Synthesize some history via the API so the stats card has content.
+      // Legacy setup: PUT /api/stats was retired with the /api/stats
+      // chain (W1) and the home stats card is gone (W2) — this call
+      // 404s as a silent no-op; the scenario just probes the current
+      // home page as-is.
       await page.request.put(`${BASE}/api/stats`, {
         data: {
           totalGames: 7,
@@ -118,16 +121,16 @@ const SCENARIOS = [
       await page.goto(`${BASE}/online`, { waitUntil: 'networkidle' });
       await passRoomGate(page);
       // MINOR-F1 (reports/review/V3.md): the strict win-glow snapshot is
-      // invalid the instant PlayController's router.replace('/result')
-      // unmounts the board. Install a DOM MutationObserver BEFORE the
-      // winning click fires to record the peak `.win-glow` count seen
-      // across the whole setup window. After the existing 400ms post-win
-      // wait (which gives navigation time to complete for the screenshot),
-      // we evaluate the recorded peak and assert >= 3. Gated on
-      // UX_STRICT=1 so non-strict runs pay no cost. The observer covers
-      // the brief win frame deterministically — no race against the
-      // Next.js RSC navigation. See ux-contract.mjs for the matching
-      // strict-block removal.
+      // invalid the instant the post-win navigation (ResultNavigator's
+      // router.push('/result')) unmounts the board. Install a DOM
+      // MutationObserver BEFORE the winning click fires to record the
+      // peak `.win-glow` count seen across the whole setup window. After
+      // the existing 400ms post-win wait (which gives navigation time to
+      // complete for the screenshot), we evaluate the recorded peak and
+      // assert >= 3. Gated on UX_STRICT=1 so non-strict runs pay no cost.
+      // The observer covers the brief win frame deterministically — no
+      // race against the Next.js RSC navigation. See ux-contract.mjs for
+      // the matching strict-block removal.
       if (process.env.UX_STRICT === '1') {
         await page.evaluate(() => {
           window.__winGlowPeak = 0;

@@ -57,18 +57,18 @@ function resetStore(): void {
   useGameStore.getState().__resetInternalForTests();
 }
 
-// ─── M1: apiRecordOutcome 404 → exact reason='not-found' (L219-L222) ───
+// ─── M1: apiRecordOutcome 404 → exact reason='not-found' (L234-L237) ───
 //
-// Source: apiRecordOutcome(body at lib/store.ts:215-225). 404 with
+// Source: apiRecordOutcome(body at lib/store.ts:228-240). 404 with
 // problem+json must surface as `{ ok: false, reason: 'not-found' }`
-// so callers (ResultNavigator, /result RSC) can branch on row-vanished
+// so OutcomeErrorBanner can map row-vanished (outcomeError.reason)
 // without parsing status codes. Any other shape or reason string
 // silently swallows 404 into the generic http-error bucket.
 //
-// Stryker mutants killed: L219 ConditionalExpression (3x),
+// Stryker mutants killed: L234 ConditionalExpression (3x),
 // LogicalOperator, EqualityOperator (status), BlockStatement,
-// StringLiteral 'http-error', L220 ObjectLiteral, StringLiteral
-// 'not-found', L222 ObjectLiteral.
+// StringLiteral 'http-error', L235 ObjectLiteral, StringLiteral
+// 'not-found', L237 ObjectLiteral.
 describe('W-MUT store.ts — apiRecordOutcome 404 reason contract', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -103,7 +103,7 @@ describe('W-MUT store.ts — apiRecordOutcome 404 reason contract', () => {
     await useGameStore.getState().makeMove(8);
     // The seam must surface a tagged result with reason === 'not-found'
     // — not the raw 'http-error', not empty string, not an empty object.
-    // Asserting exact reason + ok=false + no value catches every L219-L222
+    // Asserting exact reason + ok=false + no value catches every L234-L237
     // mutant in one shot.
     await useGameStore.getState().awaitOutcomeWrite();
     expect(spy).toHaveBeenCalledTimes(1);
@@ -116,7 +116,7 @@ describe('W-MUT store.ts — apiRecordOutcome 404 reason contract', () => {
 
   it('non-404 http-error (500) is passed through with the original reason string', async () => {
     // 500 is NOT a row-vanished case. The seam must propagate 'http-error'
-    // (not re-shape it). Mutant L222 `return {}` would lose the reason
+    // (not re-shape it). Mutant L237 `return {}` would lose the reason
     // and break any caller that branches on reason.
     const { calls, restore } = mockFetch([
       { status: 500, body: { type: 'about:blank', title: 'Internal', status: 500 } },
@@ -138,7 +138,7 @@ describe('W-MUT store.ts — apiRecordOutcome 404 reason contract', () => {
     expect(calls).toHaveLength(1);
     expect(useGameStore.getState().phase).toBe('won');
     // Internal cache must NOT be updated with `r.value.stats` because
-    // r.ok is false. Mutant L366 `if (true)` would push undefined into
+    // r.ok is false. Mutant L359 `if (true)` would push undefined into
     // internalStats; mutant `if (false)` would skip even the success case
     // (covered by W-T tests below).
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
@@ -146,9 +146,9 @@ describe('W-MUT store.ts — apiRecordOutcome 404 reason contract', () => {
   });
 });
 
-// ─── M2: startGame('online') must NOT seed internalStats from localStorage (L262) ───
+// ─── M2: startGame('online') must NOT seed internalStats from localStorage (L277) ───
 //
-// Source: startGame offline branch (lib/store.ts:262). Mutating
+// Source: startGame offline branch (lib/store.ts:277). Mutating
 // `if (resolvedMode === 'offline')` to `if (true)` would always call
 // loadOfflineStats(), polluting the online-mode internal cache with
 // stale local row data.
@@ -168,7 +168,7 @@ describe('W-MUT store.ts — startGame online does not seed internalStats from l
     useGameStore.getState().__resetInternalForTests();
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
     useGameStore.getState().startGame('online');
-    // The online branch must not touch the cache. If L262 mutant
+    // The online branch must not touch the cache. If L277 mutant
     // (always-true) lands, internalStats gets seeded with the
     // localStorage row — corrupting the online cache.
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
@@ -176,9 +176,9 @@ describe('W-MUT store.ts — startGame online does not seed internalStats from l
   });
 });
 
-// ─── M3: startGame offline rehydrate guard is idempotent (L276 + L278) ───
+// ─── M3: startGame offline rehydrate guard is idempotent (L291 + L293) ───
 //
-// Source: rehydrate roomName block at lib/store.ts:276-283. Two guards
+// Source: rehydrate roomName block at lib/store.ts:291-298. Two guards
 // prevent the rehydrate from clobbering an already-set value, or from
 // setState'ing when localStorage has nothing to mirror.
 describe('W-MUT store.ts — startGame(offline) rehydrate guard idempotency', () => {
@@ -202,9 +202,9 @@ describe('W-MUT store.ts — startGame(offline) rehydrate guard idempotency', ()
   it('with BOTH store.roomName set AND localStorage set: store wins (no overwrite)', () => {
     // Soft-nav scenario: the store already carries the active room, and
     // a prior localStorage row from a previous session is still hanging
-    // around. The guard at L276 (`if (!store.roomName)`) must skip the
-    // rehydrate block entirely. Mutant L276 → `if (true)` would always
-    // call getRoomName(); mutant L278 → `if (true)` would always
+    // around. The guard at L291 (`if (!store.roomName)`) must skip the
+    // rehydrate block entirely. Mutant L291 → `if (true)` would always
+    // call getRoomName(); mutant L293 → `if (true)` would always
     // setState even if `stored` is falsy.
     useGameStore.getState().setRoomName('active-session');
     window.localStorage.setItem('ttt.room.name.v1', 'stale-other-user');
@@ -215,7 +215,7 @@ describe('W-MUT store.ts — startGame(offline) rehydrate guard idempotency', ()
 
   it('with store.roomName null AND localStorage empty: stays null (no spurious setState)', () => {
     // Both keys empty: the inner `if (stored)` must short-circuit. With
-    // mutant L278 → `if (true)`, the setState would fire with `null`
+    // mutant L293 → `if (true)`, the setState would fire with `null`
     // (no-op visually but the store-level handler would still run).
     // We assert no spurious state mutation by snapshotting before/after.
     const before = useGameStore.getState();
@@ -232,9 +232,9 @@ describe('W-MUT store.ts — startGame(offline) rehydrate guard idempotency', ()
   });
 });
 
-// ─── M4: makeMove with currentPlayer=null is a complete no-op (L299) ───
+// ─── M4: makeMove with currentPlayer=null is a complete no-op (L315) ───
 //
-// Source: lib/store.ts:299 guard. Existing test at line 190 only checks
+// Source: lib/store.ts:315 guard. Existing test at line 190 only checks
 // `board[0] === null` — which the mutant also satisfies (applyMove with
 // null player writes null back). Stronger assertion on currentPlayer
 // kills the mutant.
@@ -256,15 +256,15 @@ describe('W-MUT store.ts — makeMove with currentPlayer=null preserves state', 
     const s = useGameStore.getState();
     expect(s.board[0]).toBeNull();
     // Stronger assertion: currentPlayer must not flip to a Player via
-    // otherPlayer(null) when the guard is removed (L299 → false).
+    // otherPlayer(null) when the guard is removed (L315 → false).
     expect(s.currentPlayer).toBeNull();
     expect(s.phase).toBe('playing');
   });
 });
 
-// ─── M5: isAnonymous definition treats empty-string roomName as anonymous (L307) ───
+// ─── M5: isAnonymous definition treats empty-string roomName as anonymous (L323) ───
 //
-// Source: lib/store.ts:307. The anti-silent-create guard fires when
+// Source: lib/store.ts:323. The anti-silent-create guard fires when
 // roomName is null OR empty string. Mutating the second clause to
 // `false` or a non-empty string would let an empty-string roomName
 // fall through to the bookkeeping branch and POST a doomed-to-404
@@ -302,9 +302,9 @@ describe('W-MUT store.ts — isAnonymous triggers on empty-string roomName', () 
   });
 });
 
-// ─── M6: r.ok guard prevents internalStats write on failure (L366) ───
+// ─── M6: r.ok guard prevents internalStats write on failure (L359/L388) ───
 //
-// Source: lib/store.ts:366 `if (r.ok) internalStats = r.value.stats;`.
+// Source: lib/store.ts:359/:388 `if (r.ok) { internalStats = … }`.
 // The OK-only assignment is the seam for server-authoritative mirror.
 // Mutating to `if (true)` would write `r.value.stats` (undefined) into
 // internalStats on failure; `if (false)` would skip the success case
@@ -338,7 +338,7 @@ describe('W-MUT store.ts — r.ok guard on internalStats assignment', () => {
     await useGameStore.getState().awaitOutcomeWrite();
     expect(useGameStore.getState().phase).toBe('drawn');
     // Internal cache must remain empty — `r.ok === false` so the if-guard
-    // short-circuits. Mutant L366 → `if (true)` would write
+    // short-circuits. Mutant L388 → `if (true)` would write
     // `r.value.stats` (undefined) and corrupt the cache shape.
     expect(useGameStore.getState().__getInternalForTests()).toEqual(emptyStats());
     restore();
@@ -363,7 +363,7 @@ describe('W-MUT store.ts — r.ok guard on internalStats assignment', () => {
     await useGameStore.getState().makeMove(8);
     await useGameStore.getState().awaitOutcomeWrite();
     // r.ok guard happy path: the OK arm MUST write through. Mutant
-    // L366 → `if (false)` would skip the assignment; internalStats
+    // L359 → `if (false)` would skip the assignment; internalStats
     // would stay at emptyStats. Both sides of the conditional are
     // covered by this + the previous test.
     expect(useGameStore.getState().__getInternalForTests()).toEqual({
@@ -373,9 +373,9 @@ describe('W-MUT store.ts — r.ok guard on internalStats assignment', () => {
   });
 });
 
-// ─── M7: cleanupLegacyPlayerNameKey is invoked on every setRoomName (L410) ───
+// ─── M7: cleanupLegacyPlayerNameKey is invoked on every setRoomName (L438) ───
 //
-// Source: lib/store.ts:410. Belt-and-suspenders legacy key sweep that
+// Source: lib/store.ts:438. Belt-and-suspenders legacy key sweep that
 // runs on every setRoomName write. Removing it leaves a stale
 // `ttt.player.name.v1` key on disk after the W3 migration — the key
 // is harmless (legacy) but readers see it during inspections.
@@ -400,11 +400,11 @@ describe('W-MUT store.ts — setRoomName always sweeps legacy ttt.player.name.v1
   });
 });
 
-// ─── M8: outcome write seam lifecycle (L239/L243) — equivalents ───
+// ─── M8: outcome write seam lifecycle (L254/L258) — equivalents ───
 //
-// Source: trackOutcomeWrite (lib/store.ts:237-246). The seam is
-// single-write in all current test paths; the identity guard at L239
-// and the unhandled-rejection catch at L243 fire only under concurrent
+// Source: trackOutcomeWrite (lib/store.ts:250-262). The seam is
+// single-write in all current test paths; the identity guard at L254
+// and the unhandled-rejection catch at L258 fire only under concurrent
 // or future-reject scenarios not exercised today.
 //
 // These tests PIN the equivalent-mutant rationale: they assert the
@@ -444,7 +444,7 @@ describe('W-MUT store.ts — seam lifecycle under single-write (equivalents)', (
   });
 
   it('write rejection (network error) does not surface as unhandled promise', async () => {
-    // The `.catch(() => {})` at L243 prevents unhandled rejection if
+    // The `.catch(() => {})` at L258 prevents unhandled rejection if
     // a future regression lets apiRecordOutcome reject. Today
     // apiRecordOutcome never rejects (postOutcome catches internally),
     // so the catch is forward-looking defense-in-depth — the mutant

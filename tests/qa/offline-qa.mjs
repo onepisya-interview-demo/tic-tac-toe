@@ -1,4 +1,4 @@
-// pure-local-qa.mjs — End-to-end probe for the W3-probes pure-local contract (post room migration).
+// offline-qa.mjs — End-to-end probe for the W3-probes pure-local contract (post room migration).
 // BR: BR-4
 // (ulw-room-migration-home-landing W3-probes; preserves the W2 pure-local contract — name→room token swap).
 // One real Chromium + production build (pnpm build && pnpm start on
@@ -10,7 +10,7 @@
 //   A3: pending=0 首页点「开始对战」 → 无弹框直行
 //
 // Usage:
-//   node tests/qa/pure-local-qa.mjs          (needs pnpm build && pnpm start on :3101)
+//   node tests/qa/offline-qa.mjs            (needs pnpm build && pnpm start on :3101)
 //   env: BASE_URL (default http://localhost:3101), DATABASE_URL,
 //        EVIDENCE_DIR (default .omx/evidence/pure-local-qa).
 

@@ -4,10 +4,9 @@
 // Why disabled: /solo no longer renders the 「同步」 button or
 // SyncConfirmDialog (W2 纯净化 wave). All probe steps depend on
 // data-testid="offline-sync" and "sync-confirm-dialog", which have
-// been removed from the /offline surface. POST /api/offline-stats/sync
-// is preserved at the endpoint layer (StartGameButton is still the
-// sole caller pending W3) but the UI surface to drive a merge
-// from /offline is gone.
+// been removed from the /offline surface. The /api/offline-stats/sync
+// endpoint itself is also gone (retired with the endpoint chain —
+// rg "offline-stats/sync" finds no route today); no caller remains.
 //
 // Coverage migration plan (W3 final): StartGameButton's intercept
 // is gone (Decision D1 retired it). The home-return SyncConfirmDialog

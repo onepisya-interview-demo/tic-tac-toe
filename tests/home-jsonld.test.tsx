@@ -44,9 +44,10 @@ describe('lib/home-jsonld (W3 landing schema.org payload)', () => {
   });
 
   it('serializer escapes `<` to `\\u003c` for any injected XSS payload', () => {
-    // Direct unit test of the serializer's XSS guard on a
-    // synthetic payload that DOES contain `<`. Pins the
-    // behavior the Next.js 16 docs prescribe.
+    // The serializer itself takes no arguments (it only escapes the
+    // static HOME_JSON_LD), so this pins the escape idiom inline on a
+    // synthetic payload that DOES contain `<` — the same
+    // `.replace(/</g, '\\u003c')` pass serializeHomeJsonLd applies.
     const dangerous = '{"k":"<script>alert(1)</script>"}';
     const out = dangerous.replace(/</g, '\\u003c');
     expect(out).not.toContain('<');

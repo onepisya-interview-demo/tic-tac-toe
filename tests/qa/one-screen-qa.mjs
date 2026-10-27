@@ -16,8 +16,9 @@
 //       if the page actually scrolls, the header's getBoundingClientRect().top
 //       remains at 0px after scrolling.
 //
-// Repeatable: state is reset at probe start (DELETE /api/stats resets the
-// server row so / renders empty). Evidence dir is fixed at
+// Repeatable: no explicit reset — W1 retired /api/stats (DELETE ledger)
+// and W3 hermetic DB is fresh per run, so / renders empty on its own.
+// Evidence dir is fixed at
 // .omx/evidence/one-screen-qa; screenshots + qa-log.json overwrite cleanly.
 // Usage:
 //   node tests/qa/one-screen-qa.mjs          (needs BASE_URL=http://localhost:3101

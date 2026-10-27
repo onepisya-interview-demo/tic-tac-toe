@@ -10,11 +10,10 @@ import { createEmptyBoard } from '@/lib/game';
  * clear the module-level offline-stats cache.
  *
  * Why a single helper: store fields drift (roomName, outcomeError are
- * past cases; GameShell's afterEach currently omits mode/board/
- * winLine/roomName/outcomeError) when hand-rolled reset blocks
- * scattered across components tests fail to track new fields.
- * Centralizing here means future `GameState` fields propagate so long
- * as `lib/store.ts`'s `initial` stays in sync with this function.
+ * past cases) when hand-rolled reset blocks scattered across component
+ * tests fail to track new fields. Centralizing here means future
+ * `GameState` fields propagate so long as `lib/store.ts`'s `initial`
+ * stays in sync with this function.
  */
 export function resetStore(): void {
   useGameStore.setState({
