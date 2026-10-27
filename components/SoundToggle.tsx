@@ -5,9 +5,10 @@ import { getMuted, setMuted } from '@/lib/sound';
 
 export function SoundToggle() {
   // Initial state must be identical on server and the first client render —
-  // otherwise React throws a hydration mismatch on /, /play, /result when
-  // the persisted preference differs from the SSR default. We always start
-  // muted; useEffect syncs from localStorage after hydration is complete.
+  // otherwise React throws a hydration mismatch on /, /online, /offline
+  // when the persisted preference differs from the SSR default. We always
+  // start muted; useEffect syncs from localStorage after hydration is
+  // complete.
   const [muted, setLocalMuted] = useState<boolean>(true);
 
   useEffect(() => {

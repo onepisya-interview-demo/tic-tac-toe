@@ -5,7 +5,9 @@
 //   - public/favicon-32x32.png   (Windows taskbar / legacy)
 //   - public/favicon-48x48.png   (legacy @2x tab)
 //   - public/icon-192.png        (Android Chrome home)
-//   - public/icon-512.png        (PWA splash / maskable; Lanczos-upscale from 180)
+//   - public/icon-512.png        (PWA splash; Lanczos-upscale from 180)
+//   - public/icon-maskable-512.png (maskable PWA icon: 410x410 logo on a
+//     #0b0f17 512 canvas, 80% safe zone)
 //   - public/apple-touch-icon.png (180x180 iOS touch icon backup)
 // Source: app/apple-icon.tsx → build → .next/server/app/apple-icon.body
 //         (default), OR pass --source <path> to use an external PNG.

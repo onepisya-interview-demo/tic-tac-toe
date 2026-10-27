@@ -6,7 +6,7 @@ type Props = {
   stats: GameStats;
 };
 
-/** The five-stat战绩 grid shared by the home and result pages. */
+/** The five-stat战绩 grid shared by the /offline panel and the result page. */
 export function StatsGrid({ stats }: Props) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

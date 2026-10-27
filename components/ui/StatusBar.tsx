@@ -8,7 +8,7 @@ type Props = {
 };
 
 /**
- * Inline status announcement for the /play and /solo header row. The
+ * Inline status announcement for the /online and /offline header row. The
  * shell wraps this in a flex row alongside the h1 and SoundToggle, so
  * the root must NOT be a centered text-h2 block (that would force the
  * row to two lines on mobile). It now renders as a compact

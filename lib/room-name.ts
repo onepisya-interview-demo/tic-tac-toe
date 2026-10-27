@@ -50,7 +50,7 @@ export function isRoomName(value: unknown): value is string {
 /**
  * Single source of truth for server-side room-name normalization.
  * Trims `raw` if and only if it passes `isRoomName`; returns null
- * otherwise. All four route handlers under app/api/rooms/ import this
+ * otherwise. All six route handlers under app/api/rooms/ import this
  * so the whitelist cannot drift between endpoints. Returns the trimmed
  * canonical PK value (the same shape `isRoomName` validates), so
  * callers can pass the result straight into a service function without

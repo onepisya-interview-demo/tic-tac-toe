@@ -1,4 +1,4 @@
-// app/layout.metadata.test.ts
+// app/layout.test.ts
 //
 // RED-first guard for the Next.js 16 metadata contract that drives share
 // previews (X/Twitter card, Open Graph, Slack/IM unfurls).
@@ -63,7 +63,7 @@ describe("app/layout metadata — share preview contract", () => {
     expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card-home\.png"/);
     expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card-play\.png"/);
     expect(LAYOUT_SRC).toMatch(/url\s*:\s*"\/social-card-result\.png"/);
-    // Each of the three entries carries the image/png MIME so crawlers
+    // Each of the four entries carries the image/png MIME so crawlers
     // don't have to sniff (cURLs hit /social-card-*.png via metadataBase).
     expect(LAYOUT_SRC.match(/type\s*:\s*"image\/png"/g)?.length).toBe(4);
     // Each entry carries an HTTPS secure_url mirror on the public domain —

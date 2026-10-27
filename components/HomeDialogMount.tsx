@@ -101,9 +101,10 @@ export function HomeDialogMount() {
 
   async function handleConfirm(name: string): Promise<void> {
     // SyncConfirmDialog has already completed the postRoomSession +
-    // postMerge sequence and forwarded the merged row. The F1
-    // baseline model (W4) sets the post-merge local baseline to 0,
-    // the canonical value right after clearOfflineStats() runs.
+    // postMerge sequence (the merged row is not forwarded to this
+    // hook — only the chosen name comes back). The F1 baseline model
+    // (W4) sets the post-merge local baseline to 0, the canonical
+    // value right after clearOfflineStats() runs.
     // pendingSyncCount() now reads this baseline, so the next
     // home-return has pending = local - 0 = local — the dialog
     // text "本机 N 局" always matches the data the next merge

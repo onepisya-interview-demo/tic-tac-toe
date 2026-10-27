@@ -67,7 +67,7 @@ export const metadata: Metadata = {
     // single-source decision, 2026-10-04 自治裁决 a) so relative OG /
     // Twitter image URLs resolve against the one public production domain
     // — the earlier vercel.app metadataBase kept a second domain alive in
-    // SEO surfaces. All three routes share this canonical — the share-card
+    // SEO surfaces. All four routes share this canonical — the share-card
     // is intentionally a single product URL.
     url: "https://3t.onepis.net/",
     title: "井字棋 · 同设备 pass-and-play",

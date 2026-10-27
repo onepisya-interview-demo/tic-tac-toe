@@ -139,10 +139,10 @@ export function __setDbOpDelayForTests(ms: number | null): void {
 }
 
 /**
- * Read DATABASE_URL_SLOW_DELAY_MS so a server can be launched with the
- * variable set (e.g. `DATABASE_URL_SLOW_DELAY_MS=1500 next start`) and
- * every DB op will block for that many ms — reproducing the RSC / store
- * races the production Turso HTTP transport exposes, on local sqlite.
+ * Per-op latency injection (ms) so races that only manifest under a
+ * slow upstream become reproducible on local sqlite. The only entry
+ * point is `__setDbOpDelayForTests` — tests inject the delay directly;
+ * this module reads no environment variable.
  */
 let dbOpDelayMs = 0;
 
@@ -196,9 +196,9 @@ function resolveDbConfig(): Config {
  */
 export async function getDb(): Promise<LibSQLDatabase<typeof schema>> {
   // Test/dev-only latency injection so races that only manifest under a
-  // slow upstream become locally reproducible on sqlite. Production never
-  // sets DATABASE_URL_SLOW_DELAY_MS; the variable is documented in
-  // __setDbOpDelayForTests and consumed at the same seam.
+  // slow upstream become locally reproducible on sqlite. The delay is
+  // only ever set via __setDbOpDelayForTests; no environment variable
+  // is read on this path.
   if (dbOpDelayMs > 0) {
     await new Promise((r) => setTimeout(r, dbOpDelayMs));
   }
@@ -722,12 +722,14 @@ export async function ensureRecordByRoom(room: string): Promise<GameStats> {
  * { stats, existed: false }; if the row already exists, returns
  * { stats, existed: true }.
  *
- * Race-safety: a concurrent writer that inserted the row first trips
- * the UNIQUE constraint on game_stats.room. The catch block re-reads
- * the row so the loser surfaces the winner's stats instead of
- * throwing — callers (the route handler) see the same response shape
- * regardless of timing. Mirrors the load → mutate → upsert shape so
- * the per-room contract is the single source of truth.
+ * Race-safety: upsertRecordByRoom writes via INSERT ... ON CONFLICT DO
+ * UPDATE on game_stats.room, so a concurrent writer that lands the row
+ * first never trips a UNIQUE error here — the late insert turns into
+ * an UPDATE (overwriting the row with emptyStats()) and the call still
+ * returns existed:false. The catch block below only fires on
+ * non-conflict errors; its re-read surfaces whatever row exists by
+ * then. Mirrors the load → mutate → upsert shape so the per-room
+ * contract is the single source of truth.
  *
  * UNIQUE on room is the server-side guarantee that room is an
  * identity, not a label: there is exactly one row per non-null room,
@@ -744,7 +746,7 @@ export async function registerOrLoginRoom(
     await upsertRecordByRoom(room, zero);
     return { stats: zero, existed: false };
   } catch (err) {
-    // Concurrent writer inserted first: re-read surfaces their row.
+    // Non-conflict error: surface the row if one exists by now.
     const after = await loadRecordByRoom(room);
     if (after) return { stats: after, existed: true };
     throw err;

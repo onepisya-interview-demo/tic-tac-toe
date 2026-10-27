@@ -101,8 +101,9 @@ describe('lib/api-problem (RFC 9457 problem+json helper)', () => {
     });
 
     it('handles every known slug without throwing', () => {
-      // Exhaustiveness smoke: each slug must produce a serialisable problem
-      // body, otherwise the type taxonomy is broken.
+      // Smoke: each slug in ALL_SLUGS must produce a serialisable
+      // problem body. Note ALL_SLUGS lists 7 of the 9 ProblemSlugs —
+      // 'unauthorized' and 'room-not-found' have no coverage here.
       for (const slug of ALL_SLUGS) {
         const res = problemResponse(500, slug);
         expect(res.status).toBe(500);
