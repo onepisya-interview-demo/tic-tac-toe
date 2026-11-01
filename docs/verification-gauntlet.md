@@ -95,12 +95,17 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
 6. **探针 / CI job 触发面覆盖的结构性盲区（2026-09-30 验证波新增）**：CI 自
    2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不
-   触发任何 CI job——凡不产生 PR 的改动面，CI 触发面语境下六层中依赖 CI 实跑的门禁全部静默
-   （⑤commit-audit 系本地 hook、①tests ②typecheck ③lint 另有每 commit 本地纪律跑，本地执行
-   不受影响；2026-10-04 表述精确化）。实证：rooms-race 探针 job
+   触发 ci.yml 任何 job——凡不产生 PR 的改动面，CI 触发面语境下六层中依赖 CI 实跑的门禁
+   ①-④/⑥层仍全部静默（⑤commit-audit 2026-11-01 起另有远程自动触发点＝独立 workflow
+   `.github/workflows/commit-audit.yml`，push→dev＋PR→main＋workflow_dispatch 三触发，
+   advisory 未登 repo ruleset 不阻断合并——P2-c 裁决 A+ 落地，调研存档见
+   [`.omo/plans/p2c-remote-trigger-research-20261101.md`](../.omo/plans/p2c-remote-trigger-research-20261101.md)；
+   ①tests ②typecheck ③lint 另有每 commit 本地纪律跑，本地执行
+   不受影响；2026-10-04 表述精确化，2026-11-01 按远程触发点落地再对齐）。实证：rooms-race 探针 job
    漏传 `BASE_URL`，自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI →
-   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
-   实施）；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
+   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。「dev push 触发 CI」机械化候选 C6 的
+   commit-audit 切面已落地（2026-11-01 主公裁 P2-c A+）；ci.yml 本体扩触发面（①-④/⑥层
+   远程化）仍待主公裁决，未裁决不实施；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
    [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
    [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)；反模式侧记 L1-32 见
    [`docs/anti-patterns.md`](./anti-patterns.md)（同源互链，2026-10-04 补回指——b5a3299 互链实为单向）。
@@ -115,7 +120,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 
 | 豁免对象 | 现状（实测口径） | 纪律替代（本地侧） | 教训锚 | 解豁免通道 |
 | --- | --- | --- | --- | --- |
-| dev push | ci.yml `on:` 仅 `pull_request → main`，dev 直推零 CI——凡不产生 PR 的改动面，CI 侧全静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6——主公裁决档，未裁决不翻案；本清单只显式化现状，不立项亦不驳回 |
+| dev push | ci.yml `on:` 仍仅 `pull_request → main`（dev 直推零 ci.yml job）；2026-11-01 起 dev push 触发独立 workflow `commit-audit.yml`（⑤层 commit-audit 一门远程红绿可见；advisory 未登 repo ruleset 不阻断合并）——①-④/⑥层凡不产生 PR 的改动面仍 CI 侧静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6 的 commit-audit 切面已落地（2026-11-01 主公裁 P2-c A+）；ci.yml 本体扩触发面（①-④/⑥层远程化）仍待主公裁决 |
 
 ### 5.2 「五 CI 必绿」↔ 11 job 对账表
 
