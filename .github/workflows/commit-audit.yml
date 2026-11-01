@@ -1,0 +1,46 @@
+# Commit-audit 远程自动触发点——P2-c 裁决 A+（主公令 2026-11-01），advisory 起步。
+# 裁决位：.omo/plans/comment-triage-rollout-20261025.md §六 P2-c（2026-11-01 已裁决 A＋叠注）；
+# 调研存档：.omo/plans/p2c-remote-trigger-research-20261101.md（dwfrun-bab6c3a9，红队两轮证伪）。
+#
+# 为何独立 workflow 而非 ci.yml 加 job：本波纪律明令不动 ci.yml，且 ci-contract.test.ts
+# describe C 断言 §5.2 对账表 ↔ ci.yml job 集合双向相等（新 job 入 ci.yml 须同步测试面）；
+# 独立文件删即回滚，advisory 期间零契约面耦合。
+# 为何 advisory：未登 repo ruleset（main-gate id 23195249 required_status_checks 现列
+# ci.yml 11 job 显示名），本 job 红不阻断合并——升格 required 须 PUT ruleset 追加本 job
+# 显示名「Commit audit (commit-audit --range)」（ruleset 按精确字符串匹配，一字不改），
+# 留待主公另裁。
+# 为何 fetch-depth: 0（务必为 0，不可回退浅克隆）：PR 事件 checkout 的是 merge ref，
+# checkout 默认 fetch-depth=1 只 fetch 触发 ref 本身，origin/main 不存在 →
+# --range origin/main..HEAD 直接 git exit 128（调研已在 depth=1 克隆实证复现）；
+# 全量 fetch 保证 origin/main 必在（仓约 5 MiB，秒级）。
+# 审计命令与 scripts/verify-all.mjs ⑤层同款字符串；commit-audit.mjs 仅 import node:
+# 内建（零 npm 依赖），无需 pnpm install。
+name: Commit audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: commit-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  commit-audit:
+    name: Commit audit (commit-audit --range)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node tests/qa/commit-audit.mjs --range origin/main..HEAD
