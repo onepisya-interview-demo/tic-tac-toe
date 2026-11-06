@@ -66,10 +66,10 @@
 | 约束声明注释 | 类型 / 运行时断言 / 测试 / lint——**批准后编码，注释照删** | `// start <= end` → `type TimeRange = { start: Date; durationMs: number }` | 难误用类型＞运行时检查＞散文注释 |
 | 规则叮嘱（重复教训） | AGENTS.md 条目 / 门禁 | 「你别这么做」→ lint / compile / architecture gate | encode-lessons-in-structure；能探针化的约束不靠记忆（anti-patterns L1-29） |
 
-### 机械化指向（Phase 2，待主公裁决）
+### 机械化指向（Phase 2，已落地 2026-10-25）
 
-- **R8 注释增量门禁**（`tests/qa/commit-audit.mjs` 扩展，零新依赖；R1–R7 已占满故定名 R8）：blocking 仅限 `//` 行注释三子集——B1 死代码形状 / B2 阶段叙述 `(Phase|Step)\s*\d` / B3 `eslint-disable` 无 ` -- ` 描述；banner 分隔线等 advisory 只报不拦；祖父条款仿 preR7Adoption 追加 preR8Adoption 日期锚。
-- **M2 ESLint `no-warning-comments`**（customTerms todo/fixme/xxx，`location:"start"`）：将是 `eslint.config.mjs` 首个 rules 条目；`tests/qa/**` 在 globalIgnores 内对 eslint 不可见，该子树的 B3 扫描由 commit-audit 侧正则承担。
+- **R8 注释增量门禁**（已落地：`6eaf05b` 入 `tests/qa/commit-audit.mjs`，采纳日锚 2026-10-25；挂载点已裁 pre-commit 单挂 `--staged` 增量模式——[rollout §六 P2-a](../.omo/plans/comment-triage-rollout-20261025.md)；R1–R7 已占满故定名 R8）：blocking 仅限 `//` 行注释三子集——B1 死代码形状 / B2 阶段叙述 `(Phase|Step)\s*\d` / B3 `eslint-disable` 无 ` -- ` 描述；banner 分隔线等 advisory 只报不拦；祖父条款 preR8Adoption 日期锚已实装。
+- **M2 ESLint `no-warning-comments`**（已落地：`433ab49` 入 `eslint.config.mjs` 为首个 rules 条目（error 级）——[rollout §六 P2-b](../.omo/plans/comment-triage-rollout-20261025.md)；customTerms todo/fixme/xxx，`location:"start"`）：`tests/qa/**` 在 globalIgnores 内对 eslint 不可见，该子树的 B3 扫描由 commit-audit 侧正则承担。
 - 拦不住（诚实声明）：复述代码的语义判断——无主流 linter 能判；语义层靠 fresh-eyes 分诊评审（不携带产出 session 上下文的独立只读评审）。
 
 ## 交叉引用
