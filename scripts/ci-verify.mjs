@@ -567,7 +567,7 @@ function main() {
   process.exit(counts.changed > 0 ? 1 : 0);
 }
 
-// 直接执行时跑主流程；被 import 时只暴露解析函数（供 fixture 级单测复用）。
+// 直接执行时跑主流程；被 import 时只暴露解析函数。
 const invokedAsScript =
   process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedAsScript) {
