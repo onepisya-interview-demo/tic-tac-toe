@@ -154,8 +154,27 @@ const MERGE_COMMIT_RE = /^Merge pull request #\d+ /;
 // 触发面：--staged 增量模式（pre-commit hook 调用，读 git diff --cached -U0
 // 新增行）＋branch/range 模式对采纳日之后 commit 的逐笔 added-line 扫描；
 // --message-file 模式（commit-msg hook 路径）行为完全不变、不跑 R8。
+//
+// R8 shell 扩展（2026-11-09 入档，sh 门禁波；台账 .omo/plans/sh-gate-wave-20261109.md）：
+// 扫描组扩至 .sh（同六目录）。shell 注释以行首 `#` 计（shebang 除外）：B2 阶段
+// 叙述 shell 形态入 blocking（dry-run 全历史 152 条 .sh 新增行零命中）；B1 注释
+// 掉的命令形状仅入 advisory——宽词表形状在历史上仅有的 4 处命中全部是
+// `#   exit 0 = ...` 式 exit 语义契约注释（至今仍在 vercel 双脚本），历史精确率
+// 0/4，无法构造存量零误报的 blocking 形状，落 advisory 只监控；A1 banner `#`
+// 形态入 advisory（零命中）；B3 eslint 抑制指令对 shell 无意义（n/a——shell 用
+// shellcheck 自己的 `# shellcheck disable=SCxxxx` 指令面，不在本波）。祖父：.sh
+// 面独立锚点 R8_SHELL_ADOPTION_DATE=2026-11-09（作者日期日级严格 <，采纳日当日
+// 即生效）——与 JS 面 R8_ADOPTION_DATE 的整日祖父保守读法刻意不同：shell 面随
+// 本波当日落地、--staged 面同刻起即强制，branch 面当日不豁免保持两面对称（沙箱
+// 边界已钉死：2026-11-08 豁免／2026-11-09 必罚）。锚点前存量（最后一笔 .sh
+// commit fa0d4e9=2026-10-25）整段祖父，扩展对存量零追溯。
 const R8_ADOPTION_DATE = "2026-10-25";
-const R8_SCAN_PATH_RE = /^(app|components|lib|db|scripts|tests)\/.*\.(ts|tsx|mjs|js|cjs)$/;
+// R8 shell 扩展独立锚点（2026-11-09）：语义与 JS 面锚点的差异见上——JS 面 `<=`
+// 整日祖父（规则当日 22:30 才落地，当日早些的 commit 无法合规）；shell 面本波
+// 当日落地即当日生效，比较取严格 `<`（采纳日当日不豁免）。两锚点各自祖父
+// 自己的规则面：preR8Adoption 管 `//` 族，preR8ShellAdoption 管 `#` 族。
+const R8_SHELL_ADOPTION_DATE = "2026-11-09";
+const R8_SCAN_PATH_RE = /^(app|components|lib|db|scripts|tests)\/.*\.(ts|tsx|mjs|js|cjs|sh)$/;
 const R8_DEAD_CODE_RE = /^\s*\/\/\s*((const|let|var|import|export)\s+\w+.*[;{(]\s*$|console\.\w+\(|return\s+[\w.'"`]+;\s*$)/;
 const R8_PHASE_NARRATION_RE = /\/\/\s*(Phase|Step)\s*\d/;
 // 判据词以 [-] 写法拆开，避免本文件自身新增行命中 B3（语义等价）。
@@ -164,6 +183,14 @@ const R8_BANNER_RE = /\/\/\s*(={5,}|-{5,}|\*{5,})/;
 // 留格标记口径（A1 白名单与 M3' 报表共用，方案 §3.2 M3'）：决策编号族＋BR 号＋
 // plan 回链＋判据回链；`// BR:` 头与 JSDoc/块注释契约形态由 scanR8 按行形态识别。
 const R8_RETENTION_RE = /(W-R|案[①②③]|L1-\d|D-\d|票 ?\d|BR-\d|\.omo\/plans\/|判据)/;
+// R8 shell 扩展正则（2026-11-09，取舍见上）：B2 shell 形态与 JS 版同构（`#` 替
+// `//`），仅施加于 .sh 文件的行首 `#` 注释行——字符串内的 `#` 不计（红线：存量
+// 零误报，比 JS 版更保守的行首锚定）；B1 shell 命令形状仅 advisory，词表只收
+// 注释掉后几乎必为死代码的命令（排除 exit/echo 等契约说明常用词，dry-run 佐证
+// 见台账）；A1 banner shell 形态同 JS 判据（=,-,* 五连以上）。
+const R8_SHELL_PHASE_NARRATION_RE = /#\s*(Phase|Step)\s*\d/;
+const R8_SHELL_DEAD_CODE_RE = /^\s*#\s*(git|pnpm|npm|npx|curl|wget|rm|cp|mv|chmod|chown|sudo|kill)\b/;
+const R8_SHELL_BANNER_RE = /#\s*(={5,}|-{5,}|\*{5,})/;
 
 function parseArgs(argv) {
   const out = {};
@@ -414,14 +441,42 @@ function parseAddedLines(diff) {
 // `// BR:` heads and block/JSDoc-form lines count as marked（留格），so the
 // unmarked remainder answers "how many added comments carry no triage marker
 // at all" — pure observation, no threshold.
-function scanR8(diff) {
+function scanR8(diff, opts = {}) {
   const findings = [];
   const notes = [];
   let commentLines = 0;
   let markedLines = 0;
   for (const file of parseAddedLines(diff)) {
     if (!R8_SCAN_PATH_RE.test(file.path)) continue;
+    // shell 面祖父：作者日期早于 R8_SHELL_ADOPTION_DATE 的 commit 跳过整个
+    // `#` 族（规则尚不存在），`//` 族不受此 opt 影响、仍按 R8_ADOPTION_DATE
+    // 各自祖父。--staged 面不传此 opt（同 JS 面：钩子路径永不豁免）。
+    if (file.path.endsWith(".sh") && opts.preR8ShellAdoption) continue;
     for (const { no, text } of file.lines) {
+      // R8 shell 面（2026-11-09 扩展）：.sh 走 `#` 注释形态族后 continue，
+      // `//` 族检查结构性不可达——双向零交叉：.ts 里的 `#`（字符串/模板字面
+      // 量）与 .sh 里的 `//`（URL 等）互不触发。shebang 不是分诊面注释，
+      // 不计入 M3' 分母。blocking 仅 B2；B1/A1 为 advisory（取舍见正则处）。
+      if (file.path.endsWith(".sh")) {
+        const isShellComment = /^\s*#/.test(text);
+        const isShebang = /^\s*#!\//.test(text);
+        if (isShellComment && !isShebang) {
+          commentLines += 1;
+          if (R8_RETENTION_RE.test(text)) {
+            markedLines += 1;
+          }
+        }
+        if (isShellComment && R8_SHELL_PHASE_NARRATION_RE.test(text)) {
+          findings.push({ rule: "R8", msg: `B2 phase narration: ${file.path}:${no}: ${text.trim()}` });
+        }
+        if (R8_SHELL_DEAD_CODE_RE.test(text)) {
+          notes.push(`B1 shell commented-out command shape (advisory): ${file.path}:${no}: ${text.trim()}`);
+        }
+        if (isShellComment && R8_SHELL_BANNER_RE.test(text) && !R8_RETENTION_RE.test(text)) {
+          notes.push(`A1 banner without retention backlink (advisory): ${file.path}:${no}: ${text.trim()}`);
+        }
+        continue;
+      }
       const isBlockForm = /^\s*\/\*/.test(text) || /^\s*\*/.test(text) || text.includes("{/*");
       if (/^\s*\/\//.test(text) || isBlockForm) {
         commentLines += 1;
@@ -547,9 +602,13 @@ function main() {
     // are structurally exempt (a merge diff is not a human-authored
     // increment).
     const preR8Adoption = authorDate.slice(0, 10) <= R8_ADOPTION_DATE;
+    // R8 shell 面独立锚点（2026-11-09），日级严格 `<`：与上面 JS 面 `<=` 的差异
+    // 理由见 R8_SHELL_ADOPTION_DATE 常量处。作用于 scanR8 内 `#` 族的豁免开关，
+    // 不影响本行 JS 面扫描的进入条件（一笔 commit 两族可各自祖父/各自生效）。
+    const preR8ShellAdoption = authorDate.slice(0, 10) < R8_SHELL_ADOPTION_DATE;
     const result = checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption, githubCommitted });
     if (!preR8Adoption && !isMerge) {
-      const r8 = scanR8(git("show", "--format=", "-U0", sha));
+      const r8 = scanR8(git("show", "--format=", "-U0", sha), { preR8ShellAdoption });
       result.findings.push(...r8.findings);
       if (r8.notes.length > 0) result.r8Notes = r8.notes;
       if (r8.commentLines > 0) {

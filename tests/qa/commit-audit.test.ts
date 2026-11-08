@@ -953,3 +953,112 @@ describe('commit-audit --branch main R8 采纳日祖父（R8_ADOPTION_DATE=2026-
     expect(result.stdout).toContain('total=2 pass=1 skip=0 fail=1');
   });
 });
+
+// R8 shell 扩展（2026-11-09，sh 门禁波）integration tests. --staged 模式钉死
+// .sh 面的分界：B2 `#` 形态 blocking FAIL；合法契约说明（exit 语义、BR 头、
+// 决策编号回链、安装指引）PASS。违规串可整串内联——shell 正则只施加于 .sh
+// 文件且须行首 `#`，本 .ts 测试源自身结构性不可自触发；唯一的例外是 `// Ph`
+// 拼串（B2 JS 正则对内联 `//` ＋数字跟随会自触发，沿本文件既有拆串纪律）。
+const R8_SHELL_VIOLATIONS = [
+  '#!/bin/sh',
+  '# Phase 2: 接线阶段叙述（必须被 B2 拦截）',
+  '# Step 3: 同型数字跟随形态',
+  'echo "// Ph' + 'ase 9 inline string"  # 字符串内 // 形态：JS 族正则不得对 .sh 触发',
+  '# rm -rf tmp/old-build           # B1 shell 命令形状：advisory，不阻断',
+].join('\n') + '\n';
+
+// 合法 shell 注释形态：exit 语义契约说明（dry-run 佐证的历史正样本）、BR 头、
+// 决策编号回链、`安装：` 前缀的安装指引（pre-push-guard.sh:5 同款形状）。
+const R8_SHELL_LEGAL = [
+  '#!/bin/sh',
+  '# BR: BR-7 exit 语义契约——exit 0 = cancel deployment（do not build）',
+  '# W-R D-3 决策编号回链注释（留格标记）',
+  '# 安装：cp tests/qa/pre-push-guard.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push',
+  'echo ok',
+].join('\n') + '\n';
+
+describe('commit-audit --staged R8 shell 扩展（.sh 面，2026-11-09）', () => {
+  it('FAILs B2 shell phase narration; // -family checks and out-of-scope paths never fire on .sh', () => {
+    const repo = initStagedFixture();
+    mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    writeFileSync(path.join(repo, 'scripts', 'r8-bad.sh'), R8_SHELL_VIOLATIONS, 'utf8');
+    // 同样的违规文本放在 docs/（六目录外）：.sh 的范围口径同样钉死。
+    mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    writeFileSync(path.join(repo, 'docs', 'note.sh'), R8_SHELL_VIOLATIONS, 'utf8');
+    gitIn(repo, ['add', '.']);
+    const r = runStagedAudit(repo);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('R8-STAGED: FAIL');
+    expect(r.stdout).toMatch(/B2 phase narration: scripts\/r8-bad\.sh:2/);
+    expect(r.stdout).toMatch(/B2 phase narration: scripts\/r8-bad\.sh:3/);
+    // 行 4 的字符串内 `//` 形态不得触发 JS 族正则（分流钉死）。
+    expect(r.stdout).not.toContain('r8-bad.sh:4');
+    // 行 5 的命令形状只报 advisory NOTE，不进 findings（取舍见台账）。
+    expect(r.stdout).toMatch(
+      /NOTE  R8  B1 shell commented-out command shape \(advisory\): scripts\/r8-bad\.sh:5/,
+    );
+    expect(r.stdout).not.toContain('docs/note.sh');
+    // M3' 报表：shebang 不计分母，行 2/3/5 计 3 条注释、零留格标记。
+    expect(r.stdout).toContain('added comment lines=3 marked=0 unmarked=3');
+  });
+
+  it('PASSes legal shell comments (exit-semantics contract, BR head, decision backlink, install guide)', () => {
+    const repo = initStagedFixture();
+    mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    writeFileSync(path.join(repo, 'scripts', 'r8-good.sh'), R8_SHELL_LEGAL, 'utf8');
+    gitIn(repo, ['add', '.']);
+    const r = runStagedAudit(repo);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('R8-STAGED: PASS');
+    // 合法形态零 NOTE：BR 头与决策编号都留格，安装指引不含命令词表形状
+    //（`安装：` 前缀隔开了 # 与 cp）。
+    expect(r.stdout).not.toContain('NOTE');
+    // M3'：shebang 除外共 3 条注释，BR-7 与 W-R D-3 两条留格。
+    expect(r.stdout).toContain('added comment lines=3 marked=2 unmarked=1');
+  });
+});
+
+// R8 shell 面独立采纳锚点（R8_SHELL_ADOPTION_DATE=2026-11-09，日级严格 `<`）
+// branch 模式 fixture：同一笔 .sh B2 违规，作者日期 2026-11-08（扩展前一日）
+// 必须 PASS 豁免，2026-11-09（采纳日当日）必须 FAIL——采纳日当日即生效，与
+// JS 面 R8_ADOPTION_DATE 的整日祖父（<=）刻意不同（沙箱边界 2026-11-09 钉死：
+// 11-08 豁免／11-09 必罚）。对照现存 JS 面 fixture（10-25 当日 PASS／10-26
+// FAIL）可见两面锚点语义的分界。
+function initR8ShellAdoptionFixture(): { repo: string; shas: string[] } {
+  const repo = path.join(R8_TMP, `shell-adopt-${Math.random().toString(36).slice(2)}`);
+  execFileSync('git', ['init', '-b', 'main', repo], { env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+  mkdirSync(path.join(repo, 'tests'), { recursive: true });
+  const cases = [
+    { day: '2026-11-08', subject: 'test(audit): R8 shell 锚点边界——扩展前一日' },
+    { day: '2026-11-09', subject: 'test(audit): R8 shell 锚点边界——采纳日当日' },
+  ] as const;
+  const shas: string[] = [];
+  for (let i = 0; i < cases.length; i++) {
+    const c = cases[i];
+    writeFileSync(path.join(repo, 'f.txt'), `iter ${i}\n`, 'utf8');
+    writeFileSync(path.join(repo, 'tests', `grandfather-probe-${i}.sh`), R8_SHELL_VIOLATIONS, 'utf8');
+    gitIn(repo, ['add', '.'], { ...R8_FIXTURE_IDENT });
+    const msg = `${c.subject}\n\n${R7_PASS_BODY}`;
+    const stamp = `${c.day}T12:00:00+08:00`;
+    gitIn(repo, ['commit', '--no-gpg-sign', '-m', msg], {
+      ...R8_FIXTURE_IDENT,
+      GIT_AUTHOR_DATE: stamp,
+      GIT_COMMITTER_DATE: stamp,
+    });
+    shas.push(gitIn(repo, ['rev-parse', 'HEAD']).slice(0, 8));
+  }
+  return { repo, shas };
+}
+
+describe('commit-audit --branch main R8 shell 采纳锚点（R8_SHELL_ADOPTION_DATE=2026-11-09，严格 <）', () => {
+  const fixture = initR8ShellAdoptionFixture();
+  const result = runBranchAudit(fixture.repo);
+
+  it('exempts pre-extension-day violations and FAILs the adoption day itself', () => {
+    expect(result.stdout).toContain(`PASS  ${fixture.shas[0]}  test(audit): R8 shell 锚点边界——扩展前一日`);
+    expect(result.stdout).toContain(`FAIL  ${fixture.shas[1]}  test(audit): R8 shell 锚点边界——采纳日当日`);
+    expect(result.stdout).toMatch(/R8: B2 phase narration: tests\/grandfather-probe-1\.sh:2/);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain('total=2 pass=1 skip=0 fail=1');
+  });
+});
