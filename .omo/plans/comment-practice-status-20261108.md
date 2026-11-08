@@ -34,10 +34,10 @@
 | 2 | A＋收尾链 | commit-audit.yml 真实 runner 首跑实证（从未跑过） | a）并入 push 执行链：push→dev 自然触发，绿即核销；红则按 `fatal: ambiguous argument 'origin/main..HEAD'` 浅克隆形态诊断；b）与 push 一并挂起 | **a**——首跑是 #3 升格的前置证据（runner 裸 fetch、checkout@v7 refspec 属调研未覆盖面） | rollout :423 pending ③；本会话 `gh run list --workflow=commit-audit.yml` → `HTTP 404: workflow commit-audit.yml not found on the default branch`；本会话 `gh api …/actions/workflows` 远端只有 `CI` 与 `Dependabot Updates` |
 | 3 | A＋收尾链 | 是否升格 required：PUT `rulesets/23195249` 追加「Commit audit (commit-audit --range)」→ 12 项 | a）升格——PR→main 真阻断；没有首跑实证就盲升，runner 实况一旦意外会阻断合并；b）维持 advisory（红可见、不阻断） | **先 b 后 a**：#2 首跑绿了再升格。须主公亲操或明令，check 名按精确字符串一字不改（`311d91c` 命名错位先例） | rollout :423 pending ②；commit-audit.yml:8-11；本会话 `gh api …/rulesets/23195249` → `main-gate`、enforcement `active`、required 11 项、无该名 |
 | 4 | sweep 调研反哺 | poteto 调研结论（主公 10-26 亲令）是否采信 | a）采信（含身份纠正 poteto＝Lauren Tan；「全禁不适用本仓」沿 practice-v2:46 先裁）；b）只留档 | **a**——五条 implications 与 sweep 实收同向互证，也为 #5 的轻量路径铺路 | sweep :24-50、:106；令 3 原话 :11 |
-| 5 | sweep 调研反哺 | 源头抑制（生成时就压住注释）是否立项 | a）缓立重技能，轻量路径先行：把「误导三型」判据补进 conventions.md 分诊矩阵或 AGENTS.md 注释写作纪律（纯文档、零依赖）；b）立项 poteto 式重技能（Comment Sicko 只读子代理＋/swarm）——若涉新依赖须按 AGENTS.md:29 三类自证，否则询问人类 | **a**（台账原推荐）；重技能等出现新的系统性 slop 类别再评估（与 rollout §5.4 定策同口径） | sweep :112、:50 |
+| 5 | sweep 调研反哺 | 源头抑制（生成时就压住注释）是否立项 | a）缓立重技能，轻量路径先行：把「误导三型」判据补进 conventions.md 分诊矩阵或 AGENTS.md 注释写作纪律（纯文档、零依赖）；b）立项 poteto 式重技能（Comment Sicko 只读子代理＋/swarm）——若涉新依赖须按 AGENTS.md:29 三类自证，否则询问人类 | **a**（台账原推荐）；重技能等出现新的系统性 slop 类别再评估（与 rollout §5.4 定策同口径） | sweep :112、:50；**【2026-11-09 勘注】口径已修订**——选项 b「三类自证」已废，现行＝两档制（`dependencies` 须主公审批／`devDependencies` 豁免自决），见 AGENTS.md L0／[ADR-0001 修订记录](./adr-0001-github-committer-exemption-20261026.md) |
 | 6 | sweep 只报告项 | 只报告项的终态：翻案改写（涉保护面须主公令）还是永久留档。范围按 §三.6 原文＝§1.4 十二条＋各分区保护面只报告项（如 §1.3 db 行候选 1/2「维持只报告」，未入 §1.4 表） | a）永久留档——保护面纪律不破，但 12 条（high 11／medium 1）永留码面；b）逐条翻案改写（决策回链块 #1/#4/#5、测试名 #6/#7 涉保护面），须单独波次逐条两半验证；c）只把死代码本体 #10/#11/#12 另立代码债票 | **a 为主；在意失真则 c**——判据 3／5 已把保护面与代码债划出注释 sweep 范围；死代码是行为面债，另票处理比翻案保护面干净 | sweep :74-91、:111、:57-58、:67 |
 | 7 | ADR 附记二 | R9（政令／越线自决 trailer 硬拦）与 known-issue 基线是否令实施 | a）维持不执行（储备）；b）令实施 R9（`MASTER_DECREE=1` 形态，同 push 法令）；c）令实施 `--baseline` 清单 | **a**——基线没有已知消费场景（ADR :75 自述）；R9 对应的缺口（教训 3，ADR :70）真实但不迫切，可在下次门禁面改动波顺带复议 | ADR :72-77；sweep :110；本会话 `grep -n 'R9' tests/qa/commit-audit.mjs` 零命中 |
-| 8 | .sh 盲区 | 3 个 tracked .sh 零机械覆盖，是否开「补防线」票（所谓「另一票」在仓内零落档） | a）维持声明现状——盲区已写入 conventions.md:73，语义层靠 fresh-eyes 兜底；b）开票——最小零依赖形态是给 `tests/qa/commit-audit.mjs:158` 扩展名组加 `sh`；引 shellcheck 类工具须按依赖政令另问 | **默认 a**（P3-b 主公选的是「纳入＋声明」而非补防线）；若开票，限 b 的零依赖形态——动门禁规则须主公令（ADR 附记一教训 3） | rollout :428；conventions.md:73；本会话 `grep -rn -E '另一票\|补防线\|sh 门禁' .omo/ docs/` 零命中 |
+| 8 | .sh 盲区 | 3 个 tracked .sh 零机械覆盖，是否开「补防线」票（所谓「另一票」在仓内零落档） | a）维持声明现状——盲区已写入 conventions.md:73，语义层靠 fresh-eyes 兜底；b）开票——最小零依赖形态是给 `tests/qa/commit-audit.mjs:158` 扩展名组加 `sh`；引 shellcheck 类工具须按依赖政令另问 | **默认 a**（P3-b 主公选的是「纳入＋声明」而非补防线）；若开票，限 b 的零依赖形态——动门禁规则须主公令（ADR 附记一教训 3） | rollout :428；conventions.md:73；本会话 `grep -rn -E '另一票\|补防线\|sh 门禁' .omo/ docs/` 零命中；**【2026-11-09 勘注】口径已修订**——新令下 shellcheck 类环境改造工具属豁免档（`devDependencies` 自决可加＋台账留痕），不再「另问」；仅产品上线打包类（`dependencies`）须主公审批，见 AGENTS.md L0／[ADR-0001 修订记录](./adr-0001-github-committer-exemption-20261026.md) |
 | 9 | 工作区知悉 | 他人未提交的 `.gitignore` 改动（删掉已提交版 :115-116：OPS-IGNORE 备案注释＋`/.omo/decisions-20261001.md` 忽略行）意图未知，如何处置 | a）维持现状（各波零触碰先例，以已提交真源为准）；b）主公认领并说明意图——裁留须同时裁 `decisions-20261001.md` 是否入档（档内自述永不 commit），或裁撤；c）不是主公改的就还原 | **先澄清再处置；澄清前维持 a**——这处改动一旦被提交，`decisions-20261001.md` 就脱离忽略面，与已提交的 OPS-IGNORE 口径直接冲突 | 本会话 `git diff .gitignore`（−2 行）与 `git show HEAD:.gitignore`；rollout :439（决策 38）；ADR :62；rollout :29（D7，10-25 起即存在） |
 
 **【2026-11-08 裁决叠注】§1.2 九项终态（主公 2026-11-08 /workflow『全部执行』令；执行实况以推送执行员／首跑观察员／升格执行员回执为准，本块只落终态）**
@@ -54,7 +54,7 @@
 
 ### 1.3 分诊为非待裁（备案，不呈裁）
 
-- **依赖政令消费规则**（sweep §三.3 :108）：规则就是主公令 2 原话（sweep :10），AGENTS.md:29 已载同款；没有选项冲突，也没有动作面——维持备案。
+- **依赖政令消费规则**（sweep §三.3 :108）：规则就是主公令 2 原话（sweep :10），AGENTS.md:29 已载同款；没有选项冲突，也没有动作面——维持备案。**【2026-11-09 勘注】口径已修订**——本备案所引旧三类口径已被主公 2026-11-09 两档制新令替代（AGENTS.md L0／[ADR-0001 修订记录](./adr-0001-github-committer-exemption-20261026.md)）；备案状态随令更新，无新增待裁面。
 - **文档滞后勘注**（§五.5 D-2／D-3，anti-patterns.md 状态行）：属事实同步，可按 `048527d`「附带自决·主公可令回退」先例交后续文档波处理；若涉段位分类重算且有疑义，再问。
 
 ## 二 方法论谱系
@@ -91,7 +91,7 @@ sweep :24 标题与总图 :235 同口径自述「未单独立调研档，结论�
 | 工具 | 能拦 | 局限 | 本仓处置 |
 | --- | --- | --- | --- |
 | SonarQube S125（Major） | 注释掉的代码 | 只覆盖死代码一类，不判复述与误导；须接 SonarQube／SonarCloud 扫描面——本仓零接入（本会话 `grep -rni sonar package.json .github/workflows/ eslint.config.mjs` 零命中） | 只作「死代码必删」的依据引用（practice-v2:85、:112）；死代码形状由 R8-B1 承担 |
-| eslint-plugin-sonarjs `no-commented-code`（M6） | 同上（ESLint 内） | 启发式有已证实的误报（分号结尾注释）与漏报（TS 对象属性）；属新 dev 依赖（practice-v2:194） | **明确不采纳，仅备案**（rollout :431）；若重提须过依赖政令三类自证（AGENTS.md:29） |
+| eslint-plugin-sonarjs `no-commented-code`（M6） | 同上（ESLint 内） | 启发式有已证实的误报（分号结尾注释）与漏报（TS 对象属性）；属新 dev 依赖（practice-v2:194） | **明确不采纳，仅备案**（rollout :431）；若重提须过依赖政令三类自证（AGENTS.md:29）；**【2026-11-09 勘注】口径已修订**——三类自证已废，现行＝两档制，见 AGENTS.md L0／[ADR-0001 修订记录](./adr-0001-github-committer-exemption-20261026.md) |
 | ESLint `no-warning-comments`（M2） | 行首 TODO／FIXME／XXX | 拦不住块内 TODO 与拆词绕过「to do」（practice-v2:178）；`tests/qa` 在 globalIgnores 内不可见（eslint.config.mjs:9-15）；.sh 不在面 | **已采纳**（eslint.config.mjs:17，error 级） |
 | LLM 语义层技能族（pstack `/no-comments`＋Comment Sicko；gajae-code ai-slop-cleaner 7 类 taxonomy） | 复述、装饰、叙述、误导等语义类 | 没有机械判据、不可证伪，靠清单纪律（practice-v2:192）；要在生成时载入 agent 才有源头抑制效果（sweep :30、:50） | 语义层由 M5' fresh-eyes 一次性评审承载；生成时抑制未立项（§一 #5） |
 
@@ -108,7 +108,7 @@ sweep :24 标题与总图 :235 同口径自述「未单独立调研档，结论�
 | 第四类豁免（committer 身份） | `commit-audit.mjs` :109 `GITHUB_COMMITTER_EMAIL`、:231-232 短路、:572 SKIP 行；ADR-0001 Accepted（:9） | branch/range 面；`--message-file`（人类提交入口）不受任何豁免（docs/commit-policy.md:119） | GitHub squash 产物（如 `4ac5acf`）的 R1/R7 历史误报 | ——（人类本地提交的 committer 恒为本人，结构性不可命中，rollout :425） |
 | M4' 批量清理守卫 | `scripts/batch-clean-guard.mjs`（100 行，`--check`／`--backup`） | 自觉调用（P2-d 已裁落地启用；既有批量脚本强制接入另立工单，rollout :424） | 经脚本入口的批量清理：tracked 脏即拒；untracked 打包到 `.omo/backups/<ts>-<label>.tar` | 不经入口的未知进程删除（anti-patterns.md:219 机制注自述收窄） |
 | B3 存量补理由 | rollout §3.9.1（:236-246） | 一次性存量收尾（`06c7358`） | 7 处 eslint-disable 从 7/0 补到 7/7 带 ` -- ` 理由 | —— |
-| 依赖新增政令 | AGENTS.md:29；ADR-0001 :77 附记二引同款；sweep :108 消费规则 | 政令（文档层，无机械防线） | 新增依赖须自证属「改进环境／改进验证／增加人类对 agent 信任」三类，否则询问人类 | 靠纪律执行 |
+| 依赖新增政令 | AGENTS.md:29；ADR-0001 :77 附记二引同款；sweep :108 消费规则 | 政令（文档层，无机械防线） | 新增依赖须自证属「改进环境／改进验证／增加人类对 agent 信任」三类，否则询问人类 | 靠纪律执行；**【2026-11-09 勘注】口径已修订**——「拦得住」列三类自证系旧令描述，现行＝两档制（`dependencies` 须主公审批／`devDependencies` 豁免自决＋台账留痕义务），见 AGENTS.md L0／[ADR-0001 修订记录](./adr-0001-github-committer-exemption-20261026.md) |
 | 写作纪律两条 | AGENTS.md:50-53 | 提示词层的上游抑制 | 「不给未改动的代码加注释」「只在 logic 不自明处加注释」 | 不可机械验证 |
 
 ## 四 预判验证记录
