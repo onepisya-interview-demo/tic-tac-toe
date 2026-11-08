@@ -70,7 +70,7 @@
 
 - **R8 注释增量门禁**（已落地：`6eaf05b` 入 `tests/qa/commit-audit.mjs`，采纳日锚 2026-10-25；挂载点已裁 pre-commit 单挂 `--staged` 增量模式——[rollout §六 P2-a](../.omo/plans/comment-triage-rollout-20261025.md)；R1–R7 已占满故定名 R8）：blocking 仅限 `//` 行注释三子集——B1 死代码形状 / B2 阶段叙述 `(Phase|Step)\s*\d` / B3 `eslint-disable` 无 ` -- ` 描述；banner 分隔线等 advisory 只报不拦；祖父条款 preR8Adoption 日期锚已实装。
 - **M2 ESLint `no-warning-comments`**（已落地：`433ab49` 入 `eslint.config.mjs` 为首个 rules 条目（error 级）——[rollout §六 P2-b](../.omo/plans/comment-triage-rollout-20261025.md)；customTerms todo/fixme/xxx，`location:"start"`）：`tests/qa/**` 在 globalIgnores 内对 eslint 不可见，该子树的 B3 扫描由 commit-audit 侧正则承担。
-- 拦不住（诚实声明）：复述代码的语义判断——无主流 linter 能判；语义层靠 fresh-eyes 分诊评审（不携带产出 session 上下文的独立只读评审）。
+- 拦不住（诚实声明）：复述代码的语义判断——无主流 linter 能判；语义层靠 fresh-eyes 分诊评审（不携带产出 session 上下文的独立只读评审）。门禁覆盖面声明（2026-11-08 P3-b 裁决 D 写入——[rollout §六 P3-b](../.omo/plans/comment-triage-rollout-20261025.md)）：全仓 3 个 tracked .sh（`scripts/vercel-ignore-build.sh`、`scripts/vercel-ignore-build.test.sh`、`tests/qa/pre-push-guard.sh`）均不在 R8 扫描面（`tests/qa/commit-audit.mjs:158` 扩展名组不含 sh）与 M2 面（eslint 忽略 .sh），CI 与 verify-all 也没有 .sh 检查；语义层只有 06c7358 一次性评审覆盖过 scripts/ 下 2 个，`tests/qa/pre-push-guard.sh` 从未评审——该文件是 `.git/hooks/pre-push` 的真源（push 法令机械防线本体，hook 第 2-3 行自述），其注释盲区性质重于业务 .sh。
 
 ## 交叉引用
 
