@@ -40,6 +40,18 @@
 | 8 | .sh 盲区 | 3 个 tracked .sh 零机械覆盖，是否开「补防线」票（所谓「另一票」在仓内零落档） | a）维持声明现状——盲区已写入 conventions.md:73，语义层靠 fresh-eyes 兜底；b）开票——最小零依赖形态是给 `tests/qa/commit-audit.mjs:158` 扩展名组加 `sh`；引 shellcheck 类工具须按依赖政令另问 | **默认 a**（P3-b 主公选的是「纳入＋声明」而非补防线）；若开票，限 b 的零依赖形态——动门禁规则须主公令（ADR 附记一教训 3） | rollout :428；conventions.md:73；本会话 `grep -rn -E '另一票\|补防线\|sh 门禁' .omo/ docs/` 零命中 |
 | 9 | 工作区知悉 | 他人未提交的 `.gitignore` 改动（删掉已提交版 :115-116：OPS-IGNORE 备案注释＋`/.omo/decisions-20261001.md` 忽略行）意图未知，如何处置 | a）维持现状（各波零触碰先例，以已提交真源为准）；b）主公认领并说明意图——裁留须同时裁 `decisions-20261001.md` 是否入档（档内自述永不 commit），或裁撤；c）不是主公改的就还原 | **先澄清再处置；澄清前维持 a**——这处改动一旦被提交，`decisions-20261001.md` 就脱离忽略面，与已提交的 OPS-IGNORE 口径直接冲突 | 本会话 `git diff .gitignore`（−2 行）与 `git show HEAD:.gitignore`；rollout :439（决策 38）；ADR :62；rollout :29（D7，10-25 起即存在） |
 
+**【2026-11-08 裁决叠注】§1.2 九项终态（主公 2026-11-08 /workflow『全部执行』令；执行实况以推送执行员／首跑观察员／升格执行员回执为准，本块只落终态）**
+
+1. **#1 push：已批准并执行完毕**——六层 verify-all exit 0（绿）＋队列核验 `git rev-list --count origin/dev..HEAD`＝24（恰 24 笔；§6.1 的 23 笔系立卷时点，含总览入档笔 `e71726f` 后终值 24）→ `MASTER_PUSH_DECREE=1 git push origin dev` 成功：普通 push 快进 `40ac019..e71726f`、零 force；回验 `git ls-remote origin refs/heads/dev`＝本地 HEAD `e71726f1120052322784583818fb9a95b991543e`。他人 4 件未提交变更（§五.4）全程原样未碰。
+2. **#2 首跑：成功（绿）**——run `42494216534`（push 事件、headBranch=dev、headSha 与 ls-remote 逐字符一致）：全 7 步 success，job 9s；远端 `node tests/qa/commit-audit.mjs --range origin/main..HEAD` 汇总 total=95 pass=95 skip=0 fail=0（调研底数 85/85 系 dev 其后又前进 10 笔，fail=0 双口径一致）。调研未覆盖面①checkout@v7 refspec 已实证（v7 实解析 SHA `3d3c42e`、fetch 为 getRefSpecForAllHistory 全量双 refspec、origin/main 建立，与按 main 源码推断一致）；面②runner 裸 fetch 依旧未实测（配方以 fetch-depth:0 规避且规避路径已在真实 runner 验证有效），是否补实证留主公裁。
+3. **#3 升格：已执行**——PUT `rulesets/23195249` 追加「Commit audit (commit-audit --range)」成功：required 11→12 项（新项 idx=11）、权威名与 `.github/workflows/commit-audit.yml:36` 及 run 唯一 job name 逐字一致（无 `311d91c` 式命名错位）、enforcement 仍 active、GET 回验原 11 项及其余字段零变动。PR→main 合并面自此对该检查真阻断。
+4. **#4 poteto 调研：已裁采信（a）**——结论整体采信（含身份纠正）；sweep §三.1 已叠注。
+5. **#5 源头抑制：已裁缓立（a）**——重技能不立项，等新的系统性 slop 类别再评；轻量路径仅备注可选、本波不落地；sweep §三.7 已叠注。
+6. **#6 只报告项：已裁永久留档（a 为主）**——sweep §1.4 十二条维持永久留档＋db 行候选 1/2 维持只报告；死代码本体（#10/#11/#12）属行为面债、另票口径（未来处置属新票新令，本波不开票）；sweep §三.6 已叠注。
+7. **#7 ADR 附记二：已裁不实施（a）**——R9 与 known-issue 基线维持储备；ADR 附记二已叠注关闭。
+8. **#8 .sh 补防线票：已裁不开**——维持声明现状（conventions.md:73 盲区声明＋fresh-eyes 兜底）。本表原文「所谓『另一票』在仓内零落档」自本令起事实修正为**主公已裁不开**——零落档状态自此有了裁决口径。
+9. **#9 `.gitignore` 他人未提交改动：仍待主公澄清——唯一人裁残留**。『全部执行』令未含此项处置；push 执行波全程原样未碰（`git status` 实测四件与 §五.4 快照一致），澄清前维持 a。
+
 ### 1.3 分诊为非待裁（备案，不呈裁）
 
 - **依赖政令消费规则**（sweep §三.3 :108）：规则就是主公令 2 原话（sweep :10），AGENTS.md:29 已载同款；没有选项冲突，也没有动作面——维持备案。
@@ -202,3 +214,5 @@ sweep §1.4 登记 12 条（high 11／medium 1；其中 #8 注释本身如实，
 
 - **须主公明令**后以 `MASTER_PUSH_DECREE=1` 执行（AGENTS.md:27；机械防线 `.git/hooks/pre-push` :2-3）；push 前后 tip 以 `git rev-parse` 实测留痕。
 - 建议顺序：push 前复跑 `node scripts/verify-all.mjs` → push dev → 观察 commit-audit.yml 首跑（§一 #2）→ 首跑绿后再裁升格 required（§一 #3）。
+
+**【2026-11-08 裁决叠注】push 批准点已按实际走完**（主公 2026-11-08 /workflow『全部执行』令）：上方建议顺序四步全部执行完毕——①六层 verify-all exit 0（绿）＋队列核验恰 24 笔（§6.1 的 23 笔系立卷时点，含总览入档笔 `e71726f` 后终值 24，全部随本次出仓）；②`MASTER_PUSH_DECREE=1 git push origin dev` 普通推送成功（快进 `40ac019..e71726f`、零 force），`git ls-remote` 回验远端 dev＝本地 HEAD（`e71726f1120052322784583818fb9a95b991543e`）；③commit-audit.yml 首跑绿（run `42494216534`，total=95 pass=95 fail=0）；④ruleset 升格完毕（`rulesets/23195249` required 12 项）。远程门禁空窗（§5.6）自此闭合：R6/R8 远程面已生效且从 advisory 升为 required。push 前后 tip 以 `git rev-parse`／`git ls-remote` 留痕（见上）。
