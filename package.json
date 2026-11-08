@@ -36,8 +36,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && node scripts/lint-sh.mjs",
     "lint:fix": "eslint --fix",
+    "lint:sh": "node scripts/lint-sh.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -90,6 +91,7 @@
     "fast-check": "^4.9.0",
     "jsdom": "^30.0.1",
     "playwright": "^1.63.0",
+    "shellcheck": "^4.1.0",
     "tailwindcss": "^4",
     "typescript": "^6",
     "vitest": "^5.0.0"
