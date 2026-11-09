@@ -45,11 +45,11 @@
 
 `tests/qa/commit-audit.mjs` R3 自 2026-10-24 起把本节正文 schema 的三段结构由「可选捷径」升为硬要求（设计记录 `.omo/plans/commit-audit-r3-explicit-heading-20261024.md`）：
 
-- **`--message-file` 钩子路径（人类提交入口）**：正文必须含显式 `WHAT:` / `WHY:` / `HOW:` 三个 token（`/\bWHAT:\s/` 形态——token 后跟空白；同行 `WHAT: 内容` 与独占行 `WHAT:` 换行接内容均认），缺任一即 FAIL R3，finding 列出缺失 token 清单（如 `missing WHY: HOW:`）。行长排版仍归上节「正文排版硬规则」与 commitlint，audit 只认 token 存在性。
+- **`--message-file` 钩子路径（人类提交入口）**：正文必须含显式 `WHAT:` / `WHY:` / `HOW:` 三个 token（`/\bWHAT:\s/` 形态——token 后跟空白；同行 `WHAT: 内容` 与独占行 `WHAT:` 换行接内容均认），缺任一即 FAIL R3，finding 列出缺失 token 清单（如 `missing WHY: HOW:`）。行长排版仍归上节「正文排版硬规则」与 commitlint，audit 只认 token 存在性——且以**正文 ≥60 字为先决**（2026-10-24 勘注）：`body.length < 60`（去首尾空白后）先报 `body too short` FAIL R3 并短路，token 检查只对 ≥60 字正文进行；短正文即便三 token 齐全亦 FAIL（脚本 R3 块两段式判定：先长度、后 token）。
 - **关键词启发式退役为祖父分支**：原 R3 在三 token 缺位时退化到 `WHY_RE` / `HOW_RE` 关键词匹配（中文词表 50+ 日常词，几乎任何 ≥60 字技术散文都双表命中）。该路径自本日起只服务 `--branch` / `--range` 模式下 author date ≤ 2026-10-24 的旧账（`R3_STRICT_ADOPTION_DATE` 常量，日级 `<=`、当日整日视为旧账，仿 R7 采纳日先例）；其后提交在两种模式一律要求显式 token。
 - **豁免零变化、编号不动**：bot / merge / prompt 豁免语义不变；R1/R2/R4/R5/R6/R7 零改动；本修正按 R3 收紧处理，不开 R8——正文 schema 一直是策略真源语义、R3 是其机械实现，这是收敛「脚本弱于文档」的实现缺口，不是新规则维度。
-- **漂移实证锚**：fd8db3f / 5165933 / d9c608b / c303d8b / 35ac680 五笔散文体正文在旧 R3 下全部过门。词表伪命中例：「不触发」命中「触发」；「验证基建」名词命中「验证」；`github` / `needs` 等英文残留伪命中；「修复」一词 WHY/HOW 双表兼任，单词即满足两检。
-- **已推送提交不 reword**：五笔漂移提交保持原样，branch 模式对它们永远走祖父分支（零新 FAIL）；force-push 属单向门，留主公裁定另行工单。
+- **漂移实证锚**：fd8db3f（现史 1ad6bd5）/ 5165933（现史 6f0377f）/ d9c608b（现史 022c1b4）/ c303d8b（现史 c966292）/ 35ac680（现史 311d91c）五笔散文体正文在旧 R3 下全部过门——**2026-10-24 勘注**：括注为同笔提交 reword 后的现行史哈希（见下条回执）；实证所指的散文体正文只存于旧哈希（已自任何分支不可达，仅本地 reflog 与 filter-branch 备份 ref `refs/original/refs/heads/dev`→785458a 可解——后者是真实 ref 而非 reflog，钉住旧史对象、不随 reflog 过期回收），新哈希正文已改为独占行 token 形态，引用一律以新哈希为准。词表伪命中例：「不触发」命中「触发」；「验证基建」名词命中「验证」；`github` / `needs` 等英文残留伪命中；「修复」一词 WHY/HOW 双表兼任，单词即满足两检。
+- **「已推送提交不 reword」——原断言已推翻，reword＋force push 执行回执（2026-10-24）**：本条原载「五笔漂移提交保持原样，branch 模式对它们永远走祖父分支（零新 FAIL）；force-push 属单向门，留主公裁定另行工单」；主公 10-24 裁定推翻该口径，五笔已全部 reword（旧散文体正文改写为独占行 `WHAT:` / `WHY:` / `HOW:`，author date 保留）并 force push 出仓——force push 系主公明令，于 10-24 16:15 推送 38e4933 时完成（本地 origin/dev reflog：该次非快进覆盖旧史尖端 785458a；早于 §push 法令守卫 4cd33b3 入仓）。新旧对照 fd8db3f→1ad6bd5、5165933→6f0377f、d9c608b→022c1b4、c303d8b→c966292、35ac680→311d91c；旧锚自任何分支不可达（新克隆不可解析），仓内各档与外部记忆档引用须按此换新。实测 `node tests/qa/commit-audit.mjs --range 1ad6bd5~1..HEAD` → total=14 pass=10 skip=4 fail=0，五新锚 5/5 PASS，已不依赖祖父分支。
 
 ## 中文提交（默认）
 
@@ -91,8 +91,6 @@ R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7�
 - 新增/修订 BR 行或探针文件时**两处头注同步改**，R6 才回绿；探针列反引号内写全路径（规范化路径不命中会误判有洞）。
 - `--branch` 模式走整条分支全历史 + 全仓 R6，因此**基线的隐性违规会在任意波的终验首爆**——不是本波引入的也要当场修（实证 2026-09-25：BR-6 探针头注缺失在两计划波终验被 R6 揪出，cdacf88 修复）。
 
-R7 与 commitlint 是单源关系：`commitlint.config.cjs` 不重复实现 R7，避免双源漂移（见该文件首部注释）。已有 commit 中的英文 outlier 由 R7 捕获，由后续工单按 reword 协议处理（不在本工单范围）。
-
 ## 原子提交
 
 一个提交一个主题。每个提交都必须独立构建、测试为绿；不提交 WIP 或 omnibus。next-env.d.ts 和 Next 自动生成区块的变化单独作为 chore 提交，方便未来 bisect。
@@ -118,13 +116,50 @@ fix 类提交采用「失败测试在前」序列——修复的验收证据是*
 
 `.git/hooks/commit-msg` 会调用 `node tests/qa/commit-audit.mjs --message-file "$1"`。消息不合规时提交失败；**禁止用 `git commit --no-verify` 绕过**。需要独立校验时使用 `pnpm exec commitlint --edit <message-file>`。
 
-branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref 表达式）对三类来源做规则化豁免，输出记 `SKIP` 并单列计数；`--message-file` 模式（人类提交入口，commit-msg hook 闸门）不受任何豁免。判别维度各异避免单 token 多义：
+branch 全史审计（`--branch main`）与 `--range` 模式（任意 git ref 表达式）对四类来源做规则化豁免，输出记 `SKIP` 并单列计数；`--message-file` 模式（人类提交入口，commit-msg hook 闸门）不受任何豁免。判别维度各异避免单 token 多义：
 
 - **GitHub merge commit**（subject `Merge pull request #N from …`）：按构造豁免——机器生成的合并记录无人类正文/尾注，按 subject 模式识别；R1-R5/R7 全豁免。
 - **Dependabot 自动提交**（author 为 `dependabot[bot]`）：identity-based 即现有架构（ae02a33 先例）；R3-R5/R7 豁免（subject 仍受 R1/R2 约束，不按 subject 猜测避免人类借用豁免）。
+- **GitHub squash merge / 网页端提交**（committer 为 `GitHub <noreply@github.com>`，2026-10-25 补）：identity-based（committer 面，与 Dependabot 的 author 面同构）；squash 产物 subject 是 PR 标题原文（含 `(#N)` 后缀）、正文是成员提交消息机器拼接，Conventional 前缀与 lore trailers 均非提交时刻可承载——R1-R5/R7 全豁免（同 merge commit 面）。实证：4ac5acf（PR #22 squash 产物）在 dev 终审报 fail=1（R1 非常规 subject＋R7 对拼接正文里 `WHAT:` 独占行取空值），该提交已出仓（origin/main 与 origin/dev 双双在档）不可 reword，属豁免缺口而非提交违规，按本条收口。
 - **规则采纳日之前的旧账**（author date 在 R7 采纳日 2026-09-23 或更早）：按时间锚点豁免——commit 写于该日时 R7 还未上线（commit `3068b22a` 落仓于 22:30:11），结构性无法事后合规；仅豁免 R7 的 subject 与 trailer CJK 检查，R1-R5 仍走全检。
   - **2026-10-24 补注（R3 严格化采纳日）**：同理，author date ≤ 2026-10-24 的旧账在 branch/range 模式对 R3 显式 `WHAT:/WHY:/HOW:` token 检查走关键词祖父分支（`R3_STRICT_ADOPTION_DATE` 常量、日级 `<=`、同 R7 语义）；R1/R2/R4/R5 仍全检，`--message-file` 永不豁免。
 
-三层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
+四层豁免在 `tests/qa/commit-audit.mjs` 同脚本内常量化（`MERGE_COMMIT_RE` / `DEPENDABOT_EMAIL` / `GITHUB_COMMITTER_EMAIL` / `R7_ADOPTION_DATE`），与策略紧耦合——单源审查，规则演化时只改常量与注释。R6 全仓状态检查与 `--message-file` 模式不变：R6 仍按 BR↔探针双向绑定走全仓，hook 仍按现行 R1-R5/R7 全检（人类提交入口必须严格）。
 
 hook 重建契约（hook 位于 `.git/` 内，git 永不跟踪）：契约三源为 AGENTS.md §commit-msg hook、`.omo/plans/commit-policy-enforcement.md`与 `.omo/plans/recovery-from-unknown-cleanup.md`（Directive 即原始 hook 契约）；重建脚本见 `.omo/plans/recovery-from-unknown-cleanup.md` 附录 B，重建后必须双向冒烟（合规消息放行 + 违规消息拦截）。
+
+## push 法令（2026-10-24）
+
+> 定位：提交策略管 `.git/hooks/commit-msg`（本地入库闸门）；本节管 `.git/hooks/pre-push`
+> （出仓闸门）——commit 之后、push 之前的那道门。设计记录：
+> `.omo/plans/pre-push-guard-decree-20261024.md`；AGENTS.md §L0 硬约束首条对应 digest。
+
+**主公原话要点（2026-10-24）**：
+
+- 「自动 push 不是一个好习惯，特别是在没有我的允许的情况下，最近好几次都自动 push 了」
+- 「一个是基于安全的考虑，一个是基于 push 之后我们后面改东西还要进行 force push」
+- 「我希望永远不要自动 push，除非我主动说 push 你才允许 push」
+
+**两条理由**：
+
+1. **安全**：未经许可的 push 把内容泄出本地仓边界，主公失去对远端状态的最终控制权——AI 不得自授出仓权。
+2. **force push 连带成本**：推上去再改就要 force push——历史一旦出仓，改写即单向门（与 §R3「已推送提交不 reword」同源约束：出仓的代价由后续每一笔改写支付）。
+
+**机械防线机制**（真源 `tests/qa/pre-push-guard.sh`，POSIX sh）：
+
+- **hook 位置**：`.git/hooks/pre-push`（git 永不跟踪 `.git/` 内文件；克隆/重建后重装：
+  `cp tests/qa/pre-push-guard.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push`）。
+- **两条放行路径**（判定顺序定死）：
+  1. stdin 或 stdout 任一为 TTY → `exit 0`——主公本人终端操作，无感放行；
+  2. 环境变量 `MASTER_PUSH_DECREE=1` → `exit 0`——主公明令后带令牌执行的单次授权
+     （令牌仅当次命令环境注入、不落盘）。
+- **其余一律拦截**：AI 子进程 / GUI / CI 等非交互 push → stderr 输出拦截说明并 `exit 1`；
+  拦截文案首行含稳定标记串 **`[push-guard]`**，供机械验证锚定（含文案、不含放行）。
+
+**AI 执行口径**：平时一律不 push。任何 push——常规 push、`--force`、推 tag、
+`git push origin --delete` 远程分支删除——都必须等主公明令之后，以
+`MASTER_PUSH_DECREE=1 git push ...` 执行单次授权。令牌是明令的回执，不是默认参数；
+不得预置、不得常驻注入。无明令时 push 被 hook 拦下即是正确行为，不是要修的故障。
+
+**GUI 误拦说明**：GUI 客户端（IDE / Git GUI 等）的非交互 push 同样会被拦——这是设计内
+行为，不是 hook 误报；被拦时请主公本人在终端执行 `git push`（TTY 路径免令牌放行）。

@@ -62,9 +62,6 @@ async function step(name, fn) {
   }
 }
 
-// Same-origin fetch helpers (page context) — avoids the cross-origin
-// preflight hang stats-race-qa documented for Playwright's request
-// context on HTTPS.
 async function getStats(page) {
   return page.evaluate(async () => {
     const r = await fetch("/api/stats", { cache: "no-store" });

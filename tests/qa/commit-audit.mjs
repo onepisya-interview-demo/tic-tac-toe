@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Commit-policy audit.
 //
-// Two modes:
+// Modes:
 //   node tests/qa/commit-audit.mjs                  # audit all commits on main
 //   node tests/qa/commit-audit.mjs --branch <name>  # audit all commits on <name>
 //   node tests/qa/commit-audit.mjs --message-file F # audit a single commit message file
+//   node tests/qa/commit-audit.mjs --staged         # R8 scan of staged added lines (pre-commit hook)
 //
 // Exit 0 when all checks pass; exit 1 when any fail.
 
@@ -97,6 +98,16 @@ const TRAILER_KEY = /^(Constraint|Rejected|Confidence|Scope-risk|Directive|Teste
 const DEPENDABOT_EMAIL = "dependabot[bot]@users.noreply.github.com";
 const DEPENDABOT_NAME = "dependabot[bot]";
 
+// GitHub squash merge（2026-10-25 补，第四类机器产物豁免）——GitHub 端 squash
+// 与网页提交的 committer 恒为 "GitHub <noreply@github.com>"：subject 是 PR 标题
+// 原文（含 "(#N)" 后缀），正文是成员提交消息机器拼接，Conventional 前缀与
+// lore trailers 均非提交时刻可承载。identity-based 判据（committer 面，与
+// Dependabot 的 author 面同构）；branch/range 模式全 per-commit 规则豁免（同
+// merge commit 豁免面），--message-file 钩子路径结构性不可达（main() 调
+// checkMessage 无此 opt）。实证：4ac5acf（PR #22 squash 产物，dev 终审 fail=1）
+// 即此豁免缺口。
+const GITHUB_COMMITTER_EMAIL = "noreply@github.com";
+
 // Historical exemption baseline for branch / range mode (--message-file hook
 // path is never exempted). Three classes, each keyed on a distinct dimension
 // so a single token cannot borrow multiple exemptions:
@@ -130,6 +141,57 @@ const R7_ADOPTION_DATE = "2026-09-23";
 const R3_STRICT_ADOPTION_DATE = "2026-10-24";
 const MERGE_COMMIT_RE = /^Merge pull request #\d+ /;
 
+// R8（注释增量门禁，2026-10-25 入档；注释分诊 rollout 台账 §三）——对六目录
+// (app/components/lib/db/scripts/tests) 的 ts/tsx/mjs/js/cjs 新增行做注释形态
+// 检查。blocking 三子集只检 `//` 行注释形态：B1 注释掉的死代码（代码形状版，
+// 存量零命中）、B2 阶段叙述（收紧版，存量零命中）、B3 eslint 抑制指令缺
+// ` -- ` 描述（ESLint 官方语法；存量 7 处皆无描述、不溯及，只拦增量新增行）。
+// JSX 与块注释形态入 advisory 面（A2 二期，本版不实现）。advisory：A1 banner
+// （半角；含决策编号/判据/票号回链的白名单跳过，纯分隔线存量不拦、只监控
+// 增量）＋M3' 无标记注释占比报表（剔除留格标记后计算，纯报表、无阻断、不
+// 预留收紧）。正则与存量 dry-run 结论逐字取自注释分诊方案 v2 §3.2 M1
+// (.omo/plans/comment-triage-practice-v2-20261024.md)，不得自行放宽或收紧。
+// 触发面：--staged 增量模式（pre-commit hook 调用，读 git diff --cached -U0
+// 新增行）＋branch/range 模式对采纳日之后 commit 的逐笔 added-line 扫描；
+// --message-file 模式（commit-msg hook 路径）行为完全不变、不跑 R8。
+//
+// R8 shell 扩展（2026-11-09 入档，sh 门禁波；台账 .omo/plans/sh-gate-wave-20261109.md）：
+// 扫描组扩至 .sh（同六目录）。shell 注释以行首 `#` 计（shebang 除外）：B2 阶段
+// 叙述 shell 形态入 blocking（dry-run 全历史 152 条 .sh 新增行零命中）；B1 注释
+// 掉的命令形状仅入 advisory——宽词表形状在历史上仅有的 4 处命中全部是
+// `#   exit 0 = ...` 式 exit 语义契约注释（至今仍在 vercel 双脚本），历史精确率
+// 0/4，无法构造存量零误报的 blocking 形状，落 advisory 只监控；A1 banner `#`
+// 形态入 advisory（零命中）；B3 eslint 抑制指令对 shell 无意义（n/a——shell 用
+// shellcheck 自己的 `# shellcheck disable=SCxxxx` 指令面，不在本波）。祖父：.sh
+// 面独立锚点 R8_SHELL_ADOPTION_DATE=2026-11-09（作者日期日级严格 <，采纳日当日
+// 即生效）——与 JS 面 R8_ADOPTION_DATE 的整日祖父保守读法刻意不同：shell 面随
+// 本波当日落地、--staged 面同刻起即强制，branch 面当日不豁免保持两面对称（沙箱
+// 边界已钉死：2026-11-08 豁免／2026-11-09 必罚）。锚点前存量（最后一笔 .sh
+// commit fa0d4e9=2026-10-25）整段祖父，扩展对存量零追溯。
+const R8_ADOPTION_DATE = "2026-10-25";
+// R8 shell 扩展独立锚点（2026-11-09）：语义与 JS 面锚点的差异见上——JS 面 `<=`
+// 整日祖父（规则当日 22:30 才落地，当日早些的 commit 无法合规）；shell 面本波
+// 当日落地即当日生效，比较取严格 `<`（采纳日当日不豁免）。两锚点各自祖父
+// 自己的规则面：preR8Adoption 管 `//` 族，preR8ShellAdoption 管 `#` 族。
+const R8_SHELL_ADOPTION_DATE = "2026-11-09";
+const R8_SCAN_PATH_RE = /^(app|components|lib|db|scripts|tests)\/.*\.(ts|tsx|mjs|js|cjs|sh)$/;
+const R8_DEAD_CODE_RE = /^\s*\/\/\s*((const|let|var|import|export)\s+\w+.*[;{(]\s*$|console\.\w+\(|return\s+[\w.'"`]+;\s*$)/;
+const R8_PHASE_NARRATION_RE = /\/\/\s*(Phase|Step)\s*\d/;
+// 判据词以 [-] 写法拆开，避免本文件自身新增行命中 B3（语义等价）。
+const R8_ESLINT_DISABLE_RE = /eslint[-]disable/;
+const R8_BANNER_RE = /\/\/\s*(={5,}|-{5,}|\*{5,})/;
+// 留格标记口径（A1 白名单与 M3' 报表共用，方案 §3.2 M3'）：决策编号族＋BR 号＋
+// plan 回链＋判据回链；`// BR:` 头与 JSDoc/块注释契约形态由 scanR8 按行形态识别。
+const R8_RETENTION_RE = /(W-R|案[①②③]|L1-\d|D-\d|票 ?\d|BR-\d|\.omo\/plans\/|判据)/;
+// R8 shell 扩展正则（2026-11-09，取舍见上）：B2 shell 形态与 JS 版同构（`#` 替
+// `//`），仅施加于 .sh 文件的行首 `#` 注释行——字符串内的 `#` 不计（红线：存量
+// 零误报，比 JS 版更保守的行首锚定）；B1 shell 命令形状仅 advisory，词表只收
+// 注释掉后几乎必为死代码的命令（排除 exit/echo 等契约说明常用词，dry-run 佐证
+// 见台账）；A1 banner shell 形态同 JS 判据（=,-,* 五连以上）。
+const R8_SHELL_PHASE_NARRATION_RE = /#\s*(Phase|Step)\s*\d/;
+const R8_SHELL_DEAD_CODE_RE = /^\s*#\s*(git|pnpm|npm|npx|curl|wget|rm|cp|mv|chmod|chown|sudo|kill)\b/;
+const R8_SHELL_BANNER_RE = /#\s*(={5,}|-{5,}|\*{5,})/;
+
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -138,6 +200,7 @@ function parseArgs(argv) {
     else if (a === "--message-file") out.messageFile = argv[++i];
     else if (a === "--range") out.range = argv[++i];
     else if (a === "--root") out.root = argv[++i];
+    else if (a === "--staged") out.staged = true;
   }
   return out;
 }
@@ -188,6 +251,12 @@ function checkMessage(label, raw, opts = {}) {
   // --message-file to its own branch before calling checkMessage at all.
   if (opts.isMerge) {
     return { label, subject, body, footer, findings: [], mergeCommit: true };
+  }
+
+  // GitHub squash / web commits (GITHUB_COMMITTER_EMAIL above): skip every
+  // per-commit rule in branch mode, mirroring the merge-commit surface.
+  if (opts.githubCommitted) {
+    return { label, subject, body, footer, findings: [], githubCommitted: true };
   }
 
   if (subject.length > 100) findings.push({ rule: "R2", msg: `subject ${subject.length} chars > 100` });
@@ -337,6 +406,101 @@ function parseBrRows(md) {
   return rows;
 }
 
+// Parse a `git diff -U0` style patch into per-file added lines with target-side
+// line numbers. Only `+` payload lines count; deletions do not advance the
+// target counter; hunk headers carry the start line for `no`.
+function parseAddedLines(diff) {
+  const files = [];
+  let cur = null;
+  let lineNo = 0;
+  for (const raw of diff.split("\n")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(raw);
+    if (hunk) {
+      lineNo = Number(hunk[1]) - 1;
+      continue;
+    }
+    if (raw.startsWith("+++ b/")) {
+      cur = { path: raw.slice(6), lines: [] };
+      files.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (raw.startsWith("+")) {
+      lineNo += 1;
+      cur.lines.push({ no: lineNo, text: raw.slice(1) });
+    }
+  }
+  return files;
+}
+
+// R8 scan of one diff's added lines. Returns blocking findings (B1/B2/B3),
+// advisory notes (A1) and the M3' unmarked-comment ratio counters. Blocking
+// regexes self-describe the `//` comment shape and are applied line-level,
+// exactly as the dry-run validated them. M3' counts all comment forms (line,
+// block, JSDoc continuation) in the denominator; retention-marked lines,
+// `// BR:` heads and block/JSDoc-form lines count as marked（留格），so the
+// unmarked remainder answers "how many added comments carry no triage marker
+// at all" — pure observation, no threshold.
+function scanR8(diff, opts = {}) {
+  const findings = [];
+  const notes = [];
+  let commentLines = 0;
+  let markedLines = 0;
+  for (const file of parseAddedLines(diff)) {
+    if (!R8_SCAN_PATH_RE.test(file.path)) continue;
+    // shell 面祖父：作者日期早于 R8_SHELL_ADOPTION_DATE 的 commit 跳过整个
+    // `#` 族（规则尚不存在），`//` 族不受此 opt 影响、仍按 R8_ADOPTION_DATE
+    // 各自祖父。--staged 面不传此 opt（同 JS 面：钩子路径永不豁免）。
+    if (file.path.endsWith(".sh") && opts.preR8ShellAdoption) continue;
+    for (const { no, text } of file.lines) {
+      // R8 shell 面（2026-11-09 扩展）：.sh 走 `#` 注释形态族后 continue，
+      // `//` 族检查结构性不可达——双向零交叉：.ts 里的 `#`（字符串/模板字面
+      // 量）与 .sh 里的 `//`（URL 等）互不触发。shebang 不是分诊面注释，
+      // 不计入 M3' 分母。blocking 仅 B2；B1/A1 为 advisory（取舍见正则处）。
+      if (file.path.endsWith(".sh")) {
+        const isShellComment = /^\s*#/.test(text);
+        const isShebang = /^\s*#!\//.test(text);
+        if (isShellComment && !isShebang) {
+          commentLines += 1;
+          if (R8_RETENTION_RE.test(text)) {
+            markedLines += 1;
+          }
+        }
+        if (isShellComment && R8_SHELL_PHASE_NARRATION_RE.test(text)) {
+          findings.push({ rule: "R8", msg: `B2 phase narration: ${file.path}:${no}: ${text.trim()}` });
+        }
+        if (R8_SHELL_DEAD_CODE_RE.test(text)) {
+          notes.push(`B1 shell commented-out command shape (advisory): ${file.path}:${no}: ${text.trim()}`);
+        }
+        if (isShellComment && R8_SHELL_BANNER_RE.test(text) && !R8_RETENTION_RE.test(text)) {
+          notes.push(`A1 banner without retention backlink (advisory): ${file.path}:${no}: ${text.trim()}`);
+        }
+        continue;
+      }
+      const isBlockForm = /^\s*\/\*/.test(text) || /^\s*\*/.test(text) || text.includes("{/*");
+      if (/^\s*\/\//.test(text) || isBlockForm) {
+        commentLines += 1;
+        if (isBlockForm || R8_RETENTION_RE.test(text) || /^\s*\/\/\s*BR:/.test(text)) {
+          markedLines += 1;
+        }
+      }
+      if (R8_DEAD_CODE_RE.test(text)) {
+        findings.push({ rule: "R8", msg: `B1 commented-out code shape: ${file.path}:${no}: ${text.trim()}` });
+      }
+      if (R8_PHASE_NARRATION_RE.test(text)) {
+        findings.push({ rule: "R8", msg: `B2 phase narration: ${file.path}:${no}: ${text.trim()}` });
+      }
+      if (R8_ESLINT_DISABLE_RE.test(text) && !text.includes(" -- ")) {
+        findings.push({ rule: "R8", msg: `B3 eslint suppression directive lacks " -- " description: ${file.path}:${no}` });
+      }
+      if (R8_BANNER_RE.test(text) && !R8_RETENTION_RE.test(text)) {
+        notes.push(`A1 banner without retention backlink (advisory): ${file.path}:${no}: ${text.trim()}`);
+      }
+    }
+  }
+  return { findings, notes, commentLines, markedLines, unmarked: commentLines - markedLines };
+}
+
 function main() {
   if (args.messageFile) {
     const raw = readFileSync(args.messageFile, "utf8");
@@ -374,19 +538,48 @@ function main() {
     process.exit(1);
   }
 
+  // R8 staged mode: incremental comment gate for the pre-commit hook. Reads
+  // added lines from `git diff --cached -U0`; the --message-file branch above
+  // returns before reaching here, so the commit-msg hook path is structurally
+  // unchanged. Exit contract for the hook (see .git/hooks/pre-commit): 0 +
+  // "R8-STAGED: PASS" = clean; 1 + "R8-STAGED: FAIL" = blocking violations
+  // (fail-closed at the hook); 3 = the guard itself could not scan — the hook
+  // fails open on anything that is not an explicit verdict.
+  if (args.staged) {
+    let r8;
+    try {
+      r8 = scanR8(git("diff", "--cached", "-U0"));
+    } catch (err) {
+      console.error(`[r8-guard] --staged scan crashed: ${err && err.message ? err.message : String(err)}`);
+      process.exit(3);
+    }
+    for (const n of r8.notes) console.log(`NOTE  R8  ${n}`);
+    for (const f of r8.findings) console.log(`FAIL  R8  ${f.msg}`);
+    if (r8.commentLines > 0) {
+      console.log(`R8 report M3': added comment lines=${r8.commentLines} marked=${r8.markedLines} unmarked=${r8.unmarked} (pure report, no threshold)`);
+    }
+    if (r8.findings.length > 0) {
+      console.log("R8-STAGED: FAIL");
+      process.exit(1);
+    }
+    console.log("R8-STAGED: PASS");
+    process.exit(0);
+  }
+
   // Branch / range mode: choose ref from --range (any git ref expression
   // such as origin/main..HEAD, HEAD~5..HEAD, or a branch name) and fall
   // back to --branch or "main" for backward compatibility. The ref is
   // printed verbatim in the summary line so CI logs make the audited
   // surface self-describing.
   const ref = args.range ?? args.branch ?? "main";
-  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an%x1f%aI", ref)
+  const records = git("log", "--reverse", "--format=%H%x1f%ae%x1f%an%x1f%aI%x1f%ce", ref)
     .split("\n").filter(Boolean);
   const results = records.map((record) => {
-    const [sha, authorEmail, authorName, authorDate] = record.split("\x1f");
+    const [sha, authorEmail, authorName, authorDate, committerEmail] = record.split("\x1f");
     const raw = git("log", "-1", "--format=%B", sha);
     const subject = raw.split("\n")[0];
     const botAuthored = authorEmail === DEPENDABOT_EMAIL || authorName === DEPENDABOT_NAME;
+    const githubCommitted = committerEmail === GITHUB_COMMITTER_EMAIL;
     const isMerge = MERGE_COMMIT_RE.test(subject);
     // Compare date prefixes (YYYY-MM-DD), not full ISO timestamps: the
     // audit must answer "was this commit authored before R7 took effect?",
@@ -401,7 +594,28 @@ function main() {
     // whole adoption day (2026-10-24) is grandfathered so earlier commits
     // from that day keep the keyword fallback in branch / range mode.
     const preR3StrictAdoption = authorDate.slice(0, 10) <= R3_STRICT_ADOPTION_DATE;
-    return checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption });
+    // R8 anchor, same day-level `<=` semantics: the whole adoption day
+    // (2026-10-25) is grandfathered. Pre-adoption commits skip the R8 scan
+    // silently (mirroring the preR7Adoption skip, no SKIP line) so the branch
+    // summary shape stays byte-stable for grandfathered history; only
+    // post-adoption commits get their added lines scanned, and merge commits
+    // are structurally exempt (a merge diff is not a human-authored
+    // increment).
+    const preR8Adoption = authorDate.slice(0, 10) <= R8_ADOPTION_DATE;
+    // R8 shell 面独立锚点（2026-11-09），日级严格 `<`：与上面 JS 面 `<=` 的差异
+    // 理由见 R8_SHELL_ADOPTION_DATE 常量处。作用于 scanR8 内 `#` 族的豁免开关，
+    // 不影响本行 JS 面扫描的进入条件（一笔 commit 两族可各自祖父/各自生效）。
+    const preR8ShellAdoption = authorDate.slice(0, 10) < R8_SHELL_ADOPTION_DATE;
+    const result = checkMessage(sha.slice(0, 8), raw, { botAuthored, isMerge, preR7Adoption, preR3StrictAdoption, githubCommitted });
+    if (!preR8Adoption && !isMerge) {
+      const r8 = scanR8(git("show", "--format=", "-U0", sha), { preR8ShellAdoption });
+      result.findings.push(...r8.findings);
+      if (r8.notes.length > 0) result.r8Notes = r8.notes;
+      if (r8.commentLines > 0) {
+        result.r8Report = `added comment lines=${r8.commentLines} marked=${r8.markedLines} unmarked=${r8.unmarked}`;
+      }
+    }
+    return result;
   });
   let failures = 0;
   let skips = 0;
@@ -412,6 +626,9 @@ function main() {
     } else if (r.findings.length === 0 && r.botAuthored) {
       skips++;
       console.log(`SKIP  ${r.label}  ${r.subject} (dependabot)`);
+    } else if (r.findings.length === 0 && r.githubCommitted) {
+      skips++;
+      console.log(`SKIP  ${r.label}  ${r.subject} (github committer)`);
     } else if (r.findings.length === 0) {
       console.log(`PASS  ${r.label}  ${r.subject}`);
     } else {
@@ -421,6 +638,12 @@ function main() {
         console.log(`        ${f.rule}: ${f.msg}`);
       }
     }
+    // R8 advisory surface for post-adoption commits only (undefined for all
+    // grandfathered history, so existing output stays byte-identical).
+    if (r.r8Notes) {
+      for (const n of r.r8Notes) console.log(`NOTE  R8       ${n}`);
+    }
+    if (r.r8Report) console.log(`        R8 report M3': ${r.r8Report} (pure report)`);
   }
 
   // R6 (BR ↔ probe two-way binding): repo-state check, --branch mode only.

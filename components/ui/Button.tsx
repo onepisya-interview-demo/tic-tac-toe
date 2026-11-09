@@ -6,10 +6,11 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
   /**
    * When true the button renders as busy: disabled, aria-busy, and a
-   * CSS-only spinner span appears before the children. Wire-up lives
-   * in ResetStatsButton / ResultActions (commit 5 / 6) so the reset
-   * action stops feeling unresponsive during Turso HTTP hangs longer
-   * than 8 s (HAR §P2 evidence: 30 733 ms DELETE observed once).
+   * CSS-only spinner span appears before the children. Motivation: a
+   * reset-style action must not feel unresponsive during Turso HTTP
+   * hangs longer than 8 s (HAR §P2 evidence: 30 733 ms DELETE observed
+   * once). No production caller wires this prop today — the
+   * network-bound CTAs hand-roll native <button> spinners instead.
    *
    * The visual contract is DESIGN.md §6 — every decorative animation
    * has a prefers-reduced-motion no-animation path. The existing

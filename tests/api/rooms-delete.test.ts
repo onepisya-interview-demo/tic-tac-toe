@@ -52,9 +52,8 @@ function expectProblemJson(
 }
 
 beforeEach(() => {
-  // Route imports lib/db which transitively imports getDb(); keeping a
-  // tmpdir DATABASE_URL means an accidental real-DB hit still resolves
-  // to a throwaway file. The vi.doMock above prevents the real call.
+  // Reset the deleteRoom mock between tests; the vi.doMock above keeps
+  // the route from touching the real lib/db.
   deleteRoomMock.mockReset();
 });
 

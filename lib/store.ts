@@ -413,13 +413,13 @@ export const useGameStore = create<GameStore>((set) => ({
   },
 
   resetOfflineStats: () => {
-    // Defensive guard: resetOfflineStats is offline-mode-only. The sole
-    // current caller is components/ResetStatsButton (scope='local',
-    // rendered only by OfflineStatsPanel → /offline), so this branch
-    // is unreachable in production today. It is added so a future
-    // caller that forgets to gate on mode cannot silently wipe the
-    // online internal cache (which mirrors the server-row) with
-    // emptyStats().
+    // Defensive guard: resetOfflineStats is offline-mode-only. Current
+    // production callers: ResetStatsButton (scope='local', rendered by
+    // OfflineStatsPanel → /offline) plus LeaveRoomButton and
+    // DeleteRoomButton on /result, where store.mode can be 'online' —
+    // this guard is the live defense that keeps those two from
+    // wiping the online internal cache (which mirrors the server
+    // row) with emptyStats() when clearing local state.
     if (useGameStore.getState().mode !== 'offline') return;
     clearOfflineStats();
     internalStats = emptyStats();

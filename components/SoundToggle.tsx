@@ -5,9 +5,10 @@ import { getMuted, setMuted } from '@/lib/sound';
 
 export function SoundToggle() {
   // Initial state must be identical on server and the first client render —
-  // otherwise React throws a hydration mismatch on /, /play, /result when
-  // the persisted preference differs from the SSR default. We always start
-  // muted; useEffect syncs from localStorage after hydration is complete.
+  // otherwise React throws a hydration mismatch on /, /online, /offline
+  // when the persisted preference differs from the SSR default. We always
+  // start muted; useEffect syncs from localStorage after hydration is
+  // complete.
   const [muted, setLocalMuted] = useState<boolean>(true);
 
   useEffect(() => {
@@ -18,7 +19,7 @@ export function SoundToggle() {
     // updates, so useSyncExternalStore would be over-engineering. React 18
     // bails out of the re-render when getMuted() === true (matches state),
     // so the "cascading render" the lint rule warns about never happens.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 水合后一次性从 localStorage 同步静音偏好；首帧恒 true 安全默认值，相等时 React 跳过重渲染（详见上文）
     setLocalMuted(getMuted());
   }, []);
 

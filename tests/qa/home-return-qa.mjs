@@ -253,8 +253,8 @@ await step("step 02b BR-1 反面: direct entry with pending>0 does NOT open dial
 // BR-1 触发条件保持: 仍仅 /offline→/ 软导航 + pending>declined>0。
 // 修复后 setOpen(true) 推迟到 afterViewTransition (lib/view-transition.ts)
 // 回调里, 避免 SyncConfirmDialog 在 150ms + 250ms VT 窗口内被烘进 root
-// 快照。本探针断言: 软导航后 100ms 内 dialog 不应 [open]; 350ms 后
-// [open] — 钉住'错峰', 防止后人把 setOpen 提前触发。
+// 快照。本探针断言: click 后 100ms 内 dialog 不应 [open]; 1500ms 内
+// [open] 且开启时刻 > 80ms — 钉住'错峰', 防止后人把 setOpen 提前触发。
 await step("step 02c BR-1 错峰: dialog 在 VT 窗口内不 [open], 之后才 [open]（重锚到点击时刻）", async () => {
   const { browser, ctx, page } = await launchQA();
   try {

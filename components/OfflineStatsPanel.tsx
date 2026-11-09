@@ -41,7 +41,7 @@ export function OfflineStatsPanel({ actions }: Props = {}) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR 首帧安全默认值：首帧渲染 emptyStats，挂载后从 localStorage 水合真实战绩（头注「SSR 安全」契约）
     refreshLocal();
   }, [refreshLocal]);
 

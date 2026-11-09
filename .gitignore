@@ -112,6 +112,8 @@ reports/
 # =====================================================
 /.omo/evidence/
 /.omo/ulw-loop/
+# 决策台账运行区文件，档内自述永不 commit（OPS-IGNORE 10-14 审批表 §2 自决备案）
+/.omo/decisions-20261001.md
 
 # =====================================================
 # mise.toml — omo ulw-loop auto-generated, conflicts with .nvmrc (22) which is the

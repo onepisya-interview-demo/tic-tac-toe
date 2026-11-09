@@ -5,7 +5,9 @@
 //   - public/favicon-32x32.png   (Windows taskbar / legacy)
 //   - public/favicon-48x48.png   (legacy @2x tab)
 //   - public/icon-192.png        (Android Chrome home)
-//   - public/icon-512.png        (PWA splash / maskable; Lanczos-upscale from 180)
+//   - public/icon-512.png        (PWA splash; Lanczos-upscale from 180)
+//   - public/icon-maskable-512.png (maskable PWA icon: 410x410 logo on a
+//     #0b0f17 512 canvas, 80% safe zone)
 //   - public/apple-touch-icon.png (180x180 iOS touch icon backup)
 // Source: app/apple-icon.tsx → build → .next/server/app/apple-icon.body
 //         (default), OR pass --source <path> to use an external PNG.
@@ -36,7 +38,6 @@ import { join } from "node:path";
 
 const DEFAULT_SOURCE = ".next/server/app/apple-icon.body";
 
-// (target filename in public/, dimensions) pairs.
 const TARGETS = [
   { file: "public/favicon-16x16.png", size: 16 },
   { file: "public/favicon-32x32.png", size: 32 },
@@ -72,7 +73,6 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-// Ensure public/ exists.
 mkdirSync("public", { recursive: true });
 
 const tmpDir = join(tmpdir(), "build-favicon-assets");

@@ -15,10 +15,12 @@ import { isGameStats, type GameStats } from '@/lib/game';
 //
 // Pre-condition: caller must have just hit POST /api/rooms for the
 // same room (the SyncConfirmDialog flow enforces this — the dialog
-// opens only after postRoomSession already returned a row). A 409
-// here means the row vanished in between (admin delete, forged
-// request, concurrent wipe); we refuse to silently upsert emptyStats()
-// so a forged merge cannot resurrect a wiped account.
+// opens from the home mount effect when a pending offline sync exists;
+// its confirm handler runs postRoomSession (POST /api/rooms) right
+// before postMerge). A 409 here means the row vanished in between
+// (admin delete, forged request, concurrent wipe); we refuse to
+// silently upsert emptyStats() so a forged merge cannot resurrect a
+// wiped account.
 //
 // Slugs speak the W3 room vocabulary (CONTEXT.md): W-C
 // (ulw-result-win-celebration D-5b) renamed the W1 player-era 409/422

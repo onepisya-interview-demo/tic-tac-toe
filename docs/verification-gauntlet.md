@@ -9,7 +9,7 @@
 
 | 层 | 工具 | 项目状态 | 跑吗 | 在 AGENTS.md §验证门禁吗 |
 | --- | --- | --- | --- | --- |
-| Tests | vitest 5 + jsdom 30（88→102 例）`pnpm test = vitest run` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm vitest run 100% 通过」 |
+| Tests | vitest 5 + jsdom 30（实测口径·2026-10-24 对账波：测试文件 50 过／2 跳，测试用例 576 过／11 跳——两口径并列；旧记「88→102 例」系用例口径历史快照，已滞后）`pnpm test = vitest run` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm vitest run 100% 通过」 |
 | Types | tsc 5 strict `pnpm typecheck = tsc --noEmit` | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm typecheck 通过」 |
 | Lint | eslint 9 + eslint-config-next/core-web-vitals + typescript，`pnpm lint = eslint`（不传参；等价于 `eslint .` 由 `eslint.config.mjs` 默认 targets + `globalIgnores(['tests/qa/**', ...])` 共同决定） | ✅ 已配 | ✅ 在 commit 1/2/3 各跑一次 | ✅「pnpm lint 通过」 |
 | Changed-line coverage | vitest --coverage（v8 provider，scope = `lib/**` + `db/**`，thresholds: lines 80 / functions 80 / branches 70 / statements 80） | ⚠️ 部分配 | ❌ 本计划所有 commit **不跑**（scope 不覆盖 app/ + tests/qa/ + docs/，详见 §2 on-demand 规则）；未来 commit 触及 `lib/db` 时必跑 | ❌ AGENTS.md §验证门禁未列；只在「命令」段 |
@@ -95,12 +95,17 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
    `cd47efb` (20.x) → `cf9435b` (>=22) → `875877c` (24.x)。
 6. **探针 / CI job 触发面覆盖的结构性盲区（2026-09-30 验证波新增）**：CI 自
    2026-09-15 移除 push trigger 起仅 `pull_request` 触发（ci.yml 历史可查），dev push 不
-   触发任何 CI job——凡不产生 PR 的改动面，CI 触发面语境下六层中依赖 CI 实跑的门禁全部静默
-   （⑤commit-audit 系本地 hook、①tests ②typecheck ③lint 另有每 commit 本地纪律跑，本地执行
-   不受影响；2026-10-04 表述精确化）。实证：rooms-race 探针 job
+   触发 ci.yml 任何 job——凡不产生 PR 的改动面，CI 触发面语境下六层中依赖 CI 实跑的门禁
+   ①-④/⑥层仍全部静默（⑤commit-audit 2026-11-01 起另有远程自动触发点＝独立 workflow
+   `.github/workflows/commit-audit.yml`，push→dev＋PR→main＋workflow_dispatch 三触发，
+   advisory 未登 repo ruleset 不阻断合并——P2-c 裁决 A+ 落地，调研存档见
+   [`.omo/plans/p2c-remote-trigger-research-20261101.md`](../.omo/plans/p2c-remote-trigger-research-20261101.md)；
+   ①tests ②typecheck ③lint 另有每 commit 本地纪律跑，本地执行
+   不受影响；2026-10-04 表述精确化，2026-11-01 按远程触发点落地再对齐）。实证：rooms-race 探针 job
    漏传 `BASE_URL`，自进 CI 起约 6.3 天从未绿过（`e1ea4b1` 09-24 进 CI →
-   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。是否立项「dev push 触发 CI」待主公裁决（机械化候选 C6，未裁决不
-   实施）；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
+   `a2a667d` 10-01 单行修复），直至 PR #18 首跑红才现形。「dev push 触发 CI」机械化候选 C6 的
+   commit-audit 切面已落地（2026-11-01 主公裁 P2-c A+）；ci.yml 本体扩触发面（①-④/⑥层
+   远程化）仍待主公裁决，未裁决不实施；本波验证实践增补见文末「2026-09-30 验证实践补充」，生产设施操作边界属
    [`docs/operations.md`](./operations.md) §部署辖域，完整复盘见
    [`.omo/research-verification-trust-20260930.md`](../.omo/research-verification-trust-20260930.md)；反模式侧记 L1-32 见
    [`docs/anti-patterns.md`](./anti-patterns.md)（同源互链，2026-10-04 补回指——b5a3299 互链实为单向）。
@@ -115,7 +120,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 
 | 豁免对象 | 现状（实测口径） | 纪律替代（本地侧） | 教训锚 | 解豁免通道 |
 | --- | --- | --- | --- | --- |
-| dev push | ci.yml `on:` 仅 `pull_request → main`，dev 直推零 CI——凡不产生 PR 的改动面，CI 侧全静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6——主公裁决档，未裁决不翻案；本清单只显式化现状，不立项亦不驳回 |
+| dev push | ci.yml `on:` 仍仅 `pull_request → main`（dev 直推零 ci.yml job）；2026-11-01 起 dev push 触发独立 workflow `commit-audit.yml`（⑤层 commit-audit 一门远程红绿可见；advisory 未登 repo ruleset 不阻断合并）——①-④/⑥层凡不产生 PR 的改动面仍 CI 侧静默 | 六层本地每 commit 纪律跑（本文 §1＋[docs/commands.md](./commands.md) 验证六层） | L1-32：rooms-race 漏传 `BASE_URL` 约 6.3 天静默（§3.6） | 机械化候选 C6 的 commit-audit 切面已落地（2026-11-01 主公裁 P2-c A+）；ci.yml 本体扩触发面（①-④/⑥层远程化）仍待主公裁决 |
 
 ### 5.2 「五 CI 必绿」↔ 11 job 对账表
 
@@ -135,7 +140,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 | 10 | online-direct-qa | Online-direct QA (Playwright probe) — BR-2/8 | Online-direct QA (Playwright probe) — BR-2/8 ✅ | 追加 BR 探针 | ⑥ |
 | 11 | room-reset-qa | Room-reset QA (Playwright probe) — BR-7 | Room-reset QA (Playwright probe) — BR-7 ✅ | 追加 BR 探针 | ⑥ |
 
-对账发现（2026-10-08，票 4 实测；第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下）：
+对账发现（2026-10-08，票 4 实测；勘注 2026-10-24：旧括注「第三列 ⚠️ 系 10-08 时点旧态，10-21 已修复，见下」列号笔误——⚠️ 实在第 4 列「ruleset required context」，且表体 6 处 ⚠️ 已被 311d91c 清零、现全 ✅，旧态仅见该 commit 前版本）：
 
 - **命名错位（✅ 已于 2026-10-21 修复，方案 a）**：6 个 BR 探针 job 的 ruleset context 按 job id（小写）登记，而 CI 实报 check 名＝job `name:` 显示名（PR #18 head `1b80a99` 实测：`Rooms-race QA (Playwright probe)` 等）——required checks 按精确字符串匹配（GitHub 语义，inferred），该 6 contexts 与实报名不重合，ruleset 侧此 6 项形同虚设。
   **修复回执（2026-10-21，主公令「先修复」，随 PR #22 发版波执行）**：repo ruleset（id 23195249）`required_status_checks` 六 context 由 job id 改列 CI 实报显示名——新名单自 ci.yml `name:` 字段机械提取（零转抄），五必绿五项本就一致未动；PUT 写回实测 11 contexts 全部与实报名重合，PR #22 `mergeStateStatus` 当即 BLOCKED→CLEAN。改名防漂移无静态断言可拦（GitHub 侧配置面），对账依赖本表第 3/4 列人工或 gh api 复核。
@@ -149,7 +154,7 @@ mutation / property）。本计划所有 commit 不命中任何一条，所以 N
 
 - **疑点起点**：ci.yml 各探针 job `env.EVIDENCE_DIR: ${RUNNER_TEMP}/<name>` 系 shell 风格字面量；GitHub Actions 的 env 映射层不做 shell 展开（探针拿到字面 `${RUNNER_TEMP}/...` 串作相对路径用）。
 - **10-08 判定＝「不展开」**（决定性证据：run 36748001707 运行时 `process.env.EVIDENCE_DIR` 字面含 `${RUNNER_TEMP}`；两条防误判教训：artifact 上传成功≠env 已展开、`##[group]Set up job` 回显段永远字面量不可作判据）。
-- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。
+- **初版修复 c451ee5 写法非法**：把 7 处改到 job 级 env `${{ runner.temp }}`，而 job 级 env 不允许 runner 上下文——整个 ci.yml 被判 invalid workflow（push 报 0s 失败 run 38509360622「Unrecognized named-value: 'runner'」×7、pull_request 静默不建 run；10-09~10-21 期间 CI 对新 PR 全盲，PR #22 首发现）。修正案 d9c608b＝EVIDENCE_DIR 下挪探针 step 级 env（step 级 runner 合法）。（勘注 2026-10-24：d9c608b 系 reword 前旧锚，任何分支不含、仅存本地 reflog、新克隆不可解析；现史哈希＝022c1b4，2026-10-21。）
 - **2026-10-21 终判＝「展开」**：PR #22 run 39582362835，ci-verify 判据 [2] clean——env 已展开为 runner 真实绝对路径，锚行 `QA complete. … written to /home/runner/work/_temp/visual-qa`。D-1 至此闭环。
 - **断言定版**：`tests/qa/ci-contract.test.ts` describe E（job 级 env 禁 runner——防 c451ee5 同型再犯）＋ describe F（探针 step 级 EVIDENCE_DIR 必须为 `${{ runner.temp }}/<name>` 写法——防丢失/回退 shell 字面量两态）。证据件：`.omo/evidence/ci-verify-20261021-pr22.md`（判据 [1][2][3] 全 clean）。
 

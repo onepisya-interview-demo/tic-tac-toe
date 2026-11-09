@@ -4,8 +4,8 @@
  *
  * d-F2 fix (2026-09-24): 两 seam 自本次修复起正交 — factory 调换不影响
  * delay 状态，delay 调换不影响 factory 状态。两个测试都按 `factory →
- * delay → finally(双 reset)` 安全顺序调用（line ~1317/1319/1327-1328 与
- * ~1336/1338/1345-1346），新约定下两 seam 互不干扰，调用顺序不再承担
+ * delay → finally(双 reset)` 安全顺序调用（line ~1487/1489-1490/1497-1498
+ * 与 ~1506/1508/1515-1516），新约定下两 seam 互不干扰，调用顺序不再承担
  * 「防止耦合旁路」的隐性义务。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -72,11 +72,12 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
 
   // W1 (ulw-one-game-two-versions §3 W1) — ranked full-row family
   // (loadStats / saveStats / recordAndSave / resetStats) retired along
-  // with the /api/stats chain. The per-name surface (loadRecordByRoom /
+  // with the /api/stats chain. The per-room surface (loadRecordByRoom /
   // upsertRecordByRoom / recordOutcomeForRoom / mergeRecordByRoom /
-  // registerOrLoginRoom) is now the only writable surface. Coverage
-  // for recordOutcomeForRoom is in the describe block below; the
-  // http(s)/file URL branch tests keep covering getDb() plumbing.
+  // registerOrLoginRoom, plus resetRecordByRoom / deleteRoomByRoom /
+  // purgeStaleRooms / ensureRecordByRoom) is the writable surface now.
+  // Coverage for recordOutcomeForRoom is in the describe block below;
+  // the http(s)/file URL branch tests keep covering getDb() plumbing.
 
   it('http(s) URL branch forwards DATABASE_URL + DATABASE_AUTH_TOKEN to createClient', async () => {
     process.env.DATABASE_URL = 'https://example.turso.io';
@@ -223,9 +224,10 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     expect(t).toHaveProperty('oWins');
     expect(t).toHaveProperty('draws');
     expect(t).toHaveProperty('currentStreak');
-    // name column added in W1 (ulw-name-login-one-truth plan §3) —
-    // nullable TEXT UNIQUE keeps the per-name rows isolated (auto id,
-    // name='alice' etc.). W1 retires the online shared row (id=1, name=NULL).
+    // room column — renamed from the W1-era `name` (7586e82 room
+    // migration) — nullable TEXT UNIQUE keeps the per-room rows
+    // isolated (auto id, room='alice' etc.). The online shared row
+    // (id=1, name=NULL) was retired with W1.
     expect(t).toHaveProperty("room");
     expect(t).toHaveProperty('updatedAt');
   });
@@ -240,11 +242,10 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       const probe = createClient({ url: `file:${path.join(dir, 'tic-tac-toe.db')}` });
       const rs = await probe.execute('PRAGMA table_info(game_stats)');
       const cols = rs.rows.map((row) => String(row.name));
-      // W1 (ulw-name-login-one-truth plan §3) adds `name TEXT UNIQUE`
-      // for the per-player identity column. Inserted before updated_at
-      // to keep every other column's ordinal stable for downstream
-      // readers (commit-audit and external QA probes both expect the
-      // fixed shape).
+      // The identity column is `room TEXT UNIQUE` (renamed from the
+      // W1-era `name`). Inserted before updated_at to keep every other
+      // column's ordinal stable for downstream readers (commit-audit
+      // and external QA probes both expect the fixed shape).
       expect(cols).toEqual([
         'id',
         'total_games',
@@ -256,7 +257,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
         "updated_at",
       ]);
       const types = rs.rows.map((row) => String(row.type));
-      // name is the lone TEXT column; everything else stays INTEGER.
+      // room is the lone TEXT column; everything else stays INTEGER.
       expect(types.every((t) => t === 'INTEGER' || t === 'TEXT')).toBe(true);
       expect(String(rs.rows.find((row) => row.name === "room")?.type)).toBe('TEXT');
       expect(Number(rs.rows.find((row) => row.name === 'id')?.pk)).toBe(1);
@@ -327,12 +328,12 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
   });
 
   // ── W1 (ulw-one-game-two-versions §3 W1): recordOutcomeForRoom coverage ──
-  // Per-name server-authoritative accumulator: load row → apply pure
+  // Per-room server-authoritative accumulator: load row → apply pure
   // recordOutcome rule → upsert. Row-existence contract: absent row
   // returns { ok: false, reason: 'not-found' } — never silently inserts
   // (A4 前置). Tests below pin happy path, draw / O-win math, the
-  // not-found signal, idempotent retry-after-failure, and error
-  // propagation when load / upsert throws.
+  // not-found signal, and error propagation when load throws; the
+  // upsert-throws path is deliberately not covered (rationale below).
 
   it('recordOutcomeForRoom(\'X\') on registered name → xWins:1, totalGames:1, currentStreak:1', async () => {
     const { registerOrLoginRoom, recordOutcomeForRoom, closeDb } = await import('@/lib/db');
@@ -445,7 +446,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
   it('recordOutcomeForRoom on unknown name returns { ok: false, reason: \'not-found\' } (不静默建档)', async () => {
     // A4 前置 + AC A9: service 层不允许「merge / record 一个未注册 name」
     // 偷渡成 upsert 复活已删除账号。客户端必须在调用前先 hit
-    // registerOrLoginRoom (POST /api/sessions)。White-box probe: 在
+    // registerOrLoginRoom (POST /api/rooms)。White-box probe: 在
     // 没有任何 registerOrLoginRoom 调用的情况下直接 recordOutcomeForRoom。
     const { recordOutcomeForRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
     try {
@@ -484,9 +485,10 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
 
   // The "rejects when load throws" test above already pins error
   // propagation through the service. The upsert-failure path is
-  // symmetric (any error in upsertRecordByRoom is re-thrown to the
-  // caller) and is covered by tests against upsertRecordByRoom's
-  // existing suite. We intentionally omit a dedicated
+  // likewise un-swallowed — but note recordOutcomeForRoom inlines its
+  // upsert as tx.insert().onConflictDoUpdate() inside db.transaction
+  // and does NOT call upsertRecordByRoom, so that function's suite
+  // covers a different code path. We intentionally omit a dedicated
   // 「recordOutcomeForRoom rejects when upsert throws after load
   // succeeds」 test: reproducing it requires splitting the cached
   // client state across two phases, which adds machinery beyond the
@@ -578,8 +580,9 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     }
   });
   // ── W-SYNC wave 2 (ulw-ux-mobile-sync plan): per-name ledger via game_stats.name ──
-  // Mirrors the recordAndSave surface but rows are keyed by `name` (TEXT PK)
-  // and rows are absent on first read instead of being seeded — loadRecordByRoom
+  // Mirrors the retired recordAndSave surface but rows are keyed by
+  // `room` (TEXT UNIQUE; the PK is the auto id) and rows are absent on
+  // first read instead of being seeded — loadRecordByRoom
   // returns null so callers can branch on "fresh player" without sentinel
   // values. Pattern parity with the game_stats suite: tmpDbDir +
   // __setCreateClientForTests when reaching beyond a fake, real sqlite
@@ -694,7 +697,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     const { mergeRecordByRoom, loadRecordByRoom, closeDb } = await import('@/lib/db');
     process.env.DATABASE_URL = `file:${os.tmpdir()}/merge-${Math.random()}.db`;
     try {
-      // Server has 2X 1O 0D streak=+1, client sends 3X 2O 1D streak=0.
+      // Row starts absent; the first call sends client (3,3,0,0,0).
       await mergeRecordByRoom('merger', {
         totalGames: 3,
         xWins: 3,
@@ -709,12 +712,9 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
         draws: 2,
         currentStreak: -1,
       });
-      // (2,1,0,1)+(3,2,1,0) per-field: totalGames=6+3=9? Wait — this
-      // second arg is the client stats (we send 6X+2O+2D, currentStreak=-1).
-      // First call stored the server row = emptyStats() (the row
-      // didn’t exist) + client (3,3,0,0,0) → (3,3,0,0,0).
-      // Second call reads (3,3,0,0,0), folds client (6,2,2,2,-1) →
-      // (9,5,2,2,-1).
+      // First call: server row = emptyStats() + client (3,3,0,0,0) →
+      // (3,3,0,0,0). Second call reads (3,3,0,0,0), folds client
+      // (6,2,2,2,-1) → (9,5,2,2,-1).
       expect(next).toEqual({
         totalGames: 9,
         xWins: 5,
@@ -763,7 +763,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     } = await import('@/lib/db');
     try {
       // Pre-populate a row with non-zero stats via the migrated solo
-      // primitive (which now writes to game_stats WHERE name=…).
+      // primitive (which now writes to game_stats WHERE room=…).
       await upsertRecordByRoom('bob', {
         totalGames: 7,
         xWins: 4,
@@ -836,8 +836,6 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       expect(b.stats).toEqual({ totalGames: 0, xWins: 0, oWins: 0, draws: 0, currentStreak: 0 });
       // Single row in the ledger (no double-write to per-field counters).
       expect(await loadRecordByRoom('racer')).toEqual(a.stats);
-      // At least one caller must report existed:true (otherwise the
-      // upsert never raced anyone and we accepted both as fresh).
       const existedTrue = [a, b].filter((r) => r.existed === true).length;
       expect(existedTrue).toBeGreaterThanOrEqual(0); // both 0 and 1 are valid race outcomes
     } finally {
@@ -930,8 +928,10 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
     // 修复前：delete 与 registerOrLogin 的 read→mutate→upsert 三步在两 await
     // 之间可被并发交错，理论上能出现「register 已读空 → delete 在其前跑完
     // → register 仍 upsert zero」或「register 已 upsert → delete 已 read
-    // 存在 → delete 仍删」的中间态。修复后 (withWriteLock + db.transaction)
-    // JS 层与 SQL 层双锁，终值必须收敛到某一种串行序的合法终态之一：
+    // 存在 → delete 仍删」的中间态。修复后 deleteRoomByRoom 走
+    // withWriteLock + db.transaction（JS 层与 SQL 层双锁）；
+    // registerOrLoginRoom 不加锁，但它只写全零行，任何交错仍收敛到
+    // 某一种串行序的合法终态之一：
     //   - delete 先完成 → 行不存在 → registerOrLogin 创空行（existed:false）
     //   - register 先完成 → 行存在 → delete 删除 → 行不存在
     const ROUNDS = 5;
@@ -948,7 +948,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
           deleteRoomByRoom(room),
           registerOrLoginRoom(room),
         ]);
-        // 两调用都不应抛 — withWriteLock + transaction 应吞下竞态。
+        // 两调用都不应抛 — delete 的锁与 register 的冲突吸收 upsert 共同兜住竞态。
         for (const s of settled) {
           expect(s.status).toBe('fulfilled');
         }
@@ -981,7 +981,7 @@ describe('lib/db (Turso/LibSQL: file + http branches)', () => {
       closeDb,
     } = await import('@/lib/db');
     try {
-      // 准备：插入三行，全部 updated_at = now；然后直接调 service — 应全保
+      // 准备：插入两行，全部 updated_at = now；然后直接调 service — 应全保
       // 留（updated_at 远新于 cutoff）。这是 baseline。
       await registerOrLoginRoom('keep-fresh-1');
       await registerOrLoginRoom('keep-fresh-2');
@@ -1452,12 +1452,11 @@ describe('legacy name-column rebuild (ulw-room-migration-home-landing D1-D4)', (
 //
 // These tests pin the test-only knobs (`__setDbOpDelayForTests`), the
 // fallback `resolveDbConfig` branch (unknown scheme), the latency
-// injection seam (`getDb` honors `dbOpDelayMs`), and the two service
-// functions that handle the row-existence contract for "fresh" callers
-// (`ensureRecordByRoom`, `registerOrLoginRoom`'s UNIQUE-violation
-// re-read path). These are pure coverage — no production behavior
-// changes; the goal is to surface every code path so a blind hand-edit
-// later would fail at least one of these regressions.
+// injection seam (`getDb` honors `dbOpDelayMs`), and
+// `ensureRecordByRoom`'s row-existence branch. These are pure
+// coverage — no production behavior changes; the goal is to surface
+// every code path so a blind hand-edit later would fail at least one
+// of these regressions.
 
 describe('lib/db — W-T blind spots (test seams + row-existence branches)', () => {
   let dir: string;

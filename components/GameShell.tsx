@@ -27,7 +27,7 @@ type Props = {
    *  exactly one h1 per page); status-bar / status-text testids and
    *  aria-live="polite" stay intact inside the button so the announcement
    *  contract is preserved. When omitted, the slot renders the plain
-   *  StatusBarClient (legacy /play and /result behavior). */
+   *  StatusBarClient (today only /online omits it). */
   viewToggle?: ViewToggle;
   /**
    * Optional `min-height` passed through to the Card. Use when the

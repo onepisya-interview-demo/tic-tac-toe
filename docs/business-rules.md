@@ -8,7 +8,7 @@
 
 | # | 规则 | 正向场景（什么时候发生） | 反面场景（什么时候**不**发生） | 探针 |
 | --- | --- | --- | --- | --- |
-| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框（`afterViewTransition` 推迟 showModal 出 150/250ms VT 窗口） | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹；弹框开启不与 VT 快照同窗 | `tests/qa/home-return-qa.mjs`（负向 step + step02/02b/02c/04） + `components/HomeDialogMount.test.tsx` |
+| BR-1 | **合并战绩弹框仅在「离线局 → 首页」导航转换时出现** | 在 /offline 玩完局 → 点「返回首页」软导航回 `/` 且 pending > declined → 弹框（`afterViewTransition` 推迟 showModal 出 150/250ms VT 窗口） | 直接打开 / 硬刷新首页不弹；从 /online、/result 回首页不弹；同会话 pending 无增量（≤ declined 哨兵）不弹；弹框开启不与 VT 快照同窗 | `tests/qa/home-return-qa.mjs`（负向 step + step02/02b/02c/04） + `components/HomeDialogMount.test.tsx` + `lib/view-transition.test.ts` |
 | BR-2 | 首页「开始对战」零拦截 | 无名点开始 → RoomGateDialog 引导；有名点开始 → 直接进对局 | 首页起战不因合并弹框被拦（弹框不抢焦点导航） | `tests/qa/home-return-qa.mjs` step03 + `tests/qa/online-direct-qa.mjs` |
 | BR-3 | 首页零 API 写 | 首页渲染 / 起战全程 `/api/*` 写 = 0 | —（无例外） | `tests/qa/home-return-qa.mjs` step03 强断言 |
 | BR-4 | /offline 100% 纯本地 | 离线局全程零网络、战绩写 localStorage | 断网可完整玩 + 记录 | `tests/qa/offline-qa.mjs` + `tests/qa/offline-mode-qa.mjs` |
@@ -30,7 +30,7 @@
 - **多个探针用「 + 」分隔**；步骤细节可放在括号里（如 `tests/qa/home-return-qa.mjs` step03 强断言）——R6 仅校验文件存在与头注释，步骤描述是给人看的。
 - **探针头必须反向引用 BR**：每个被引用的探针/测试文件，前 20 行内须含 `// BR: BR-N[, BR-M]` 行（逗号分隔、按升序）。R6 检查文件首 20 行是否含 BR-N 文本。
 - **缺探针条目标 `⚠ 未探针化`**：探针列直接写 `⚠ 未探针化` 即可豁免 R6；R6 只校验有路径的探针。
-- **R6 失效 = 阻断**：`--branch dev` 模式跑全分支 audit，R6 失败 exit 1、commit-msg hook 同步阻止提交。
+- **R6 失效 = 阻断（branch/range 审计面＋远程 commit-audit job 自动触发，advisory）**：R6（`auditBrProbeBinding`）只在 `--branch` / `--range` 模式执行——触发面＝手动 `node tests/qa/commit-audit.mjs --range origin/main..HEAD`（⑤层绿色门槛，`scripts/verify-all.mjs` ⑤层同款接线）、`--branch dev` 全分支审计，以及远程自动触发点＝独立 workflow `.github/workflows/commit-audit.yml` 的 job「Commit audit (commit-audit --range)」（push→dev＋PR→main＋workflow_dispatch 三触发，同款 `--range origin/main..HEAD` 命令；2026-11-01 主公裁 P2-c A+ 落地）——远程面 advisory：未登 repo ruleset，红可见但不阻断合并，升格 required 留待主公另裁。R6 失败计入 failures、exit 1。**commit-msg hook 不跑 R6**：`.git/hooks/commit-msg` 只调 `--message-file`，该模式仅跑 R1–R5 与 R7（`tests/qa/commit-audit.mjs` 源码注释自述「per-commit --message-file mode skips it」）；ci.yml 本体与 pre-push 仍无 commit-audit 调用（远程触发在独立 workflow）。后果：误删 BR 头**不会在提交时被挡**，要等下一次 verify-all ⑤层、手动 branch/range 审计或远程 commit-audit job 首跑（advisory 红可见）才被抓到——AGENTS.md L0「`// BR:` 头不可动」是第一道防线。（2026-10-25 按实测改写，原文「commit-msg hook 同步阻止提交」与代码不符；2026-11-01 P2-c A+ 落地补远程触发点口径。）
 
 ## 维护约定
 

@@ -3,7 +3,7 @@
 - **版本**：2026-09-27 裁决落档版（2026-09-28 两次落档叠注在案；同日按主公要求重排格式、并随终裁刷新全部状态——内容零删减）
 - **基线**：dev @ `2f11c36`，与 origin/dev 齐平
 - **上一版**：[doc-status-map-20260926.md](doc-status-map-20260926.md)（`01283ed` 入档静态快照）
-- **备查台账**：47 份更新清单与 130 份全景判定外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md)
+- **备查台账**：47+1 份更新清单与 130 份全景判定外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md)（【2026-10-24 勘注】＋1＝ulw-readme-shots 状态线——判定日漏列项，2026-10-04 D25 卫生票 `5cb599a` 补列，见台账 §甲#48；原 47 系判定日清单口径，与本图 §四标题同步改口径、「全部 done」结论不变）
 
 ---
 
@@ -147,6 +147,7 @@
 - ulw-room-lifecycle-20260924：关联行 T-M1 仍写「已批待派」（实已 `d685cf6` 落地）；
 - vercel-deploy-runbook：正文 todo 13–17 仍标 [!] BLOCKED，与 F1–F4 [x] 及文末 Final state 矛盾；
 - ulw-ttl-channel-fix-tp1-20260926：AC 表两个 AC-2 重复编号（既有笔误）；
+  > 【2026-10-24 勘注】上述 5 条欠账（readme-shots 状态线／offline-anonymous 前置阅读行／room-lifecycle T-M1 行／runbook todos 13-17／AC-2 重复编号）均已被 2026-10-04 D25 卫生票 `5cb599a` 清掉——状态线补记、前置阅读行改「已收官」、T-M1 改「已落地 `d685cf6`」、todos 13-17 翻勾对齐、重复 AC-2 拆 AC-2a/2b/2c（五处 diff 经 `git show 5cb599a` 逐条核实）。本清单仍未清者仅反馈1/3/4（反馈2 见上注）与末两条非欠账判定。
 - ulw-solo-mode-split-view-transitions：§3.4 实录段历史性表述——实录性质按纪律保留，非欠账；
 - ulw-tb1-audit-scope-20260927：§八与交付 footer 指向 homedialog 总档——plan 自身规定，属设计决定。
 
@@ -168,11 +169,11 @@
 
 ---
 
-## 四、47 份更新清单 —— ✅ 全部 done（零未完成）
+## 四、47+1 份更新清单 —— ✅ 全部 done（零未完成）
 
-> 明细外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md) §甲。
+> 明细外移至 [doc-status-map-20260927-ledger.md](doc-status-map-20260927-ledger.md) §甲（48 号＝判定日漏列的 ulw-readme-shots，2026-10-04 D25 卫生票 `5cb599a` 补列；【2026-10-24 勘注】标题口径由 47 与台账 §甲同步为 47+1，「全部 done」结论不变）。
 
-- 上版 §四 47 份 needsUpdate 逐份执行完毕：44 份由更新波完成、3 份（#7/#40/#42）随裁决落档完成；
+- 上版 §四 47 份 needsUpdate 逐份执行完毕：44 份由更新波完成、3 份（#7/#40/#42）随裁决落档完成（47 系上版清单判定日口径；另漏列 1 份 ulw-readme-shots 经 D25 `5cb599a` 补列同判 done——合计 47+1，台账 §甲#48）；
 - 抽验 44 份全部通过（ok=44/44，零内容问题）。
 
 ---
@@ -230,3 +231,8 @@
 本图与全部落档改动系工作树未提交变更；沿「计划入档即停，执行须主公明令」纪律，commit 与 push 待主公指令。
 
 > 【2026-10-09 叠注】本图已于 2026-09-30 随 d2296e5 入档，后续 2bf1663/b8e3e0c/6a63887 三笔回写；截至 2026-10-09 对账波前，本图与台账工作树无未提交改动（本叠注自身属对账波待提交变更）；push 仍归主公（表述口径：dev 32 笔 8390a2b..c451ee5 待推＋对账波另计）。
+> 【2026-10-24 叠注】上段「dev 32 笔 8390a2b..c451ee5 待推＋对账波另计」口径**作废**——该 32 笔连同此前未推的路线图入档笔 `8390a2b` 与对账波 2 笔，共 **35 笔**已随单笔 push 上 origin/dev（push 前后 tip `23d5866`→`5165933`，`git rev-list --count 23d5866..5165933`＝35；`5165933` 系 reword 前旧哈希）；补写波 fetch 后实测 dev 与 origin/dev **0/0 齐平**（tip `80b2f3e`），**PR #22 已合并**（dev→main squash 单亲 `4ac5acf`，`gh pr view 22` 实测 MERGED @ 2026-10-24T10:16:04Z）。10-09 后三波档案侧动作补记：**10-14**——决策审批表 17 项分诊入档（[decision-approval-sheet-20261014.md](evidence/decision-approval-sheet-20261014.md)，档面自述「分诊终裁 17 项（含 PROTO-STD）」）；**10-21**——发版波 `022c1b4`（D-1 修正案：EVIDENCE_DIR 下挪 step 级）＋`c966292`（ci-verify stripAnsi 修正）；**10-24**——PR #21 依赖升级并回 dev（`343e51c`）、R3 收紧（`e5104ed` 失败测试复现＋`38e4933` commit-audit 正文显式 WHAT/WHY/HOW token 硬要求）、`311d91c`（ruleset 命名错位修复＋D-1 终判「展开」）、五笔 reword（`fd8db3f`→`1ad6bd5`／`5165933`→`6f0377f`／`d9c608b`→`022c1b4`／`c303d8b`→`c966292`／`35ac680`→`311d91c`，五枚旧锚经 `git branch --all --contains` 实测零分支可达）、PR #22 创建并 squash 合并入 main（`4ac5acf`）。最新路线态以 [plans/ulw-verification-infra-roadmap-20261007.md](plans/ulw-verification-infra-roadmap-20261007.md) 与决策台账为准。
+> 【2026-10-27 叠注】误导注释 sweep 波收口（dev 5 笔 `8abcff6..HEAD` 动态枚举实测：`0f5f339` ADR-0001＋sweep 台账立卷／`0eb2edd` AGENTS.md L0 依赖政令／`bcc40a4` 生产面 15 文件 17 处／`db6f80f` 测试面 16 文件 38 处＋收口 `docs(omo)` 1 笔，均未 push）。新档登记：[ADR-0001](plans/adr-0001-github-committer-exemption-20261026.md)（P2-e「留」终局，第四类豁免 GitHub squash 产物按 committer 身份免检）与**执行台账** [plans/comment-misleading-sweep-20261026.md](plans/comment-misleading-sweep-20261026.md)（`0f5f339` 立卷、收口笔回填全量：poteto 调研结论内嵌 §1.1 未另立调研档——身份纠正 poteto＝Lauren Tan 非「Hiroshi Tsubokura／zenn 系」；判据清单 §1.2；7 分区扫描实收 109 候选/108 确认/1 证伪 §1.3；reportedOnly 12 条 §1.4）。六层门禁 `node scripts/verify-all.mjs` 收口波实跑 exit 0。待主公裁决新增 2 项＋维持 3 项见台账 §三：P2-c／P3-b／P4-a（实测未处置维持待裁，rollout §六 n 不回写）＋新增只报告项处置（§三.6）与源头抑制技能提案（§三.7，推荐缓立重技能、轻量判据入 conventions 可先行）。
+> 【2026-10-25 叠注】注释分诊 rollout 四阶段收口（dev 7 笔 `0ca1dc3..fa0d4e9`＋收口 `docs(omo)` 1 笔，均未 push）。两档新入：**存档方案** [plans/comment-triage-practice-v2-20261024.md](plans/comment-triage-practice-v2-20261024.md)（v2 终稿原样存档，`6759b3b` 入档；含已知过期 `--branch dev` 基线，纠偏一律记台账不改存档）与**执行台账** [plans/comment-triage-rollout-20261025.md](plans/comment-triage-rollout-20261025.md)（`6759b3b` 立卷，`54eeb6a`／`06c7358`／`fa0d4e9` 逐阶段回写，收口波填 Phase 4 §五）。定策：预判「可删面极薄、止步机制层即最优」被 Phase 3 fresh-eyes 分诊**证实**（scripts/ 9 文件 63 块删 5／转化 0／留 58，教科书面 slop 五类全零命中）→ **不启动全量清理役**；机制层终态＝R8 pre-commit＋range 面／M2 eslint `no-warning-comments`／M4' 守卫 `scripts/batch-clean-guard.mjs`／B3 7/7 补理由；六层门禁 `node scripts/verify-all.mjs` exit 0（8 步＋探针 20 条全绿，337.0s）。待主公裁决 4 项见台账 §六：P2-c（ci.yml 加 commit-audit `--range` job vs 维持现状，收口波推荐维持）、P2-e（known-issue `4ac5acf` 三选项）、P3-b（.sh 纳入口径）、P4-a（`scripts/ci-verify.mjs:570` 用途声明失真候选）。
+> 【2026-11-01 叠注】P2-c 裁决 A＋落地波收口（dev 3 笔 `3a81f1b8..HEAD` 动态枚举实测：`e4894ea` workflow 落地／`70aef91` 三文档口径回写／`8cd120b` 修障叠注，＋收口 `docs(omo)` 1 笔，均未 push）。新档登记：**调研存档** [plans/p2c-remote-trigger-research-20261101.md](plans/p2c-remote-trigger-research-20261101.md)（P2-c 裁决 A+ 的决策依据——dwfrun-bab6c3a9 终稿要点原样收录：触发面／PR 机理（fetch-depth 深浅克隆 fatal 实证）／ruleset 实况（main-gate id 23195249 required 11 项）／提案史四发现＋未覆盖清单；裁决位 [rollout 台账 §六 P2-c 叠注](plans/comment-triage-rollout-20261025.md)，含落地实收与 pending 三件）。落地：独立 workflow `.github/workflows/commit-audit.yml`（三触发 push→dev＋PR→main＋dispatch、`fetch-depth: 0`、零依赖 job、advisory 未登 ruleset——R6/R8 首个远程自动触发点）；沙箱 3 场景全过=true（全量克隆零 node_modules 实跑 range 面 exit 0＋YAML 关键字段断言＋depth=1 反向对照复证）；六层门禁 verify-all exit 0。待主公 3 件：push 批准（本地待推 18 笔，`origin/dev..HEAD` 实测）、升格 required＋ruleset 登记（PUT rulesets/23195249 追加「Commit audit (commit-audit --range)」→12 项）、真实 dev push 首跑实证（runner 实况系调研未覆盖面，若红按浅克隆崩溃形态诊断）。
+> 【2026-11-08 叠注】P3-b 裁决 D 落地（主公 2026-11-08 裁「纳入＋声明」：Phase 3 正式口径记 06c7358 评审面 `scripts/` 9 文件＝7 个 .mjs＋2 个 .sh，门禁覆盖面声明同笔写入 [docs/conventions.md](../docs/conventions.md) 机械化指向节「拦不住」条，sweep 台账 §三.2／§三.4 勘注；裁决位与即贴文本见 [rollout 台账 §六 P3-b 叠注](plans/comment-triage-rollout-20261025.md)）。上注 :236「待主公裁决 4 项」清单至此全部裁毕——P2-e 2026-10-26／P2-c 2026-11-01／P4-a 2026-11-06／P3-b 2026-11-08——rollout 台账 §六 无未决项、全收口。

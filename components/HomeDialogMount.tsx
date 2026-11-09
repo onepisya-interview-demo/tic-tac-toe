@@ -78,7 +78,7 @@ export function HomeDialogMount() {
       // Mount-time external read (sessionStorage marker + localStorage
       // ledger) opening the dialog — same documented boundary pattern as
       // the five existing set-state-in-effect disables in components/.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR 首帧安全默认值（false/0/''），水合后一次性读 sessionStorage 哨兵＋localStorage 台账快照进 state；仅 BR-1 触发路径、单次有界
       setPendingSnapshot(pending);
       setInitialName(roomName);
       // 案① a: 错峰开启 — 推迟到当前路由过渡 (150ms .page + 250ms root)
@@ -101,9 +101,10 @@ export function HomeDialogMount() {
 
   async function handleConfirm(name: string): Promise<void> {
     // SyncConfirmDialog has already completed the postRoomSession +
-    // postMerge sequence and forwarded the merged row. The F1
-    // baseline model (W4) sets the post-merge local baseline to 0,
-    // the canonical value right after clearOfflineStats() runs.
+    // postMerge sequence (the merged row is not forwarded to this
+    // hook — only the chosen name comes back). The F1 baseline model
+    // (W4) sets the post-merge local baseline to 0, the canonical
+    // value right after clearOfflineStats() runs.
     // pendingSyncCount() now reads this baseline, so the next
     // home-return has pending = local - 0 = local — the dialog
     // text "本机 N 局" always matches the data the next merge

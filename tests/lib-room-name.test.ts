@@ -12,9 +12,11 @@ import {
 } from '@/lib/room-name';
 
 // isRoomName is the validator both client and server depend on; the
-// server-side whitelist lives at app/api/rooms/**/route.ts. Both must
-// reject the same inputs (or a "save" a room the API would accept can
-// also be saved, and a save the API would reject can never be POSTed).
+// server-side single source of truth is lib/room-name.ts itself — all
+// six route handlers under app/api/rooms/ import normalizeRoom (no
+// per-route whitelist copy exists). Both sides must reject the same
+// inputs (or a "save" a room the API would accept can also be saved,
+// and a save the API would reject can never be POSTed).
 
 describe('lib/room-name / isRoomName', () => {
   it('accepts a single ASCII letter', () => {

@@ -105,7 +105,7 @@ export function SyncConfirmDialog({
   // Keep the input in sync when the dialog reopens with a fresh name
   // (RoomGateDialog save fires while the dialog was closed).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 弹窗重开时把最新 initialName prop 同步进受控输入（关闭期间 RoomGateDialog 可能已存新名）；open 守卫下单次有界同步
     if (open) setName(initialName);
   }, [open, initialName]);
 

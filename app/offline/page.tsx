@@ -25,9 +25,9 @@ type OfflineView = 'board' | 'stats';
 const WIN_AUTO_SWITCH_MS = 1200;
 /**
  * Auto-switch delay (ms) from `phase→'drawn'` to view swap. The
- * draw-shake animation is 300ms ease-out (globals.css:243-245) — 600ms
- * gives the shake room to settle and lets the user register the
- * outcome before the crossfade fires.
+ * draw-shake animation is 300ms ease-out (keyframes at globals.css:226,
+ * rule at globals.css:271-273) — 600ms gives the shake room to settle
+ * and lets the user register the outcome before the crossfade fires.
  */
 const DRAW_AUTO_SWITCH_MS = 600;
 
