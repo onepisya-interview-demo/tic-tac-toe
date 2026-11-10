@@ -6,6 +6,11 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 
+// 钉定 ShellCheck 版本（发版波 #23 尾巴收口，2026-11-10）：wrapper 默认 'latest'
+// 会匿名请求 api.github.com 取最新版号再下载（限流＋版本漂移双面敞开）；钉死后
+// 直接走既定 tag 的下载 URL、跳过 latest 查询（wrapper build/utils/buildURL.js:39）。
+const SHELLCHECK_RELEASE = "v0.11.0";
+
 const files = execFileSync("git", ["ls-files", "--", "*.sh"], { encoding: "utf8" })
   .split("\n")
   .map((s) => s.trim())
@@ -20,6 +25,7 @@ let failedFiles = 0;
 for (const file of files) {
   const r = spawnSync("pnpm", ["exec", "shellcheck", "--format=gcc", "--", file], {
     encoding: "utf8",
+    env: { ...process.env, SHELLCHECKJS_RELEASE: SHELLCHECK_RELEASE },
   });
   if (r.status === 0) continue;
   failedFiles += 1;

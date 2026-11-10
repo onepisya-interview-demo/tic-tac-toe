@@ -67,3 +67,8 @@ CI lint job（ubuntu-latest）走 `pnpm install --frozen-lockfile` + `pnpm lint`
 3. **审读 2（dry-run 数字）——已勘正**：`.sh` 专属新增行 152 条（非 189；189 是「触碰 .sh 的 commit 的全部文件新增行」口径错误，我的第一轮 dry-run 脚本按整 commit diff 计数未按文件过滤）。零命中结论不变（审读方独立复扫同为 0 命中）。§四 与 commit-audit.mjs 头注均已改 152。
 4. **审读 3（lockfile 夹带 1 行无关删除）——留痕不修**：`pnpm-lock.yaml` diff 唯一删除行 `-    cpu: [x64, arm64, wasm32, arm]`（既有包 libsql@0.5.29 的 os/cpu 元数据行，pnpm 10.10.0 再生漂移，与 shellcheck 无关）。不手工回填 lockfile（手改锁文件比再生漂移更危险）；实测 `pnpm install --frozen-lockfile` exit 0、CI 同版本 pnpm 同结果，不破门禁。
 5. **审读 4（三项观察）——留痕**：① CI lint job 名仍叫 `Lint (ESLint)` 而实际已跑 `pnpm lint`（含 lint:sh）——纯命名滞后，ci.yml 不在本波改动面，留待后续波改名；② lint-sh 只枚举 index 内文件（未 add 的新建 .sh 有本地盲窗）——原令即「枚举 tracked 文件」，已在 §三 留痕；③ 本机 node v22.23.1 触发 engines `24.x` WARN——engines 字段非本波改动、先前已存在，与本波无关。
+
+## 十、尾巴收口（2026-11-10，主公令「修复这两个小尾巴」）
+
+1. **shellcheck 版本钉定**：`scripts/lint-sh.mjs` spawn env 注入 `SHELLCHECKJS_RELEASE=v0.11.0`（单真源在 runner，不改 ci.yml——双处维护且 ci.yml 改动须对账 ruleset）。实证：移除缓存二进制后重跑，wrapper 直取 `releases/download/v0.11.0/...` 下载 URL、**零 api.github.com latest 查询**（钉定即跳过，wrapper build/utils/buildURL.js:39），`version: 0.11.0`、`pnpm lint:sh` PASS files=3。CI lint 面下次 PR→main 生效（ci.yml 不跑 push→dev）。
+2. **v2.0.2 tag＋生产冒烟**：annotated tag `v2.0.2` 打于 main=800b361（PR #23 squash＝当前已部署内容，沿 v2.0.1 annotated 先例），与 dev 修复笔一并按令推送；`node tests/qa/prod-smoke.mjs` 生产只读三断言实跑，结果记执行报告。
